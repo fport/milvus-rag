@@ -107,6 +107,25 @@ yerine yalnızca poller kullanılır (`RAG_POLL_INTERVAL_SECONDS`, varsayılan 3
   (GitHub "Recent Deliveries" sekmesinden teslimatları ve cevapları görürsün;
   ping olayına servis `{"pong": true}` döner.)
 
+## Ajanları bağlama (MCP)
+
+Servis `/mcp` altında MCP konuşur. Yerelde:
+
+```bash
+claude mcp add --transport http milvus-rag http://localhost:8090/mcp
+```
+
+Sunucuda çalışıyorsa iki şey gerekir: uç erişilebilir olmalı (reverse proxy'de
+`/mcp` de basic auth arkasında kalabilir — MCP istemcisi `--header` ile
+gönderebilir) ve **host'a izin verilmeli**:
+
+```bash
+RAG_MCP_ALLOWED_HOSTS=rag.example.com
+```
+
+Bu koruma DNS rebinding içindir; boş bırakılırsa yalnızca localhost'tan gelen MCP
+istekleri kabul edilir (HTTP API'yi etkilemez).
+
 ## Sağlık ve işletme
 
 | Ne | Nasıl |

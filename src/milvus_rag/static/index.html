@@ -995,13 +995,18 @@ function renderConnect() {
      Her arama sonucu kanal skorlarını taşır (dense/bm25/rrf/rerank).`,
     copyRow(`curl -X POST ${origin}/search -H 'content-type: application/json' -d '{"q":"jwt nerede üretiliyor","k":8}'`) +
     `<div class="mini">Arama, dosya okuma, repo/iş yönetimi — hepsi düz HTTP.</div>`));
-  parts.push(ccard("MCP / agent",
-    `İki araç yeter: <code>search_code</code> → <code>POST /search</code>,
-     <code>read_code</code> → <code>GET /repos/{id}/file</code>. Milvus API'nin MCP sunucusunda hazırlar.
-     Dönen kod ajana <i>untrusted veri</i> olarak işaretlenir (prompt-injection koruması).
-     Servisin kendi auth'u yok — URL'i iç ağda tut (DEPLOYMENT.md).`,
-    copyRow("RAG_SERVICE_URL=" + origin) +
-    `<div class="mini">Asistanın api tarafında tek ayar bu.</div>`));
+  parts.push(ccard("MCP — ajanı bağla",
+    `Servis MCP konuşur (streamable HTTP, uç: <code>${esc(origin)}/mcp</code>). Araçlar:
+     <code>search_code</code>, <code>read_code</code>, <code>list_repos</code> — hepsi salt okuma.
+     Cursor/VS Code gibi istemcilere aynı URL'i MCP sunucusu olarak ver.
+     Kendi MCP sunucusu olan bir servisi bu RAG'a bağlamak için o servis tarafında
+     <code>RAG_SERVICE_URL=${esc(origin)}</code> yeter.
+     Dönen kod ajana <i>veri</i> olarak işaretlenir (prompt-injection koruması).
+     Uç, DNS rebinding'e karşı yalnızca localhost'u kabul eder; başka bir adresten
+     bağlanılacaksa <code>RAG_MCP_ALLOWED_HOSTS</code>'a host ekle.`,
+    copyRow(`claude mcp add --transport http milvus-rag ${origin}/mcp`) +
+    copyRow(origin + "/mcp") +
+    `<div class="mini">Claude Code, Cursor ve MCP konuşan her ajan buradan bağlanır.</div>`));
   parts.push(`</div>`);
   parts.push(`<p class="mini" style="margin-top:14px">Poller: ${h.poll_interval_seconds
     ? `webhook kurulmasa bile her <b>${h.poll_interval_seconds} sn</b>'de bir uzak head karşılaştırılır — index en geç bu aralıkta tazelenir.`

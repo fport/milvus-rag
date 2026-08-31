@@ -235,11 +235,28 @@ uv run ruff check src tests && uv run ruff format --check src tests
 
 Proje düzeni ve bağlayıcı kararlar için `CLAUDE.md`.
 
-## Bir agent'a / uygulamaya bağlama
+## Bir agent'a bağlama — MCP
 
-Servis düz HTTP konuşur; bir asistana bağlamak için iki araç yeter:
+Servis **MCP konuşur** (streamable HTTP, uç: `/mcp`). Claude Code'a bağlamak tek satır:
 
-- `search_code(query, repo?)` → `POST /search` — kanal skorlarıyla ilk adaylar
-- `read_code(repo, path, start, end)` → `GET /repos/{id}/file` — agent gerisini okuyarak karar verir
+```bash
+claude mcp add --transport http milvus-rag http://localhost:8090/mcp
+```
+
+Cursor, VS Code ve MCP konuşan diğer istemcilere de aynı URL'i verirsin. Üç araç
+gelir, hepsi salt okuma:
+
+| Araç | İş |
+|---|---|
+| `search_code(query, repo?, path_prefix?, k?)` | kanal skorlarıyla ilk adaylar |
+| `read_code(repo, path, start?, end?)` | bulunan dosyadan satır aralığı — ajan gerisini okuyarak karar verir |
+| `list_repos()` | hangi kod tabanları bağlı |
+
+Uç, DNS rebinding'e karşı varsayılan olarak yalnızca localhost'tan gelen istekleri
+kabul eder; başka bir adresten bağlanılacaksa host'u `RAG_MCP_ALLOWED_HOSTS`'a ekle.
+Dönen kod parçaları ajana **veri** olarak işaretlenir (talimat değil).
+
+MCP konuşmayan bir uygulama aynı işi düz HTTP ile yapar: `POST /search` ve
+`GET /repos/{id}/file`. Kendi MCP sunucusu olan bir servisi bu RAG'a bağlamak için o servis tarafında tek ayar yeter: `RAG_SERVICE_URL=http://<host>:8090`.
 
 Sunucuya kurulum için `DEPLOYMENT.md`. Lisans: MIT.

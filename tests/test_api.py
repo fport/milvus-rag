@@ -327,3 +327,41 @@ def test_credentials_flow(client: TestClient):
     state = client.get("/settings/credentials").json()
     assert state["github"]["token_set"] is False
     assert state["azure"]["configured"] is True  # dokunulmadı
+
+
+MCP_INIT = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "pytest", "version": "1"},
+    },
+}
+MCP_HEADERS = {
+    "host": "localhost:8090",  # DNS rebinding koruması: yalnızca localhost kabul edilir
+    "content-type": "application/json",
+    "accept": "application/json, text/event-stream",
+}
+
+
+def test_mcp_endpoint(client: TestClient):
+    # Eğik çizgisiz /mcp yönlendirmesiz çalışmalı: bazı MCP istemcileri POST'ta
+    # 307'yi izlemez ve gövdeyi kaybeder.
+    response = client.post("/mcp", json=MCP_INIT, headers=MCP_HEADERS, follow_redirects=False)
+    assert response.status_code == 200, response.text
+    assert '"name":"milvus-rag"' in response.text  # initialize sonucu SSE olarak akıyor
+    assert client.post("/mcp/", json=MCP_INIT, headers=MCP_HEADERS).status_code == 200
+
+    # Yanlış accept başlığı → transport reddeder (404 değil: uç gerçekten monte).
+    wrong = client.post(
+        "/mcp", json=MCP_INIT, headers={**MCP_HEADERS, "accept": "application/json"}
+    )
+    assert wrong.status_code == 406
+
+    # Yabancı Host → DNS rebinding koruması.
+    foreign = client.post(
+        "/mcp", json=MCP_INIT, headers={**MCP_HEADERS, "host": "evil.example.com"}
+    )
+    assert foreign.status_code == 421

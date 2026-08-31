@@ -14,11 +14,14 @@ from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
 from milvus_rag import __version__
+from milvus_rag.config import get_settings
 from milvus_rag.llm import LLMError
 from milvus_rag.log import get_logger
+from milvus_rag.mcp_server import MCP_PATH, McpSlashMiddleware, build_mcp_server
 from milvus_rag.repos import RepoError
 from milvus_rag.search.answer import ask as run_ask
 from milvus_rag.search.retrieve import SearchRequest
@@ -34,6 +37,10 @@ from milvus_rag.webhooks import (
 )
 
 log = get_logger("api")
+
+# MCP transport'unun DNS rebinding koruması: varsayılan localhost kümesi.
+_LOCAL_HOSTS = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+_LOCAL_ORIGINS = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
 
 
 # ------------------------------------------------------------------- şemalar
@@ -98,6 +105,25 @@ class SearchBody(BaseModel):
 
 
 def create_app(services: Services | None = None, warm_up: bool = True) -> FastAPI:
+    # MCP sunucusu uygulamayla aynı süreçte, aynı retriever'ın üstünde çalışır.
+    # Servisler lifespan'da doğduğu için araçlar onları tembel çözer.
+    mcp = build_mcp_server(lambda: app.state.services)
+    mcp_settings = (services.settings if services else get_settings()).mcp_allowed_hosts
+    extra_hosts = [host.strip() for host in mcp_settings.split(",") if host.strip()]
+    mcp_app = mcp.streamable_http_app(
+        streamable_http_path="/",
+        transport_security=TransportSecuritySettings(
+            allowed_hosts=[*_LOCAL_HOSTS, *extra_hosts],
+            allowed_origins=[
+                *_LOCAL_ORIGINS,
+                *(f"http://{h}" for h in extra_hosts),
+                *(f"https://{h}" for h in extra_hosts),
+            ],
+        )
+        if extra_hosts
+        else None,
+    )
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         built = services or build_services()
@@ -115,14 +141,20 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
             rerank=built.reranker.model_name if built.reranker else "kapalı",
             azure="açık" if built.azure else "kapalı",
             llm=built.llm.model if built.llm else "kapalı",
+            mcp="/mcp",
         )
-        try:
-            yield
-        finally:
-            await built.jobs.stop()
-            built.close()
+        # Oturum yöneticisi mount edilen alt uygulamanın kendi lifespan'ıyla değil,
+        # buradan çalışır (FastAPI mount'ta alt lifespan'ı çağırmaz).
+        async with mcp.session_manager.run():
+            try:
+                yield
+            finally:
+                await built.jobs.stop()
+                built.close()
 
     app = FastAPI(title="Milvus RAG", version=__version__, lifespan=lifespan)
+    app.mount(MCP_PATH, mcp_app)
+    app.add_middleware(McpSlashMiddleware)
 
     def svc(request: Request) -> Services:
         return request.app.state.services  # type: ignore[no-any-return]

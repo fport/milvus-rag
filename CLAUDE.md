@@ -37,7 +37,8 @@ index/     chunk.py (tree-sitter AST chunker + markdown + fallback) · scrub.py 
 search/    routing.py (sembol → BM25) · retrieve.py (kanallar → RRF → rerank, kanal skorları) · rerank.py · answer.py
 db.py      SQLite: repos, files (path→sha), jobs, webhook_events, enrichment
 jobs.py    tek worker kuyruğu + repo başına dedupe + Azure poller
-webhooks.py Azure "Code pushed" + GitHub push (HMAC) · api.py FastAPI · cli.py typer · eval.py golden runner
+webhooks.py Azure "Code pushed" + GitHub push (HMAC) · api.py FastAPI (+ /mcp mount) · cli.py typer
+mcp_server.py MCP sunucusu (streamable HTTP): search_code · read_code · list_repos · eval.py golden runner
 ```
 
 Veri akışı: `push → webhook/poll → job → refresh_source (fetch+reset) → dosya sha'ları
@@ -64,6 +65,9 @@ güncelle → retriever cache'ini boşalt`.
 - **Tek Milvus collection, `repo_id` partition key.** Şemayı değiştirmek = collection'ı
   yeniden kurmak. `RAG_*` chunk/embedding ayarı değişince `index_version` değişir ve
   bir sonraki sync tam yeniden index yapar.
+- **MCP aynı süreçte, aynı retriever'ın üstünde.** `/mcp` altında streamable HTTP;
+  bloklayan iş (embedding, Milvus, dosya) `anyio.to_thread` ile çalışır — MCP oturumu
+  tek event loop'ta akıyor. Araç çıktısı ajana VERİ olarak işaretlenir, talimat değil.
 - **PAT hiçbir yere yazılmaz.** git'e `-c http.extraheader=` ile geçer; hata mesajları
   redakte edilir. Index'e girmeden önce `scrub` çalışır.
 

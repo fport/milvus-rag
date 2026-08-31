@@ -99,6 +99,12 @@ class Settings(BaseSettings):
     github_token: str | None = Field(default=None, validation_alias=AliasChoices("GITHUB_TOKEN"))
     github_api_url: str = "https://api.github.com"
 
+    # --- MCP -----------------------------------------------------------------
+    # `/mcp` DNS rebinding koruması altında: varsayılan yalnızca localhost. Servise
+    # başka bir adresten (rag.sirket.local gibi) MCP ile bağlanılacaksa host'u buraya
+    # ekle — virgülle ayrılmış, port dahil ("rag.sirket.local,10.0.0.5:8090").
+    mcp_allowed_hosts: str = ""
+
     # --- Tazeleme ------------------------------------------------------------
     webhook_secret: str | None = None
     poll_interval_seconds: int = Field(default=300, ge=0)

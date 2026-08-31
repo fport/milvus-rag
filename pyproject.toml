@@ -19,6 +19,7 @@ dependencies = [
     "tree-sitter>=0.26.0",
     "tree-sitter-language-pack>=1.15.8",
     "anthropic>=1.0",
+    "mcp>=2.1.1",
 ]
 
 [dependency-groups]
