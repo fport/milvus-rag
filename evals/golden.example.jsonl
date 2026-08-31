@@ -1,0 +1,15 @@
+# Golden set şablonu. Kendi repon için kopyala: evals/golden.<repo-id>.jsonl
+# (golden.example.jsonl dışındaki golden dosyaları gitignore'da — repo yollarını yayınlama.)
+#
+# Kurallar:
+# - `expect`: "path" (dosya eşleşmesi) ya da "path::symbol" (sembol/kapsayan sembol).
+#   Satır numarası YOK: kod değişince satırlar kayar, semboller kalır.
+# - `mode`: "any" → listedekilerden biri yeter; "all" (varsayılan) → hepsi gelmeli.
+# - `kind`: kırılım etiketi (prose-en / prose-tr / symbol gibi) — rapor buna göre bölünür.
+# - Bir soruyu eklemeden önce cevabın gerçekten orada olduğunu ELLE doğrula;
+#   etiketler repo okunarak yazılır, sistem çalıştırılarak değil.
+{"q": "How is the authentication middleware implemented?", "expect": ["src/middlewares/auth.ts"], "mode": "all", "kind": "prose-en"}
+{"q": "Kimlik doğrulama middleware'i nasıl çalışıyor?", "expect": ["src/middlewares/auth.ts"], "mode": "all", "kind": "prose-tr"}
+{"q": "JWT nerede üretiliyor?", "expect": ["src/auth/session.ts::createSession"], "mode": "all", "kind": "prose-tr"}
+{"q": "withSession", "expect": ["src/middlewares/auth.ts::withSession"], "mode": "all", "kind": "symbol"}
+{"q": "how are webhook events queued", "expect": ["src/features/webhook/webhook.queue.ts", "src/features/webhook/webhook.worker.ts"], "mode": "any", "kind": "prose-en"}
