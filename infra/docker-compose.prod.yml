@@ -1,0 +1,107 @@
+# Üretim: Milvus + RAG servisi tek compose'ta.
+#
+#   cp .env.example .env      # sırları doldur
+#   docker compose -f infra/docker-compose.prod.yml up -d --build
+#   curl -f http://localhost:8090/health
+#
+# İlk açılışta embedding modeli (~2.2 GB) iner ve hf-cache volume'ünde kalır.
+# Servisin KİMLİK DOĞRULAMASI YOK: 8090'ı internete açma; reverse proxy arkasına
+# koy (bkz. DEPLOYMENT.md) ya da yalnızca iç ağdan eriştir.
+
+name: milvus-rag-prod
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.18
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command:
+      - etcd
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd
+    volumes:
+      - etcd:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: minio server /minio_data
+    volumes:
+      - minio:/minio_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus:
+    image: milvusdb/milvus:v2.6.23
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MQ_TYPE: woodpecker
+    volumes:
+      - milvus:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  rag:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      # Compose ağı içinde servis adı çözülür; .env'deki localhost değerini ezer.
+      RAG_MILVUS_URI: http://milvus:19530
+    volumes:
+      - rag-data:/app/data          # SQLite (repos/jobs/manifest) + repo klonları
+      - hf-cache:/app/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      start_period: 120s            # ilk açılışta model inebilir
+      timeout: 10s
+      retries: 5
+    depends_on:
+      milvus:
+        condition: service_healthy
+
+volumes:
+  etcd:
+  minio:
+  milvus:
+  rag-data:
+  hf-cache:
