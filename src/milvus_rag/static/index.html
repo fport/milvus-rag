@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Milvus RAG</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1a2029; --muted: #67707e;
+    --line: #e2e6ec; --accent: #2743c7; --accent-ink: #ffffff; --soft: #eef1fb;
+    --ok: #1a7f4b; --warn: #9a6b12; --err: #b3261e; --code: #f0f2f6; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1319; --panel: #171c24; --ink: #e7ebf1; --muted: #939eae;
+      --line: #262d38; --accent: #8fa1ff; --accent-ink: #10142b; --soft: #1d2440;
+      --ok: #4fc088; --warn: #e4b04a; --err: #ef6a5f; --code: #0b0e13;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 16px; margin: 0; }
+  header .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
+  .chip.ok { color: var(--ok); } .chip.err { color: var(--err); }
+  main { display: grid; grid-template-columns: 330px 1fr; gap: 16px; padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  /* repos */
+  .repo { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+  .repo .top { display: flex; align-items: center; gap: 8px; }
+  .repo .name { font-weight: 600; overflow-wrap: anywhere; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.ready { background: var(--ok); } .dot.indexing { background: var(--warn); animation: blink 1s infinite; }
+  .dot.error { background: var(--err); } .dot.pending { background: var(--muted); }
+  @keyframes blink { 50% { opacity: .3; } }
+  .repo .meta { color: var(--muted); font-size: 12px; margin: 4px 0 8px; }
+  .repo .err { color: var(--err); font-size: 12px; margin: 4px 0; overflow-wrap: anywhere; }
+  .bar { height: 4px; border-radius: 2px; background: var(--soft); overflow: hidden; margin: 6px 0; }
+  .bar > div { height: 100%; background: var(--accent); transition: width .5s; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 5px 11px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.small { font-size: 12px; padding: 3px 9px; }
+  button:disabled { opacity: .5; cursor: default; }
+  input, select { font: inherit; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; width: 100%; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  label { font-size: 12px; color: var(--muted); display: block; margin: 8px 0 3px; }
+  .row { display: flex; gap: 8px; align-items: end; }
+  .row > * { flex: 1; }
+  /* search */
+  .searchbar { display: flex; gap: 8px; }
+  .searchbar input { flex: 1; padding: 9px 12px; }
+  .opts { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 10px 0 2px; font-size: 12px; color: var(--muted); }
+  .opts select, .opts input[type=number] { width: auto; padding: 3px 6px; font-size: 12px; }
+  .opts label { display: inline; margin: 0 4px 0 0; }
+  .timing { color: var(--muted); font-size: 12px; margin: 10px 0 2px; }
+  .hit { border: 1px solid var(--line); border-radius: 8px; margin-top: 10px; overflow: hidden; }
+  .hit .head { display: flex; gap: 8px; align-items: baseline; padding: 8px 12px; cursor: pointer; flex-wrap: wrap; }
+  .hit .path { font-family: var(--mono); font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
+  .hit .sym { color: var(--muted); font-size: 12px; }
+  .badge { font-size: 10.5px; font-family: var(--mono); background: var(--soft); border-radius: 4px; padding: 1px 6px; color: var(--muted); }
+  .hit pre { margin: 0; padding: 10px 12px; background: var(--code); font: 12px/1.45 var(--mono); overflow-x: auto; border-top: 1px solid var(--line); max-height: 130px; }
+  .hit.open pre { max-height: none; }
+  .answer { white-space: pre-wrap; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-top: 10px; }
+  .srcs { font-size: 12px; color: var(--muted); margin-top: 8px; font-family: var(--mono); }
+  .empty { color: var(--muted); padding: 18px 0; text-align: center; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--err); color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px; max-width: 90vw; display: none; z-index: 10; }
+  details.add { margin-top: 6px; }
+  details.add summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  .repofilter { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
+  .repofilter label { display: inline-flex; gap: 4px; align-items: center; margin: 0; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Milvus RAG</h1>
+  <div class="chips" id="chips"></div>
+</header>
+<main>
+  <aside>
+    <div class="panel">
+      <h2>Repolar</h2>
+      <div id="repos"><div class="empty">yükleniyor…</div></div>
+      <details class="add" id="addBox">
+        <summary>+ Repo ekle</summary>
+        <label>Sağlayıcı</label>
+        <select id="aProvider">
+          <option value="github">GitHub</option>
+          <option value="azure">Azure DevOps</option>
+          <option value="local">Yerel dizin</option>
+          <option value="git">Git URL</option>
+        </select>
+        <div id="fGithub"><label>owner/repo</label><input id="aGh" placeholder="orn: vercel/next.js"></div>
+        <div id="fAzure" hidden>
+          <label>Proje</label><input id="aProj" placeholder="Platform">
+          <label>Repo adı</label><input id="aRepo" placeholder="backend-api">
+        </div>
+        <div id="fLocal" hidden><label>Sunucudaki dizin</label><input id="aPath" placeholder="/opt/repos/my-api"></div>
+        <div id="fGit" hidden><label>Clone URL</label><input id="aUrl" placeholder="https://…/repo.git"></div>
+        <div class="row" style="margin-top:8px">
+          <div><label>Branch (boş = varsayılan)</label><input id="aBranch" placeholder="main"></div>
+          <button class="primary" id="aSubmit" style="flex:0 0 auto">Ekle & indexle</button>
+        </div>
+      </details>
+    </div>
+  </aside>
+  <section>
+    <div class="panel">
+      <h2>Ara</h2>
+      <div class="searchbar">
+        <input id="q" placeholder='"jwt token nerede üretiliyor" ya da handleAuthCallback' autofocus>
+        <button class="primary" id="btnSearch">Ara</button>
+        <button id="btnAsk" title="LLM ile atıflı cevap">Sor</button>
+      </div>
+      <div class="opts">
+        <span><label for="mode">mod</label><select id="mode">
+          <option value="">auto</option><option>dense</option><option>bm25</option><option>hybrid</option>
+        </select></span>
+        <span><label for="k">k</label><input id="k" type="number" value="8" min="1" max="50" style="width:60px"></span>
+        <span><label for="rr">rerank</label><input id="rr" type="checkbox"></span>
+        <span class="repofilter" id="repoFilter"></span>
+      </div>
+      <div id="out"><div class="empty">Bir şey ara — sembol yaz (BM25'e gider) ya da soru sor (dense).</div></div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let repos = [];
+
+function toast(msg) {
+  const el = $("toast"); el.textContent = msg; el.style.display = "block";
+  clearTimeout(el._t); el._t = setTimeout(() => el.style.display = "none", 6000);
+}
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const text = await res.text();
+  let data; try { data = JSON.parse(text); } catch { data = { detail: text }; }
+  if (!res.ok) throw new Error(data.detail?.[0]?.msg || data.detail || res.status);
+  return data;
+}
+
+// ---------------------------------------------------------------- sağlık
+async function loadHealth() {
+  try {
+    const h = await api("/health");
+    $("chips").innerHTML =
+      `<span class="chip ${h.milvus ? "ok" : "err"}">milvus ${h.milvus ? "✓" : "✗"}</span>` +
+      `<span class="chip">${esc(h.embedding)}</span>` +
+      `<span class="chip ${h.llm ? "ok" : ""}">${h.llm ? esc(h.llm) : "LLM yok"}</span>`;
+  } catch (e) { $("chips").innerHTML = `<span class="chip err">servis yok: ${esc(e.message)}</span>`; }
+}
+
+// ---------------------------------------------------------------- repolar
+function repoCard(r) {
+  const job = r.active_job;
+  const p = job?.stats?.progress;
+  const pct = p && p.files_total ? Math.round(100 * p.files_done / p.files_total) : null;
+  return `<div class="repo">
+    <div class="top"><span class="dot ${r.status}"></span><span class="name">${esc(r.name)}</span>
+      <span class="badge">${esc(r.provider)}</span></div>
+    <div class="meta">${r.file_count} dosya · ${r.chunk_count} chunk${r.branch ? " · " + esc(r.branch) : ""}
+      ${r.last_indexed_at ? " · " + esc(r.last_indexed_at.slice(0, 16).replace("T", " ")) : ""}</div>
+    ${r.status === "error" ? `<div class="err">${esc(r.error)}</div>` : ""}
+    ${job ? `<div class="bar"><div style="width:${pct ?? 5}%"></div></div>
+      <div class="meta">${job.status === "running" ? (pct !== null ? `indexleniyor… ${p.files_done}/${p.files_total}` : "indexleniyor…") : "kuyrukta"}</div>` : ""}
+    <div style="display:flex;gap:6px">
+      <button class="small" onclick="syncRepo('${esc(r.id)}')" ${job ? "disabled" : ""}>Sync</button>
+      ${r.web_url ? `<a class="small" href="${esc(r.web_url)}" target="_blank" rel="noopener" style="align-self:center;font-size:12px">kaynak ↗</a>` : ""}
+      <button class="small" style="margin-left:auto;color:var(--err)" onclick="removeRepo('${esc(r.id)}')" ${job ? "disabled" : ""}>Sil</button>
+    </div></div>`;
+}
+async function loadRepos() {
+  try {
+    repos = await api("/repos");
+    $("repos").innerHTML = repos.length ? repos.map(repoCard).join("") : `<div class="empty">Henüz repo yok — aşağıdan ekle.</div>`;
+    $("repoFilter").innerHTML = repos.map(r =>
+      `<label><input type="checkbox" value="${esc(r.id)}" checked> ${esc(r.id)}</label>`).join("");
+    if (repos.some(r => r.active_job)) setTimeout(loadRepos, 3000);
+  } catch (e) { toast("repolar yüklenemedi: " + e.message); }
+}
+async function syncRepo(id) {
+  try { await api(`/repos/${id}/sync`, { method: "POST", headers: {"content-type": "application/json"}, body: "{}" }); loadRepos(); }
+  catch (e) { toast(e.message); }
+}
+async function removeRepo(id) {
+  if (!confirm(`${id} silinsin mi? (index + klon)`)) return;
+  try { await api(`/repos/${id}`, { method: "DELETE" }); loadRepos(); } catch (e) { toast(e.message); }
+}
+$("aProvider").onchange = () => {
+  const v = $("aProvider").value;
+  $("fGithub").hidden = v !== "github"; $("fAzure").hidden = v !== "azure";
+  $("fLocal").hidden = v !== "local"; $("fGit").hidden = v !== "git";
+};
+$("aSubmit").onclick = async () => {
+  const provider = $("aProvider").value;
+  const body = { provider, branch: $("aBranch").value || null, index_now: true };
+  if (provider === "github") body.repo = $("aGh").value.trim();
+  if (provider === "azure") { body.project = $("aProj").value.trim(); body.repo = $("aRepo").value.trim(); }
+  if (provider === "local") body.path = $("aPath").value.trim();
+  if (provider === "git") body.url = $("aUrl").value.trim();
+  $("aSubmit").disabled = true;
+  try {
+    await api("/repos", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body) });
+    $("addBox").open = false; loadRepos();
+  } catch (e) { toast(e.message); } finally { $("aSubmit").disabled = false; }
+};
+
+// ------------------------------------------------------------------ arama
+function searchBody() {
+  const chosen = [...document.querySelectorAll("#repoFilter input:checked")].map(el => el.value);
+  return {
+    q: $("q").value.trim(),
+    repo_ids: chosen.length === repos.length ? [] : chosen,
+    k: parseInt($("k").value) || 8,
+    mode: $("mode").value || null,
+    rerank: $("rr").checked ? true : null,
+  };
+}
+function scoreBadges(scores) {
+  return Object.entries(scores).map(([k, v]) =>
+    `<span class="badge">${k}=${k === "bm25" ? v.toFixed(2) : v.toFixed(3)}</span>`).join(" ");
+}
+async function doSearch() {
+  const body = searchBody();
+  if (!body.q) return;
+  $("out").innerHTML = `<div class="empty">aranıyor…</div>`;
+  try {
+    const d = await api("/search", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body) });
+    const t = Object.entries(d.timings_ms).map(([k, v]) => `${k} ${Math.round(v)}ms`).join(" · ");
+    const head = `<div class="timing">mod: <b>${esc(d.mode)}</b>${d.reranked ? " + rerank" : ""} · ${d.candidates} aday · ${t}${d.cached ? " · cache" : ""}</div>`;
+    if (!d.hits.length) { $("out").innerHTML = head + `<div class="empty">Sonuç yok.</div>`; return; }
+    $("out").innerHTML = head + d.hits.map(h => `
+      <div class="hit" onclick="this.classList.toggle('open')">
+        <div class="head">
+          <span class="path">${esc(h.path)}:${h.start_line}-${h.end_line}</span>
+          ${h.symbol ? `<span class="sym">${esc(h.kind)} <b>${esc(h.symbol)}</b>${h.parent_symbol ? " · " + esc(h.parent_symbol) : ""}</span>` : ""}
+          <span class="badge">${esc(h.repo_id)}</span> ${scoreBadges(h.scores)}
+        </div>
+        <pre>${esc(h.content)}</pre>
+      </div>`).join("");
+  } catch (e) { $("out").innerHTML = ""; toast(e.message); }
+}
+async function doAsk() {
+  const body = searchBody();
+  if (!body.q) return;
+  $("out").innerHTML = `<div class="empty">düşünüyor… (LLM çağrısı, birkaç saniye)</div>`;
+  try {
+    const d = await api("/ask", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body) });
+    $("out").innerHTML =
+      `<div class="timing">${esc(d.model)} · ${Math.round(d.elapsed_ms)}ms</div>` +
+      `<div class="answer">${esc(d.answer)}</div>` +
+      `<div class="srcs">${d.sources.map(s => `[${s.n}] ${esc(s.path)}:${s.start_line}-${s.end_line}`).join("<br>")}</div>`;
+  } catch (e) { $("out").innerHTML = ""; toast(e.message); }
+}
+$("btnSearch").onclick = doSearch;
+$("btnAsk").onclick = doAsk;
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+
+loadHealth(); loadRepos();
+</script>
+</body>
+</html>
