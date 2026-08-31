@@ -1,6 +1,23 @@
-# milvus-rag
+<p align="center">
+  <img src="docs/screenshot.png" alt="Milvus RAG arayüzü — Türkçe soruyla kod araması, kanal skorları ve repo durumu" width="920">
+</p>
 
-Milvus'un **kod tabanı RAG servisi**. Azure DevOps'tan ya da GitHub'dan bir repo seçersin; servis
+<h1 align="center">Milvus RAG</h1>
+
+<p align="center"><em>Kod tabanını anlayan, push'ta kendini tazeleyen arama servisi.</em></p>
+
+<p align="center">
+  <a href="#kurulum">Kurulum</a> ·
+  <a href="#kullanım">Kullanım</a> ·
+  <a href="#repo-değişince-ne-olur">Tazeleme akışı</a> ·
+  <a href="#retrieval-zinciri-ve-bayraklar">Retrieval</a> ·
+  <a href="#ölçüm-defteri">Ölçüm defteri</a> ·
+  <a href="DEPLOYMENT.md">Sunucuya kurulum</a>
+</p>
+
+---
+
+Azure DevOps'tan ya da GitHub'dan bir repo seçersin; servis
 onu klonlar, tree-sitter ile kod birimlerine böler, BGE-M3 (dense) + BM25 (sparse)
 ile Milvus'a yazar; sorguda sembol biçimli sorgular BM25'e, düz cümleler dense'e gider
 (hybrid RRF ve cross-encoder rerank bayrakla açılır — ikisi de ölçüldü, tabloya bak).
