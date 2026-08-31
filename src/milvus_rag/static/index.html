@@ -30,6 +30,14 @@
   * { box-sizing: border-box; }
   html { scrollbar-color: var(--line-2) var(--bg); }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--sans); }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(1000px 560px at 8% -10%, rgba(59,246,107,.09), transparent 62%),
+      radial-gradient(1300px 900px at 108% 112%, rgba(28,140,84,.10), transparent 60%),
+      radial-gradient(140% 120% at 50% 42%, transparent 55%, rgba(0,0,0,.55) 100%);
+  }
+  .shell { position: relative; z-index: 1; }
   ::selection { background: var(--neon); color: var(--neon-ink); }
   a { color: var(--neon); text-decoration-color: rgba(59,246,107,.4); }
   a:hover { text-decoration-color: var(--neon); }
@@ -56,13 +64,44 @@
   nav .item.active { background: var(--neon-soft); color: var(--neon); }
   nav .item.active .ico { color: var(--neon); text-shadow: 0 0 10px var(--glow); }
   nav .item .cnt { margin-left: auto; font: 11px/1 var(--mono); color: var(--faint); }
-  nav .foot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 4px 2px; border-top: 1px solid var(--line); }
+  /* çekirdek: index evreninin nabzı */
+  .core { margin: auto 0 8px; position: relative; height: 190px; display: grid; place-items: center; }
+  .core .field { position: relative; width: 150px; height: 150px; }
+  .core .orb {
+    position: absolute; inset: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 32%, #d9ffe6, var(--neon) 42%, #0f5e2a 78%, #062812 100%);
+    box-shadow: 0 0 24px var(--glow), 0 0 70px rgba(59,246,107,.18);
+    animation: breathe 4.5s ease-in-out infinite;
+  }
+  .core.busy .orb { animation-duration: 1.2s; }
+  @keyframes breathe { 50% { box-shadow: 0 0 34px var(--glow), 0 0 100px rgba(59,246,107,.3); } }
+  .core .ring {
+    position: absolute; inset: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%);
+    border: 1px solid rgba(59,246,107,.5); border-radius: 50%; opacity: 0;
+    animation: ping 4.5s linear infinite;
+  }
+  .core .ring.r2 { animation-delay: 1.5s; }
+  .core .ring.r3 { animation-delay: 3s; }
+  .core.busy .ring { animation-duration: 1.8s; }
+  .core.busy .ring.r2 { animation-delay: .6s; }
+  .core.busy .ring.r3 { animation-delay: 1.2s; }
+  @keyframes ping { 0% { opacity: .7; } 85% { width: 150px; height: 150px; opacity: 0; } 100% { opacity: 0; } }
+  .core .orbitpath { position: absolute; inset: 50%; width: 108px; height: 108px; transform: translate(-50%, -50%); border: 1px dashed rgba(59,246,107,.14); border-radius: 50%; }
+  .core .sats { position: absolute; inset: 50%; width: 108px; height: 108px; transform: translate(-50%, -50%); animation: spin 46s linear infinite; }
+  @keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+  .core .sat {
+    position: absolute; top: 50%; left: 50%; width: 7px; height: 7px; margin: -3.5px;
+    border-radius: 50%; background: var(--neon); box-shadow: 0 0 8px var(--glow);
+  }
+  .corecap { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font: 10.5px/1.5 var(--mono); color: var(--faint); letter-spacing: .06em; }
+  nav .foot { margin-top: 0; display: flex; flex-direction: column; gap: 6px; padding: 10px 4px 2px; border-top: 1px solid var(--line); }
   .chip { font: 11px/1.5 var(--mono); color: var(--faint); display: flex; gap: 7px; align-items: center; padding: 2px 8px; }
   .chip::before { content: "●"; font-size: 8px; color: var(--faint); }
   .chip.ok::before { color: var(--neon); }
   .chip.err { color: var(--err); } .chip.err::before { color: var(--err); }
 
-  content, .content { display: block; padding: 26px 32px 60px; max-width: 1180px; }
+  content, .content { display: block; padding: 34px 44px 80px; max-width: 1160px; margin: 0 auto; width: 100%; }
 
   /* Görünüm başlığı: sol başlık, sağ tek eylem (Carna'daki Publish gibi) */
   .vhead { display: flex; align-items: center; gap: 14px; margin: 0 0 18px; }
@@ -89,7 +128,7 @@
   /* ── Komut çubuğu (Ara görünümünün kahramanı) ───────────────────────── */
   .cmd {
     display: flex; align-items: center; gap: 12px;
-    background: var(--panel); border: 1px solid var(--line-2); border-radius: 14px;
+    background: linear-gradient(180deg, rgba(220,255,235,.025), transparent 50%), var(--panel); box-shadow: 0 18px 50px rgba(0,0,0,.35); border: 1px solid var(--line-2); border-radius: 14px;
     padding: 6px 8px 6px 18px; position: relative;
     transition: border-color .15s, box-shadow .15s;
   }
@@ -129,7 +168,7 @@
   input[type=checkbox] { accent-color: var(--neon); width: 14px; height: 14px; }
 
   /* ── Tablo (Repolar) ─────────────────────────────────────────────────── */
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 13px; overflow: hidden; }
+  .card { background: linear-gradient(180deg, rgba(220,255,235,.02), transparent 45%), var(--panel); border: 1px solid var(--line); border-radius: 13px; overflow: hidden; box-shadow: 0 18px 50px rgba(0,0,0,.35); }
   table { width: 100%; border-collapse: collapse; }
   th { font: 600 10.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); }
   td { padding: 13px 14px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }
@@ -247,6 +286,15 @@
     <button class="item" id="tabbtn-repolar" onclick="showTab('repolar')"><span class="ico">▤</span> Repolar <span class="cnt" id="repoCount"></span></button>
     <button class="item" id="tabbtn-isler" onclick="showTab('isler')"><span class="ico">⟲</span> İşler</button>
     <button class="item" id="tabbtn-baglan" onclick="showTab('baglan')"><span class="ico">⇄</span> Bağlan</button>
+    <div class="core" id="core" aria-hidden="true">
+      <div class="field">
+        <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+        <div class="orbitpath"></div>
+        <div class="sats" id="coreSats"></div>
+        <div class="orb"></div>
+      </div>
+      <div class="corecap" id="coreCap"></div>
+    </div>
     <div class="foot" id="chips"></div>
   </nav>
 
@@ -425,8 +473,20 @@ async function loadRepos() {
       jobSel.innerHTML = `<option value="">hepsi</option>` + repos.map(r => `<option>${esc(r.id)}</option>`).join("");
       jobSel.value = current;
     }
+    renderCore();
     if (repos.some(r => r.active_job)) setTimeout(loadRepos, 3000);
   } catch (e) { toast("repolar yüklenemedi: " + e.message); }
+}
+function renderCore() {
+  const busy = repos.some(r => r.active_job);
+  $("core").classList.toggle("busy", busy);
+  const n = Math.min(repos.length, 10);
+  $("coreSats").innerHTML = Array.from({ length: n }, (_, i) => {
+    const angle = (360 / n) * i;
+    return `<span class="sat" style="transform: rotate(${angle}deg) translateX(54px)"></span>`;
+  }).join("");
+  const chunks = repos.reduce((sum, r) => sum + r.chunk_count, 0);
+  $("coreCap").textContent = busy ? "indexleniyor…" : (chunks ? `${chunks.toLocaleString("tr")} chunk canlı` : "çekirdek boşta");
 }
 async function syncRepo(id) {
   try { await api(`/repos/${id}/sync`, { method: "POST", headers: {"content-type": "application/json"}, body: "{}" }); loadRepos(); }
