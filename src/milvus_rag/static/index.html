@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#070b09">
 <title>Milvus RAG</title>
 <style>
-  /* ── Fosfor konsol: koyu tema, neon yeşil tek vurgu, tablo düzeni ───────── */
+  /* ── Fosfor konsol: üst nav + vektör uzayı sahnesi ──────────────────────── */
   :root {
     color-scheme: dark;
     --bg: #070b09;
@@ -33,78 +33,45 @@
   body::before {
     content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
     background:
-      radial-gradient(1000px 560px at 8% -10%, rgba(59,246,107,.09), transparent 62%),
-      radial-gradient(1300px 900px at 108% 112%, rgba(28,140,84,.10), transparent 60%),
-      radial-gradient(140% 120% at 50% 42%, transparent 55%, rgba(0,0,0,.55) 100%);
+      radial-gradient(1000px 560px at 10% -10%, rgba(59,246,107,.08), transparent 62%),
+      radial-gradient(1300px 900px at 105% 115%, rgba(28,140,84,.09), transparent 60%),
+      radial-gradient(140% 120% at 50% 45%, transparent 55%, rgba(0,0,0,.55) 100%);
   }
-  .shell { position: relative; z-index: 1; }
   ::selection { background: var(--neon); color: var(--neon-ink); }
   a { color: var(--neon); text-decoration-color: rgba(59,246,107,.4); }
   a:hover { text-decoration-color: var(--neon); }
   :focus-visible { outline: 2px solid var(--neon); outline-offset: 2px; border-radius: 4px; }
 
-  /* ── Kabuk: sol nav + içerik ─────────────────────────────────────────── */
-  .shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
-  nav {
-    border-right: 1px solid var(--line); background: var(--panel);
-    display: flex; flex-direction: column; padding: 18px 14px; gap: 4px;
-    position: sticky; top: 0; height: 100vh;
+  /* ── Üst bar ─────────────────────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 6;
+    display: flex; align-items: center; gap: 6px; padding: 10px 22px;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(8px);
   }
-  .brand { font: 700 14px/1 var(--mono); letter-spacing: .08em; padding: 4px 10px 18px; display: flex; gap: 9px; align-items: center; }
+  .brand { font: 700 14px/1 var(--mono); letter-spacing: .08em; display: flex; gap: 9px; align-items: center; margin-right: 18px; }
   .brand .sig { color: var(--neon); text-shadow: 0 0 12px var(--glow); font-size: 16px; }
   .brand .sub { color: var(--faint); font-weight: 400; }
-  nav .item {
-    display: flex; align-items: center; gap: 10px; width: 100%;
-    background: none; border: 0; border-radius: 9px; padding: 10px 12px;
-    font: 600 13px/1 var(--sans); color: var(--muted); cursor: pointer; text-align: left;
+  .topbar .item {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: none; border: 0; border-radius: 9px; padding: 8px 13px;
+    font: 600 13px/1 var(--sans); color: var(--muted); cursor: pointer;
     transition: background .12s, color .12s;
   }
-  nav .item .ico { font-family: var(--mono); width: 16px; text-align: center; color: var(--faint); }
-  nav .item:hover { background: var(--inset); color: var(--ink); }
-  nav .item.active { background: var(--neon-soft); color: var(--neon); }
-  nav .item.active .ico { color: var(--neon); text-shadow: 0 0 10px var(--glow); }
-  nav .item .cnt { margin-left: auto; font: 11px/1 var(--mono); color: var(--faint); }
-  /* çekirdek: index evreninin nabzı */
-  .core { margin: auto 0 8px; position: relative; height: 190px; display: grid; place-items: center; }
-  .core .field { position: relative; width: 150px; height: 150px; }
-  .core .orb {
-    position: absolute; inset: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%);
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 32%, #d9ffe6, var(--neon) 42%, #0f5e2a 78%, #062812 100%);
-    box-shadow: 0 0 24px var(--glow), 0 0 70px rgba(59,246,107,.18);
-    animation: breathe 4.5s ease-in-out infinite;
-  }
-  .core.busy .orb { animation-duration: 1.2s; }
-  @keyframes breathe { 50% { box-shadow: 0 0 34px var(--glow), 0 0 100px rgba(59,246,107,.3); } }
-  .core .ring {
-    position: absolute; inset: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%);
-    border: 1px solid rgba(59,246,107,.5); border-radius: 50%; opacity: 0;
-    animation: ping 4.5s linear infinite;
-  }
-  .core .ring.r2 { animation-delay: 1.5s; }
-  .core .ring.r3 { animation-delay: 3s; }
-  .core.busy .ring { animation-duration: 1.8s; }
-  .core.busy .ring.r2 { animation-delay: .6s; }
-  .core.busy .ring.r3 { animation-delay: 1.2s; }
-  @keyframes ping { 0% { opacity: .7; } 85% { width: 150px; height: 150px; opacity: 0; } 100% { opacity: 0; } }
-  .core .orbitpath { position: absolute; inset: 50%; width: 108px; height: 108px; transform: translate(-50%, -50%); border: 1px dashed rgba(59,246,107,.14); border-radius: 50%; }
-  .core .sats { position: absolute; inset: 50%; width: 108px; height: 108px; transform: translate(-50%, -50%); animation: spin 46s linear infinite; }
-  @keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
-  .core .sat {
-    position: absolute; top: 50%; left: 50%; width: 7px; height: 7px; margin: -3.5px;
-    border-radius: 50%; background: var(--neon); box-shadow: 0 0 8px var(--glow);
-  }
-  .corecap { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font: 10.5px/1.5 var(--mono); color: var(--faint); letter-spacing: .06em; }
-  nav .foot { margin-top: 0; display: flex; flex-direction: column; gap: 6px; padding: 10px 4px 2px; border-top: 1px solid var(--line); }
-  .chip { font: 11px/1.5 var(--mono); color: var(--faint); display: flex; gap: 7px; align-items: center; padding: 2px 8px; }
+  .topbar .item .ico { font-family: var(--mono); color: var(--faint); }
+  .topbar .item:hover { background: var(--inset); color: var(--ink); }
+  .topbar .item.active { background: var(--neon-soft); color: var(--neon); }
+  .topbar .item.active .ico { color: var(--neon); text-shadow: 0 0 10px var(--glow); }
+  .topbar .item .cnt { font: 11px/1 var(--mono); color: var(--faint); }
+  .topbar .spacer { flex: 1; }
+  .chip { font: 11px/1.5 var(--mono); color: var(--faint); display: inline-flex; gap: 6px; align-items: center; padding: 2px 7px; }
   .chip::before { content: "●"; font-size: 8px; color: var(--faint); }
   .chip.ok::before { color: var(--neon); }
   .chip.err { color: var(--err); } .chip.err::before { color: var(--err); }
 
-  content, .content { display: block; padding: 34px 44px 80px; max-width: 1160px; margin: 0 auto; width: 100%; }
+  .content { position: relative; z-index: 1; display: block; padding: 26px 36px 80px; max-width: 1240px; margin: 0 auto; width: 100%; }
 
-  /* Görünüm başlığı: sol başlık, sağ tek eylem (Carna'daki Publish gibi) */
-  .vhead { display: flex; align-items: center; gap: 14px; margin: 0 0 18px; }
+  .vhead { display: flex; align-items: center; gap: 14px; margin: 4px 0 18px; }
   .vhead h1 { font: 700 17px/1.2 var(--sans); margin: 0; }
   .vhead .sub { color: var(--faint); font: 12px var(--mono); }
   .vhead .spacer { flex: 1; }
@@ -125,16 +92,17 @@
   button.quiet:hover { color: var(--ink); border-color: var(--line-2); }
   button.quiet.danger:hover { color: var(--err); border-color: var(--err); }
 
-  /* ── Komut çubuğu (Ara görünümünün kahramanı) ───────────────────────── */
+  /* ── Komut çubuğu ────────────────────────────────────────────────────── */
   .cmd {
     display: flex; align-items: center; gap: 12px;
-    background: linear-gradient(180deg, rgba(220,255,235,.025), transparent 50%), var(--panel); box-shadow: 0 18px 50px rgba(0,0,0,.35); border: 1px solid var(--line-2); border-radius: 14px;
-    padding: 6px 8px 6px 18px; position: relative;
+    background: linear-gradient(180deg, rgba(220,255,235,.025), transparent 50%), var(--panel);
+    box-shadow: 0 18px 50px rgba(0,0,0,.35);
+    border: 1px solid var(--line-2); border-radius: 14px;
+    padding: 5px 7px 5px 18px; position: relative;
     transition: border-color .15s, box-shadow .15s;
   }
   .cmd::after {
-    content: ""; position: absolute; left: 14px; right: 14px; bottom: -1px; height: 2px;
-    border-radius: 2px;
+    content: ""; position: absolute; left: 14px; right: 14px; bottom: -1px; height: 2px; border-radius: 2px;
     background: linear-gradient(90deg, transparent, var(--neon), transparent);
     background-size: 220% 100%; background-position: -120% 0; background-repeat: no-repeat;
     opacity: 0; transition: opacity .2s;
@@ -142,13 +110,13 @@
   .cmd:focus-within { border-color: var(--neon-dim); box-shadow: 0 0 0 1px rgba(59,246,107,.25), 0 0 28px rgba(59,246,107,.12); }
   .cmd:focus-within::after { opacity: 1; animation: sweep 1.6s ease-out; background-position: 120% 0; }
   @keyframes sweep { from { background-position: -120% 0; } }
-  .cmd .prompt { font: 700 22px/1 var(--mono); color: var(--neon); text-shadow: 0 0 14px var(--glow); user-select: none; }
-  .cmd input { flex: 1; min-width: 0; border: 0; background: none; color: var(--ink); font: 16px/1.4 var(--mono); padding: 14px 0; caret-color: var(--neon); }
+  .cmd .prompt { font: 700 20px/1 var(--mono); color: var(--neon); text-shadow: 0 0 14px var(--glow); user-select: none; }
+  .cmd input { flex: 1; min-width: 0; border: 0; background: none; color: var(--ink); font: 15px/1.4 var(--mono); padding: 12px 0; caret-color: var(--neon); }
   .cmd input::placeholder { color: var(--faint); }
   .cmd input:focus { outline: none; }
   .cmd .actions { display: flex; gap: 8px; flex: none; }
 
-  .deckrow { display: flex; gap: 10px 16px; align-items: center; flex-wrap: wrap; margin: 12px 2px 0; }
+  .deckrow { display: flex; gap: 10px 16px; align-items: center; flex-wrap: wrap; margin: 10px 2px 0; }
   .try { font: 10.5px/1 var(--mono); color: var(--faint); letter-spacing: .12em; }
   .exq { font: 12px/1 var(--mono); color: var(--muted); background: none; border: 1px dashed var(--line-2); border-radius: 999px; padding: 7px 12px; font-weight: 400; }
   .exq:hover { color: var(--neon); border-color: var(--neon-dim); border-style: solid; }
@@ -167,6 +135,47 @@
   .repofilter label { display: inline-flex; gap: 5px; align-items: center; margin: 0; }
   input[type=checkbox] { accent-color: var(--neon); width: 14px; height: 14px; }
 
+  /* ── Vektör uzayı ────────────────────────────────────────────────────── */
+  .space-wrap { position: relative; margin-top: 14px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    background: radial-gradient(120% 140% at 50% 45%, rgba(13,25,17,.9), rgba(7,11,9,.98)); box-shadow: 0 18px 50px rgba(0,0,0,.35); }
+  #space { display: block; width: 100%; height: 430px; cursor: default; }
+  .space-hint { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font: 11px/1.6 var(--mono); color: var(--faint); pointer-events: none; letter-spacing: .06em; }
+
+  /* ── Sonuç listesi ───────────────────────────────────────────────────── */
+  .timing { color: var(--muted); font: 12px var(--mono); margin: 14px 2px 2px; }
+  .timing b { color: var(--neon); font-weight: 600; }
+  .hit { border: 1px solid var(--line); background: var(--panel); border-radius: 11px; margin-top: 10px; overflow: hidden; animation: rise .25s ease-out both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+  .hit .head { display: flex; gap: 8px 10px; align-items: baseline; padding: 10px 14px; cursor: pointer; flex-wrap: wrap; }
+  .hit .head:hover .path { color: var(--neon); }
+  .hit { cursor: pointer; }
+  .hit.sel { border-color: var(--neon-dim); box-shadow: 0 0 0 1px rgba(59,246,107,.25); }
+  .hit .path { font: 600 12.5px var(--mono); overflow-wrap: anywhere; transition: color .12s; }
+  .hit .sym { color: var(--muted); font-size: 12px; }
+  .badge { font: 10.5px/1.6 var(--mono); background: var(--neon-soft); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--muted); }
+  .hit pre { margin: 0; padding: 12px 14px; background: var(--bg); font: 12px/1.5 var(--mono); overflow: hidden; border-top: 1px solid var(--line); max-height: 96px; max-width: 100%; }
+  .answer { white-space: pre-wrap; background: var(--neon-soft); border: 1px solid var(--line-2); border-radius: 11px; padding: 14px 16px; margin-top: 12px; font-size: 13.5px; }
+  .srcs { font: 12px/1.8 var(--mono); color: var(--muted); margin-top: 10px; }
+  .empty { color: var(--muted); padding: 30px 12px; text-align: center; font-size: 13.5px; }
+
+  /* ── Sağ çekmece ─────────────────────────────────────────────────────── */
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 94vw); z-index: 20;
+    background: linear-gradient(180deg, rgba(220,255,235,.02), transparent 40%), var(--panel);
+    border-left: 1px solid var(--line-2); box-shadow: -30px 0 80px rgba(0,0,0,.55);
+    transform: translateX(102%); transition: transform .25s ease; display: flex; flex-direction: column;
+  }
+  .drawer.open { transform: none; }
+  .drawer .dhead { padding: 16px 18px 12px; border-bottom: 1px solid var(--line); position: relative; }
+  .drawer .dpath { font: 700 13.5px var(--mono); overflow-wrap: anywhere; color: var(--neon); text-shadow: 0 0 12px var(--glow); padding-right: 34px; }
+  .drawer .dmeta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .drawer .dclose { position: absolute; top: 10px; right: 10px; font: 700 14px var(--mono); }
+  .drawer .dbody { flex: 1; overflow: auto; }
+  .drawer pre { margin: 0; padding: 14px 18px 24px; font: 12.5px/1.6 var(--mono); background: var(--bg); min-height: 100%; }
+  .drawer .dfoot { display: flex; gap: 8px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--line); }
+  .backdrop { position: fixed; inset: 0; z-index: 19; background: rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .backdrop.show { opacity: 1; pointer-events: auto; }
+
   /* ── Tablo (Repolar) ─────────────────────────────────────────────────── */
   .card { background: linear-gradient(180deg, rgba(220,255,235,.02), transparent 45%), var(--panel); border: 1px solid var(--line); border-radius: 13px; overflow: hidden; box-shadow: 0 18px 50px rgba(0,0,0,.35); }
   table { width: 100%; border-collapse: collapse; }
@@ -175,7 +184,7 @@
   tbody tr:last-child > td { border-bottom: 0; }
   tbody tr.mainrow:hover { background: var(--inset); }
   td.cname { font: 600 13px var(--mono); white-space: nowrap; }
-  td .led { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 9px; background: var(--faint); vertical-align: 1px; }
+  td .led, .led { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 9px; background: var(--faint); vertical-align: 1px; }
   .led.ready { background: var(--neon); box-shadow: 0 0 8px var(--glow); }
   .led.indexing { background: var(--warn); box-shadow: 0 0 8px rgba(255,194,75,.5); animation: pulse 1.1s ease-in-out infinite; }
   .led.error { background: var(--err); box-shadow: 0 0 8px rgba(255,107,94,.5); }
@@ -187,43 +196,34 @@
   td.acts { text-align: right; white-space: nowrap; }
   td.acts a { font-size: 12.5px; margin: 0 4px; }
   tr.subrow td { padding: 0 14px 12px; border-bottom: 1px solid var(--line); }
-  tr.subrow .bar { margin: 0 0 6px; }
   .bar { height: 5px; border-radius: 3px; background: var(--inset); border: 1px solid var(--line); overflow: hidden; }
   .bar > div { height: 100%; background: var(--neon); box-shadow: 0 0 10px var(--glow); transition: width .5s; }
   .errtxt { color: var(--err); font-size: 12.5px; overflow-wrap: anywhere; }
   .meta { color: var(--muted); font-size: 12px; }
 
-  /* Repo bağla paneli */
   .addcard { background: var(--panel); border: 1px solid var(--line-2); border-radius: 13px; padding: 18px; margin-bottom: 16px; }
   .addcard h3 { margin: 0 0 4px; font: 700 14px var(--sans); }
   .addcard .note { color: var(--faint); font-size: 12.5px; margin: 0 0 12px; }
   .addgrid { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
   .addgrid > div { min-width: 180px; flex: 1; }
-  .addgrid label { font: 10.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 6px; }
-  .addgrid input, .addgrid select { width: 100%; background: var(--inset); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px var(--mono); }
-  .addgrid input:focus, .addgrid select:focus { outline: none; border-color: var(--neon-dim); box-shadow: 0 0 0 1px rgba(59,246,107,.25); }
+  .addgrid label, .minigrid label { font: 10.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 6px; }
+  .addgrid input, .addgrid select, .minigrid input { width: 100%; background: var(--inset); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px var(--mono); }
+  .addgrid input:focus, .addgrid select:focus, .minigrid input:focus { outline: none; border-color: var(--neon-dim); box-shadow: 0 0 0 1px rgba(59,246,107,.25); }
   .addgrid .btns { display: flex; gap: 8px; flex: none; }
-
+  .credzone { margin: 2px 0 14px; }
+  .credline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .credline .okmark { color: var(--neon); font-family: var(--mono); }
+  .minigrid { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-top: 10px; }
+  .minigrid > div { flex: 1; min-width: 200px; }
+  .pick { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; max-height: 240px; overflow: auto; background: var(--inset); }
+  .pickrow { display: flex; gap: 10px; align-items: center; padding: 9px 13px; border-bottom: 1px solid var(--line); cursor: pointer; font: 12.5px var(--mono); }
+  .pickrow:last-child { border-bottom: 0; }
+  .pickrow:hover { background: var(--neon-soft); }
+  .pickrow .dim2 { color: var(--faint); font-size: 11.5px; }
+  .pickrow .right { margin-left: auto; color: var(--faint); font-size: 11px; }
+  .pickrow.taken { opacity: .5; cursor: default; }
   .starter { padding: 34px 20px; text-align: center; color: var(--muted); }
-  .starter .steps { font: 13px/2 var(--sans); }
   .starter b { color: var(--ink); }
-
-  .empty { color: var(--muted); padding: 30px 12px; text-align: center; font-size: 13.5px; }
-
-  /* ── Sonuçlar ────────────────────────────────────────────────────────── */
-  .timing { color: var(--muted); font: 12px var(--mono); margin: 14px 2px 2px; }
-  .timing b { color: var(--neon); font-weight: 600; }
-  .hit { border: 1px solid var(--line); background: var(--panel); border-radius: 11px; margin-top: 10px; overflow: hidden; animation: rise .25s ease-out both; }
-  @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
-  .hit .head { display: flex; gap: 8px 10px; align-items: baseline; padding: 10px 14px; cursor: pointer; flex-wrap: wrap; }
-  .hit .head:hover .path { color: var(--neon); }
-  .hit .path { font: 600 12.5px var(--mono); overflow-wrap: anywhere; transition: color .12s; }
-  .hit .sym { color: var(--muted); font-size: 12px; }
-  .badge { font: 10.5px/1.6 var(--mono); background: var(--neon-soft); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--muted); }
-  .hit pre, .job pre { margin: 0; padding: 12px 14px; background: var(--bg); font: 12px/1.5 var(--mono); overflow-x: auto; border-top: 1px solid var(--line); max-height: 132px; max-width: 100%; }
-  .hit.open pre { max-height: none; }
-  .answer { white-space: pre-wrap; background: var(--neon-soft); border: 1px solid var(--line-2); border-radius: 11px; padding: 14px 16px; margin-top: 12px; font-size: 13.5px; }
-  .srcs { font: 12px/1.8 var(--mono); color: var(--muted); margin-top: 10px; }
 
   /* ── İşler ───────────────────────────────────────────────────────────── */
   .opts { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
@@ -241,53 +241,44 @@
   .step small { display: block; font: 10px/1.6 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
   .step b { display: block; font: 600 12.5px/1.5 var(--mono); }
   .arrow { align-self: center; color: var(--neon-dim); font-family: var(--mono); }
-  .job .errtxt { margin-top: 8px; }
   .job details { margin-top: 8px; }
   .job summary { font: 11px var(--mono); color: var(--faint); cursor: pointer; }
-  .job details pre { border: 1px solid var(--line); border-radius: 8px; margin-top: 6px; }
+  .job pre { margin: 6px 0 0; padding: 12px 14px; background: var(--bg); font: 12px/1.5 var(--mono); overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
 
-  /* ── Bağlan ──────────────────────────────────────────────────────────── */
-  .connect h3 { font: 700 13px var(--mono); margin: 24px 0 8px; }
-  .connect h3:first-of-type { margin-top: 6px; }
-  .connect h3 .no { color: var(--neon); text-shadow: 0 0 10px var(--glow); margin-right: 6px; }
-  .connect p, .connect li { font-size: 13.5px; }
-  .connect .note { color: var(--muted); font-size: 12.5px; }
-  .connect code { font: 12px var(--mono); color: var(--ink); background: var(--inset); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  /* ── Bağlan: kompakt kartlar + ⓘ popover ─────────────────────────────── */
+  .cgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 14px; }
+  .ccard { background: var(--panel); border: 1px solid var(--line); border-radius: 13px; padding: 16px; position: relative; box-shadow: 0 18px 50px rgba(0,0,0,.3); }
+  .ccard h3 { margin: 0 0 10px; font: 700 13px var(--mono); display: flex; align-items: center; gap: 8px; }
+  .ccard h3 .spacer { flex: 1; }
+  .mini { color: var(--faint); font-size: 12px; margin-top: 8px; }
+  .mini code { font: 11.5px var(--mono); color: var(--muted); }
+  .info { background: none; border: 1px solid var(--line-2); color: var(--faint); border-radius: 50%; width: 22px; height: 22px; padding: 0; font: 700 12px/1 var(--mono); }
+  .info:hover { color: var(--neon); border-color: var(--neon-dim); }
+  .pop {
+    position: absolute; top: 44px; right: 12px; left: 12px; z-index: 8;
+    background: var(--inset); border: 1px solid var(--line-2); border-radius: 10px;
+    padding: 12px 14px; font-size: 12.5px; color: var(--muted); box-shadow: 0 20px 50px rgba(0,0,0,.6);
+  }
+  .pop code { font: 11.5px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
   .warnbox { border: 1px solid rgba(255,194,75,.5); background: rgba(255,194,75,.07); color: var(--warn); border-radius: 10px; padding: 10px 14px; font-size: 13px; margin: 4px 0 14px; }
-  .copyrow { display: flex; gap: 10px; align-items: center; background: var(--inset); border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; margin: 8px 0; }
-  .copyrow code { flex: 1; white-space: pre; overflow-x: auto; font: 12px/1.6 var(--mono); background: none; border: 0; padding: 0; color: var(--ink); }
+  .copyrow { display: flex; gap: 10px; align-items: center; background: var(--inset); border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; margin: 8px 0 0; }
+  .copyrow code { flex: 1; white-space: pre; overflow-x: auto; font: 11.5px/1.6 var(--mono); background: none; border: 0; padding: 0; color: var(--ink); }
   .copyrow button { flex: none; font: 600 11px var(--mono); padding: 5px 10px; color: var(--neon); }
 
-  /* kimlik + repo seçici */
-  .credzone { margin: 2px 0 14px; }
-  .credline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
-  .credline .okmark { color: var(--neon); font-family: var(--mono); }
-  .minigrid { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-top: 10px; }
-  .minigrid > div { flex: 1; min-width: 200px; }
-  .minigrid label { font: 10.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 6px; }
-  .minigrid input { width: 100%; background: var(--inset); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px var(--mono); }
-  .minigrid input:focus { outline: none; border-color: var(--neon-dim); box-shadow: 0 0 0 1px rgba(59,246,107,.25); }
-  .pick { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; max-height: 240px; overflow: auto; background: var(--inset); }
-  .pickrow { display: flex; gap: 10px; align-items: center; padding: 9px 13px; border-bottom: 1px solid var(--line); cursor: pointer; font: 12.5px var(--mono); }
-  .pickrow:last-child { border-bottom: 0; }
-  .pickrow:hover { background: var(--neon-soft); }
-  .pickrow .dim2 { color: var(--faint); font-size: 11.5px; }
-  .pickrow .right { margin-left: auto; color: var(--faint); font-size: 11px; }
-  .pickrow.taken { opacity: .5; cursor: default; }
   .toast {
     position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-    background: #2a1210; border: 1px solid var(--err); color: #ffd9d5;
-    padding: 10px 16px; border-radius: 10px; font-size: 13px; max-width: 90vw; display: none; z-index: 10;
+    background: #10240f; border: 1px solid var(--neon-dim); color: var(--ink);
+    padding: 10px 16px; border-radius: 10px; font-size: 13px; max-width: 90vw; display: none; z-index: 30;
   }
+  .toast.err { background: #2a1210; border-color: var(--err); color: #ffd9d5; }
 
   @media (max-width: 900px) {
-    .shell { grid-template-columns: 1fr; }
-    nav { position: static; height: auto; flex-direction: row; align-items: center; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); }
-    .brand { padding-bottom: 4px; width: 100%; }
-    nav .item { width: auto; }
-    nav .foot { display: none; }
-    .content { padding: 18px 16px 50px; }
+    .content { padding: 16px 14px 60px; }
+    #space { height: 300px; }
     td.dim, td.num, th.hides { display: none; }
+    .topbar { flex-wrap: wrap; }
+    .topbar .foot-chips { display: none; }
+    .cgrid { grid-template-columns: 1fr; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -295,122 +286,133 @@
 </style>
 </head>
 <body>
-<div class="shell">
-  <nav>
-    <div class="brand"><span class="sig">❯</span> MILVUS<span class="sub">//</span>RAG</div>
-    <button class="item" id="tabbtn-ara" onclick="showTab('ara')"><span class="ico">❯</span> Ara</button>
-    <button class="item" id="tabbtn-repolar" onclick="showTab('repolar')"><span class="ico">▤</span> Repolar <span class="cnt" id="repoCount"></span></button>
-    <button class="item" id="tabbtn-isler" onclick="showTab('isler')"><span class="ico">⟲</span> İşler</button>
-    <button class="item" id="tabbtn-baglan" onclick="showTab('baglan')"><span class="ico">⇄</span> Bağlan</button>
-    <div class="core" id="core" aria-hidden="true">
-      <div class="field">
-        <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
-        <div class="orbitpath"></div>
-        <div class="sats" id="coreSats"></div>
-        <div class="orb"></div>
-      </div>
-      <div class="corecap" id="coreCap"></div>
-    </div>
-    <div class="foot" id="chips"></div>
-  </nav>
+<div class="topbar">
+  <div class="brand"><span class="sig">❯</span> MILVUS<span class="sub">//</span>RAG</div>
+  <button class="item" id="tabbtn-ara" onclick="showTab('ara')"><span class="ico">❯</span> Ara</button>
+  <button class="item" id="tabbtn-repolar" onclick="showTab('repolar')"><span class="ico">▤</span> Repolar <span class="cnt" id="repoCount"></span></button>
+  <button class="item" id="tabbtn-isler" onclick="showTab('isler')"><span class="ico">⟲</span> İşler</button>
+  <button class="item" id="tabbtn-baglan" onclick="showTab('baglan')"><span class="ico">⇄</span> Bağlan</button>
+  <span class="spacer"></span>
+  <span class="foot-chips" id="chips"></span>
+</div>
 
-  <div class="content">
-    <!-- ── Ara ─────────────────────────────────────────────────────────── -->
-    <div id="tab-ara">
-      <div class="cmd">
-        <span class="prompt" aria-hidden="true">❯</span>
-        <input id="q" placeholder="Soru yaz ya da fonksiyon adı yapıştır…" autofocus aria-label="Kod tabanında ara">
-        <div class="actions">
-          <button class="primary" id="btnSearch">Ara</button>
-          <button id="btnAsk" title="Bulunan kodla AI'dan atıflı cevap ister">AI'ya sor</button>
+<div class="content">
+  <!-- ── Ara: komut çubuğu + vektör uzayı ─────────────────────────────── -->
+  <div id="tab-ara">
+    <div class="cmd">
+      <span class="prompt" aria-hidden="true">❯</span>
+      <input id="q" placeholder="Soru yaz ya da fonksiyon adı yapıştır…" autofocus aria-label="Kod tabanında ara">
+      <div class="actions">
+        <button class="primary" id="btnSearch">Ara</button>
+        <button id="btnAsk" title="Bulunan kodla AI'dan atıflı cevap ister">AI'ya sor</button>
+      </div>
+    </div>
+    <div class="deckrow">
+      <span class="try">DENE</span>
+      <button class="exq" onclick="tryQuery(this)">jwt token nerede üretiliyor</button>
+      <button class="exq" onclick="tryQuery(this)">withSession</button>
+      <button class="exq" onclick="tryQuery(this)">webhook eventleri nasıl kuyruğa alınıyor</button>
+      <details class="adv">
+        <summary>Ayarlar</summary>
+        <div class="advbody">
+          <span><label for="mode">arama modu</label><select id="mode">
+            <option value="">Otomatik (önerilen)</option>
+            <option value="dense">Anlamsal</option>
+            <option value="bm25">Kelime (BM25)</option>
+            <option value="hybrid">Karma (RRF)</option>
+          </select></span>
+          <span><label for="k">sonuç</label><input id="k" type="number" value="8" min="1" max="50" style="width:64px"></span>
+          <span><label for="rr">yeniden sırala</label><input id="rr" type="checkbox" title="Cross-encoder; daha isabetli ama saniyeler sürer"></span>
+          <span class="repofilter" id="repoFilter"></span>
+        </div>
+      </details>
+    </div>
+    <div class="space-wrap">
+      <canvas id="space"></canvas>
+      <div class="space-hint" id="spaceHint">vektör uzayı — bağlı repoların ve aramanın canlı haritası</div>
+    </div>
+    <div id="out"></div>
+  </div>
+
+  <!-- ── Repolar ──────────────────────────────────────────────────────── -->
+  <div id="tab-repolar" hidden>
+    <div class="vhead">
+      <h1>Repolar</h1><span class="sub" id="repoSub"></span>
+      <span class="spacer"></span>
+      <button class="primary" id="btnAddRepo">＋ Repo bağla</button>
+    </div>
+    <div class="addcard" id="addBox" hidden>
+      <h3>Repo bağla</h3>
+      <p class="note">Bağlanınca klonlanır ve indexlenir; sonrasında her push'ta yalnızca değişen dosyalar güncellenir.</p>
+      <div class="credzone" id="credZone"></div>
+      <div class="addgrid">
+        <div style="flex:0 0 170px"><label for="aProvider">Nereden</label>
+          <select id="aProvider">
+            <option value="github">GitHub</option>
+            <option value="azure">Azure DevOps</option>
+            <option value="local">Sunucudaki dizin</option>
+            <option value="git">Git URL</option>
+          </select></div>
+        <div id="fGithub"><label for="aGh">owner/repo</label><input id="aGh" placeholder="örn: vercel/next.js"></div>
+        <div id="fAzure" hidden><label for="aProj">Proje</label><input id="aProj" placeholder="Platform"></div>
+        <div id="fAzure2" hidden><label for="aRepo">Repo adı</label><input id="aRepo" placeholder="backend-api"></div>
+        <div id="fLocal" hidden><label for="aPath">Dizin yolu</label><input id="aPath" placeholder="/opt/repos/my-api"></div>
+        <div id="fGit" hidden><label for="aUrl">Clone URL</label><input id="aUrl" placeholder="https://…/repo.git"></div>
+        <div style="flex:0 0 140px"><label for="aBranch">Branch</label><input id="aBranch" placeholder="varsayılan"></div>
+        <div class="btns">
+          <button class="primary" id="aSubmit">Bağla & indexle</button>
+          <button class="quiet" id="aCancel">Vazgeç</button>
         </div>
       </div>
-      <div class="deckrow">
-        <span class="try">DENE</span>
-        <button class="exq" onclick="tryQuery(this)">jwt token nerede üretiliyor</button>
-        <button class="exq" onclick="tryQuery(this)">withSession</button>
-        <button class="exq" onclick="tryQuery(this)">webhook eventleri nasıl kuyruğa alınıyor</button>
-        <details class="adv">
-          <summary>Ayarlar</summary>
-          <div class="advbody">
-            <span><label for="mode">arama modu</label><select id="mode">
-              <option value="">Otomatik (önerilen)</option>
-              <option value="dense">Anlamsal</option>
-              <option value="bm25">Kelime (BM25)</option>
-              <option value="hybrid">Karma (RRF)</option>
-            </select></span>
-            <span><label for="k">sonuç</label><input id="k" type="number" value="8" min="1" max="50" style="width:64px"></span>
-            <span><label for="rr">yeniden sırala</label><input id="rr" type="checkbox" title="Cross-encoder; daha isabetli ama saniyeler sürer"></span>
-            <span class="repofilter" id="repoFilter"></span>
-          </div>
-        </details>
-      </div>
-      <div id="out"><div class="empty">Yaz, Enter'a bas — o kadar.</div></div>
+      <div id="pickZone"></div>
     </div>
+    <div class="card"><div id="repos"><div class="empty">yükleniyor…</div></div></div>
+  </div>
 
-    <!-- ── Repolar ─────────────────────────────────────────────────────── -->
-    <div id="tab-repolar" hidden>
-      <div class="vhead">
-        <h1>Repolar</h1><span class="sub" id="repoSub"></span>
-        <span class="spacer"></span>
-        <button class="primary" id="btnAddRepo">＋ Repo bağla</button>
-      </div>
-      <div class="addcard" id="addBox" hidden>
-        <h3>Repo bağla</h3>
-        <p class="note">Bağlanınca klonlanır ve indexlenir; sonrasında her push'ta yalnızca değişen dosyalar güncellenir.</p>
-        <div class="credzone" id="credZone"></div>
-        <div class="addgrid">
-          <div style="flex:0 0 170px"><label for="aProvider">Nereden</label>
-            <select id="aProvider">
-              <option value="github">GitHub</option>
-              <option value="azure">Azure DevOps</option>
-              <option value="local">Sunucudaki dizin</option>
-              <option value="git">Git URL</option>
-            </select></div>
-          <div id="fGithub"><label for="aGh">owner/repo</label><input id="aGh" placeholder="örn: vercel/next.js"></div>
-          <div id="fAzure" hidden><label for="aProj">Proje</label><input id="aProj" placeholder="Platform"></div>
-          <div id="fAzure2" hidden><label for="aRepo">Repo adı</label><input id="aRepo" placeholder="backend-api"></div>
-          <div id="fLocal" hidden><label for="aPath">Dizin yolu</label><input id="aPath" placeholder="/opt/repos/my-api"></div>
-          <div id="fGit" hidden><label for="aUrl">Clone URL</label><input id="aUrl" placeholder="https://…/repo.git"></div>
-          <div style="flex:0 0 140px"><label for="aBranch">Branch</label><input id="aBranch" placeholder="varsayılan"></div>
-          <div class="btns">
-            <button class="primary" id="aSubmit">Bağla & indexle</button>
-            <button class="quiet" id="aCancel">Vazgeç</button>
-          </div>
-        </div>
-        <div id="pickZone"></div>
-      </div>
-      <div class="card"><div id="repos"><div class="empty">yükleniyor…</div></div></div>
+  <!-- ── İşler ────────────────────────────────────────────────────────── -->
+  <div id="tab-isler" hidden>
+    <div class="vhead">
+      <h1>Index işleri</h1><span class="sub">4 sn'de bir yenilenir</span>
+      <span class="spacer"></span>
+      <span class="opts"><label for="jobRepo">repo</label> <select id="jobRepo" onchange="loadJobs()"><option value="">hepsi</option></select></span>
     </div>
+    <div id="jobs"><div class="empty">yükleniyor…</div></div>
+  </div>
 
-    <!-- ── İşler ───────────────────────────────────────────────────────── -->
-    <div id="tab-isler" hidden>
-      <div class="vhead">
-        <h1>Index işleri</h1><span class="sub">4 sn'de bir yenilenir</span>
-        <span class="spacer"></span>
-        <span class="opts"><label for="jobRepo">repo</label> <select id="jobRepo" onchange="loadJobs()"><option value="">hepsi</option></select></span>
-      </div>
-      <div id="jobs"><div class="empty">yükleniyor…</div></div>
-    </div>
-
-    <!-- ── Bağlan ──────────────────────────────────────────────────────── -->
-    <div id="tab-baglan" hidden class="connect">
-      <div class="vhead"><h1>Bağlan</h1><span class="sub">webhook · API · MCP</span></div>
-      <div id="connect"><div class="empty">yükleniyor…</div></div>
-    </div>
+  <!-- ── Bağlan ───────────────────────────────────────────────────────── -->
+  <div id="tab-baglan" hidden>
+    <div class="vhead"><h1>Bağlan</h1><span class="sub">webhook · API · MCP</span></div>
+    <div id="connect"><div class="empty">yükleniyor…</div></div>
   </div>
 </div>
+
+<!-- Sağ çekmece -->
+<div class="backdrop" id="backdrop" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer" aria-label="Kod detayı">
+  <div class="dhead">
+    <div class="dpath" id="dPath"></div>
+    <div class="dmeta" id="dMeta"></div>
+    <button class="quiet dclose" onclick="closeDrawer()" aria-label="Kapat">✕</button>
+  </div>
+  <div class="dbody"><pre id="dCode"></pre></div>
+  <div class="dfoot">
+    <button id="dMore">± 40 satır bağlam</button>
+    <button class="quiet" id="dCopy">kodu kopyala</button>
+    <span style="flex:1"></span>
+    <span class="meta" id="dLines"></span>
+  </div>
+</aside>
 <div class="toast" id="toast" role="alert"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let repos = [];
-
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const STATUS_TR = { ready: "hazır", indexing: "indexleniyor", error: "hata", pending: "bekliyor" };
 
-function toast(msg) {
-  const el = $("toast"); el.textContent = msg; el.style.display = "block";
+function toast(msg, ok = false) {
+  const el = $("toast"); el.textContent = msg; el.classList.toggle("err", !ok); el.style.display = "block";
   clearTimeout(el._t); el._t = setTimeout(() => el.style.display = "none", 6000);
 }
 async function api(path, options) {
@@ -422,7 +424,186 @@ async function api(path, options) {
 }
 function tryQuery(btn) { $("q").value = btn.textContent; doSearch(); }
 
-// ---------------------------------------------------------------- sağlık
+// ════════════════════════════════ VEKTÖR UZAYI ═══════════════════════════
+// Bağlı repolar takımyıldız, chunk'lar yıldız tozu; arama sonuçları skora
+// göre çekirdeğe yaklaşan düğümler. Düğüme tıkla → sağdan kod çekmecesi.
+const viz = { nodes: [], repoPts: [], anim0: 0, hover: -1, sel: -1, raf: 0, W: 0, H: 0 };
+const canvas = $("space"), ctx = canvas.getContext("2d");
+
+function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6d2b79f5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hashStr(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+function vizSize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  if (!rect.width) return;
+  const dpr = devicePixelRatio || 1;
+  canvas.width = rect.width * dpr; canvas.height = canvas.offsetHeight * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  viz.W = rect.width; viz.H = canvas.offsetHeight;
+  vizLayout();
+}
+function vizLayout() {
+  const { W, H } = viz; if (!W) return;
+  const cx = W / 2, cy = H * 0.52;
+  viz.cx = cx; viz.cy = cy;
+  viz.repoPts = repos.map((r, i) => {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(repos.length, 1);
+    const x = cx + Math.cos(angle) * W * 0.30;
+    const y = cy + Math.sin(angle) * H * 0.30;
+    const rand = mulberry(hashStr(r.id));
+    const stars = Array.from({ length: Math.min(24 + Math.floor(r.chunk_count / 40), 90) }, () => {
+      const a = rand() * Math.PI * 2, d = 14 + rand() * 66;
+      return { x: x + Math.cos(a) * d * 1.25, y: y + Math.sin(a) * d * 0.75, s: .6 + rand() * 1.4, tw: rand() * Math.PI * 2 };
+    });
+    return { repo: r, x, y, angle, stars };
+  });
+  vizPlaceResults();
+}
+function vizPlaceResults() {
+  const hits = window._hits || [];
+  const { cx, cy, W, H } = viz; if (!W) return;
+  // Aynı repodan gelenler tek açıya yığılmasın: repo grubu içinde yelpaze aç.
+  const groups = {};
+  hits.forEach((h, i) => { (groups[h.repo_id] ||= []).push(i); });
+  viz.nodes = hits.map((h, i) => {
+    const rp = viz.repoPts.find(p => p.repo.id === h.repo_id);
+    const baseAngle = rp ? rp.angle : (i * 2.4);
+    const group = groups[h.repo_id];
+    const pos = group.indexOf(i);
+    const fan = group.length > 1 ? (pos - (group.length - 1) / 2) * (1.5 / Math.max(group.length - 1, 1)) : 0;
+    const t = i / Math.max(hits.length, 2);              // sıra → mesafe: iyi skor çekirdeğe yakın
+    const dist = (0.24 + t * 0.5) * Math.min(W * 0.34, H * 0.62);
+    return { hit: h, i,
+      x: cx + Math.cos(baseAngle + fan) * dist * 1.25,
+      y: cy + Math.sin(baseAngle + fan) * dist * 0.72,
+    };
+  });
+}
+function short(path) { const parts = path.split("/"); return parts.length > 2 ? "…/" + parts.slice(-2).join("/") : path; }
+
+function vizDraw(ts) {
+  const { W, H, cx, cy } = viz; if (!W) return;
+  ctx.clearRect(0, 0, W, H);
+  const T = REDUCED ? 0 : ts / 1000;
+  const busy = repos.some(r => r.active_job);
+  const NEON = "59,246,107";
+
+  // repo kümeleri: yıldız tozu + etiket + çekirdeğe bağ
+  for (const p of viz.repoPts) {
+    ctx.strokeStyle = `rgba(${NEON},.05)`; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(p.x, p.y); ctx.stroke();
+    for (const st of p.stars) {
+      const tw = REDUCED ? .55 : .35 + .4 * Math.abs(Math.sin(T * .7 + st.tw));
+      ctx.fillStyle = `rgba(${NEON},${.12 * tw + .04})`;
+      ctx.beginPath(); ctx.arc(st.x, st.y, st.s, 0, 7); ctx.fill();
+    }
+    ctx.fillStyle = `rgba(${NEON},.75)`;
+    ctx.shadowColor = `rgba(${NEON},.8)`; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3.2, 0, 7); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(125,147,133,.9)"; ctx.font = "11px ui-monospace, Menlo, monospace"; ctx.textAlign = "center";
+    ctx.fillText(p.repo.name, p.x, p.y + (p.y < cy ? -12 : 20));
+  }
+
+  // çekirdek
+  const breathe = REDUCED ? 1 : 1 + .06 * Math.sin(T * (busy ? 5 : 1.4));
+  const R = 17 * breathe;
+  const grad = ctx.createRadialGradient(cx - R * .3, cy - R * .35, 1, cx, cy, R);
+  grad.addColorStop(0, "#d9ffe6"); grad.addColorStop(.45, "#3bf66b"); grad.addColorStop(1, "#0a3d1c");
+  ctx.shadowColor = `rgba(${NEON},.7)`; ctx.shadowBlur = 34 * breathe;
+  ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.fill();
+  ctx.shadowBlur = 0;
+  if (!REDUCED) {
+    const ringT = (T % 3) / 3;
+    ctx.strokeStyle = `rgba(${NEON},${.5 * (1 - ringT)})`;
+    ctx.beginPath(); ctx.arc(cx, cy, R + ringT * 70, 0, 7); ctx.stroke();
+  }
+
+  // sonuç düğümleri: çekirdekten doğup yerine süzülür
+  const age = REDUCED ? 1 : Math.min((ts - viz.anim0) / 900, 1);
+  viz.nodes.forEach((n, idx) => {
+    const k = REDUCED ? 1 : Math.min(Math.max(age * viz.nodes.length - idx, 0), 1);
+    if (k <= 0) { n.dx = null; return; }
+    const ease = 1 - Math.pow(1 - k, 3);
+    const x = cx + (n.x - cx) * ease, y = cy + (n.y - cy) * ease;
+    n.dx = x; n.dy = y;
+    const hot = idx === viz.hover || idx === viz.sel;
+    ctx.strokeStyle = `rgba(${NEON},${(.28 - idx * .02) * ease})`;
+    ctx.lineWidth = hot ? 1.6 : 1;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
+    for (let j = 0; j < idx; j++) {                      // aynı dosyanın parçaları bağlı
+      const m = viz.nodes[j];
+      if (m.hit.path === n.hit.path && m.dx != null) {
+        ctx.strokeStyle = `rgba(${NEON},.14)`; ctx.setLineDash([3, 4]);
+        ctx.beginPath(); ctx.moveTo(m.dx, m.dy); ctx.lineTo(x, y); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    const r = (hot ? 7.5 : 5.5) * ease;
+    ctx.shadowColor = `rgba(${NEON},.9)`; ctx.shadowBlur = hot ? 18 : 10;
+    ctx.fillStyle = hot ? "#d9ffe6" : `rgba(${NEON},.95)`;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = hot ? "rgba(220,235,225,1)" : "rgba(125,147,133,.95)";
+    ctx.font = (hot ? "600 " : "") + "11px ui-monospace, Menlo, monospace"; ctx.textAlign = "center";
+    ctx.fillText(hot ? n.hit.path + ":" + n.hit.start_line : (n.hit.symbol || short(n.hit.path)), x, y - 12);
+  });
+  canvas.style.cursor = viz.hover >= 0 ? "pointer" : "default";
+}
+function vizLoop(ts) { vizDraw(ts); viz.raf = requestAnimationFrame(vizLoop); }
+function vizStart() {
+  cancelAnimationFrame(viz.raf);
+  if (REDUCED) { vizDraw(0); return; }                  // hareket istemeyene tek kare
+  viz.raf = requestAnimationFrame(vizLoop);
+}
+canvas.addEventListener("mousemove", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  viz.hover = viz.nodes.findIndex(n => n.dx != null && (n.dx - x) ** 2 + (n.dy - y) ** 2 < 196);
+  if (REDUCED) vizDraw(0);
+});
+canvas.addEventListener("click", () => { if (viz.hover >= 0) openDrawer(viz.hover); });
+addEventListener("resize", () => { if (!$("tab-ara").hidden) { vizSize(); if (REDUCED) vizDraw(0); } });
+
+// ── sağ çekmece ──────────────────────────────────────────────────────────
+let drawerHit = null, drawerExpanded = false;
+function openDrawer(i) {
+  const hit = (window._hits || [])[i]; if (!hit) return;
+  drawerHit = hit; drawerExpanded = false;
+  viz.sel = i;
+  document.querySelectorAll(".hit").forEach((el, j) => el.classList.toggle("sel", j === i));
+  $("dPath").textContent = `${hit.path}:${hit.start_line}-${hit.end_line}`;
+  $("dMeta").innerHTML =
+    (hit.symbol ? `<span class="badge">${esc(hit.kind)} ${esc(hit.symbol)}</span>` : "") +
+    `<span class="badge">${esc(hit.repo_id)}</span>` +
+    Object.entries(hit.scores).map(([k, v]) => `<span class="badge">${k}=${k === "bm25" ? v.toFixed(2) : v.toFixed(3)}</span>`).join("");
+  $("dCode").textContent = hit.content;
+  $("dLines").textContent = `${hit.end_line - hit.start_line + 1} satır`;
+  $("dMore").disabled = false; $("dMore").textContent = "± 40 satır bağlam";
+  $("drawer").classList.add("open"); $("backdrop").classList.add("show");
+}
+function closeDrawer() {
+  $("drawer").classList.remove("open"); $("backdrop").classList.remove("show");
+  viz.sel = -1;
+  document.querySelectorAll(".hit.sel").forEach(el => el.classList.remove("sel"));
+}
+addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+$("dMore").onclick = async () => {
+  if (!drawerHit) return;
+  const btn = $("dMore"); btn.disabled = true; btn.textContent = "yükleniyor…";
+  try {
+    const pad = drawerExpanded ? 120 : 40;
+    const start = Math.max(1, drawerHit.start_line - pad);
+    const d = await api(`/repos/${encodeURIComponent(drawerHit.repo_id)}/file?path=${encodeURIComponent(drawerHit.path)}&start=${start}&end=${drawerHit.end_line + pad}`);
+    $("dCode").textContent = d.text;
+    $("dLines").textContent = `${d.start}-${d.end} / ${d.total_lines} satır`;
+    drawerExpanded = true;
+    btn.textContent = "± 120 satır bağlam"; btn.disabled = false;
+  } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = "± 40 satır bağlam"; }
+};
+$("dCopy").onclick = () => { navigator.clipboard.writeText($("dCode").textContent).then(() => toast("Kod panoya kopyalandı ✓", true)); };
+
+// ── sağlık ───────────────────────────────────────────────────────────────
 async function loadHealth() {
   try {
     const h = (window._health = await api("/health"));
@@ -434,7 +615,7 @@ async function loadHealth() {
   } catch (e) { $("chips").innerHTML = `<span class="chip err">servis yok</span>`; }
 }
 
-// ---------------------------------------------------------------- repolar
+// ── repolar ──────────────────────────────────────────────────────────────
 function repoRow(r) {
   const job = r.active_job;
   const p = job?.stats?.progress;
@@ -465,9 +646,7 @@ function repoRow(r) {
     </td>
   </tr>${sub}`;
 }
-const STARTER = `<div class="starter">
-  <div class="steps"><b>1</b> — Sağ üstten repo bağla &nbsp;·&nbsp; <b>2</b> — index'in bitmesini bekle &nbsp;·&nbsp; <b>3</b> — Ara'ya geç, soruyu sor</div>
-</div>`;
+const STARTER = `<div class="starter"><b>1</b> — Sağ üstten repo bağla &nbsp;·&nbsp; <b>2</b> — index'in bitmesini bekle &nbsp;·&nbsp; <b>3</b> — Ara'ya geç, soruyu sor</div>`;
 async function loadRepos() {
   try {
     repos = await api("/repos");
@@ -491,20 +670,9 @@ async function loadRepos() {
       jobSel.innerHTML = `<option value="">hepsi</option>` + repos.map(r => `<option>${esc(r.id)}</option>`).join("");
       jobSel.value = current;
     }
-    renderCore();
+    vizLayout(); if (REDUCED) vizDraw(0);
     if (repos.some(r => r.active_job)) setTimeout(loadRepos, 3000);
   } catch (e) { toast("repolar yüklenemedi: " + e.message); }
-}
-function renderCore() {
-  const busy = repos.some(r => r.active_job);
-  $("core").classList.toggle("busy", busy);
-  const n = Math.min(repos.length, 10);
-  $("coreSats").innerHTML = Array.from({ length: n }, (_, i) => {
-    const angle = (360 / n) * i;
-    return `<span class="sat" style="transform: rotate(${angle}deg) translateX(54px)"></span>`;
-  }).join("");
-  const chunks = repos.reduce((sum, r) => sum + r.chunk_count, 0);
-  $("coreCap").textContent = busy ? "indexleniyor…" : (chunks ? `${chunks.toLocaleString("tr")} chunk canlı` : "çekirdek boşta");
 }
 async function syncRepo(id) {
   try { await api(`/repos/${id}/sync`, { method: "POST", headers: {"content-type": "application/json"}, body: "{}" }); loadRepos(); }
@@ -514,6 +682,8 @@ async function removeRepo(id) {
   if (!confirm(`${id} kaldırılsın mı? Index'i ve klonu silinir.`)) return;
   try { await api(`/repos/${id}`, { method: "DELETE" }); loadRepos(); } catch (e) { toast(e.message); }
 }
+
+// ── kimlikler + repo seçici ─────────────────────────────────────────────
 let credState = null;
 async function loadCredState() {
   try { credState = await api("/settings/credentials"); } catch { credState = null; }
@@ -526,9 +696,9 @@ async function saveCreds(fields, btn) {
       method: "PUT", headers: {"content-type": "application/json"},
       body: JSON.stringify({ ...fields, verify: true }),
     });
-    if (r.github) toast(r.github.ok ? `GitHub bağlandı: ${r.github.login} ✓` : "GitHub: " + r.github.detail);
-    if (r.azure) toast(r.azure.ok ? `Azure bağlandı: ${r.azure.projects} proje ✓` : "Azure: " + r.azure.detail);
-    if (!r.github && !r.azure) toast("Kaydedildi");
+    if (r.github) toast(r.github.ok ? `GitHub bağlandı: ${r.github.login} ✓` : "GitHub: " + r.github.detail, r.github.ok);
+    if (r.azure) toast(r.azure.ok ? `Azure bağlandı: ${r.azure.projects} proje ✓` : "Azure: " + r.azure.detail, r.azure.ok);
+    if (!r.github && !r.azure) toast("Kaydedildi", true);
     await loadCredState(); loadHealth();
   } catch (e) { toast(e.message); }
   finally { btn.disabled = false; btn.textContent = btn.dataset.label; }
@@ -539,21 +709,16 @@ function renderCredZone() {
   $("pickZone").innerHTML = "";
   if (v === "github") {
     const g = credState?.github;
-    zone.innerHTML = g?.token_set
+    const browse = `<div class="minigrid">
+      <div><label>Repoları listele — kullanıcı ya da org</label><input id="ghOwner" placeholder="örn: fport"></div>
+      <div style="flex:0 0 auto"><button data-label="Listele" onclick="listGithub(this)">Listele</button></div>
+    </div>`;
+    zone.innerHTML = (g?.token_set
       ? `<div class="credline"><span class="okmark">●</span> GitHub token kayıtlı (${g.source === "ui" ? "arayüzden" : "env"}) — private repolar da görünür.
-           <button class="quiet" onclick="toggleGhToken()">değiştir</button></div>
-         <div class="minigrid" id="ghTokenForm" hidden></div>
-         <div class="minigrid">
-           <div><label>Repoları listele — kullanıcı ya da org</label><input id="ghOwner" placeholder="örn: fport"></div>
-           <div style="flex:0 0 auto"><button data-label="Listele" onclick="listGithub(this)">Listele</button></div>
-         </div>`
+           <button class="quiet" onclick="toggleGhToken()">değiştir</button></div>`
       : `<div class="credline">Token yok — public repolar yine bağlanır. Private için:
-           <button class="quiet" onclick="toggleGhToken()">token ekle</button></div>
-         <div class="minigrid" id="ghTokenForm" hidden></div>
-         <div class="minigrid">
-           <div><label>Repoları listele — kullanıcı ya da org</label><input id="ghOwner" placeholder="örn: fport"></div>
-           <div style="flex:0 0 auto"><button data-label="Listele" onclick="listGithub(this)">Listele</button></div>
-         </div>`;
+           <button class="quiet" onclick="toggleGhToken()">token ekle</button></div>`)
+      + `<div class="minigrid" id="ghTokenForm" hidden></div>` + browse;
   } else if (v === "azure") {
     const a = credState?.azure;
     zone.innerHTML = a?.configured
@@ -606,10 +771,7 @@ async function listAzure(btn) {
   btn.disabled = true; btn.textContent = "yükleniyor…";
   try {
     const projects = await api("/azure/projects");
-    renderPicks(projects.map(pr => ({
-      title: pr.name, sub: "proje", right: "repoları aç →",
-      fill: () => listAzureRepos(pr.name),
-    })));
+    renderPicks(projects.map(pr => ({ title: pr.name, sub: "proje", right: "repoları aç →", fill: () => listAzureRepos(pr.name) })));
   } catch (e) { toast(e.message); }
   finally { btn.disabled = false; btn.textContent = btn.dataset.label; }
 }
@@ -661,7 +823,7 @@ $("aSubmit").onclick = async () => {
   } catch (e) { toast(e.message); } finally { $("aSubmit").disabled = false; }
 };
 
-// ------------------------------------------------------------------ arama
+// ── arama ────────────────────────────────────────────────────────────────
 function searchBody() {
   const boxes = [...document.querySelectorAll("#repoFilter input:checked")].map(el => el.value);
   return {
@@ -679,31 +841,34 @@ function scoreBadges(scores) {
 async function doSearch() {
   const body = searchBody();
   if (!body.q) { $("q").focus(); return; }
-  showTab("ara");
-  $("out").innerHTML = `<div class="empty">aranıyor…</div>`;
+  showTab("ara"); closeDrawer();
+  $("spaceHint").textContent = "taranıyor…";
+  $("out").innerHTML = "";
   try {
     const d = await api("/search", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body) });
+    window._hits = d.hits;
+    viz.anim0 = performance.now();
+    vizPlaceResults(); if (REDUCED) vizDraw(0);
+    $("spaceHint").textContent = d.hits.length
+      ? "düğüme tıkla → kod sağdan açılır · çekirdeğe yakın = daha alakalı"
+      : "eşleşme yok — sorguyu değiştirip tekrar dene";
     const t = Object.entries(d.timings_ms).map(([k, v]) => `${k} ${Math.round(v)}ms`).join(" · ");
     const head = `<div class="timing">${d.hits.length} sonuç · mod <b>${esc(d.mode)}</b>${d.reranked ? " + rerank" : ""} · ${t}${d.cached ? " · önbellek" : ""}</div>`;
-    if (!d.hits.length) {
-      $("out").innerHTML = head + `<div class="empty">Eşleşme yok — sorguyu değiştirip tekrar dene.</div>`;
-      return;
-    }
-    $("out").innerHTML = head + d.hits.map(h => `
-      <div class="hit" onclick="this.classList.toggle('open')" title="Aç/kapa">
+    $("out").innerHTML = head + d.hits.map((h, i) => `
+      <div class="hit" onclick="openDrawer(${i})" title="Detayı aç">
         <div class="head">
           <span class="path">${esc(h.path)}:${h.start_line}-${h.end_line}</span>
           ${h.symbol ? `<span class="sym">${esc(h.kind)} <b>${esc(h.symbol)}</b>${h.parent_symbol ? " · " + esc(h.parent_symbol) : ""}</span>` : ""}
           <span class="badge">${esc(h.repo_id)}</span> ${scoreBadges(h.scores)}
         </div>
-        <pre>${esc(h.content)}</pre>
+        <pre>${esc(h.content.split("\n").slice(0, 5).join("\n"))}</pre>
       </div>`).join("");
-  } catch (e) { $("out").innerHTML = ""; toast(e.message); }
+  } catch (e) { $("spaceHint").textContent = "vektör uzayı — bağlı repoların ve aramanın canlı haritası"; toast(e.message); }
 }
 async function doAsk() {
   const body = searchBody();
   if (!body.q) { $("q").focus(); return; }
-  showTab("ara");
+  showTab("ara"); closeDrawer();
   $("out").innerHTML = `<div class="empty">AI okuyor… birkaç saniye</div>`;
   try {
     const d = await api("/ask", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body) });
@@ -717,19 +882,21 @@ $("btnSearch").onclick = doSearch;
 $("btnAsk").onclick = doAsk;
 $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
 
-// ---------------------------------------------------------------- görünümler
+// ── görünümler ───────────────────────────────────────────────────────────
 function showTab(name) {
   for (const tab of ["ara", "repolar", "isler", "baglan"]) {
     $("tab-" + tab).hidden = tab !== name;
     $("tabbtn-" + tab).classList.toggle("active", tab === name);
   }
   clearInterval(window._jobsTimer);
+  cancelAnimationFrame(viz.raf);
+  if (name === "ara") { requestAnimationFrame(() => { vizSize(); vizStart(); }); }
   if (name === "isler") { loadJobs(); window._jobsTimer = setInterval(loadJobs, 4000); }
   if (name === "baglan") renderConnect();
   if (name === "repolar") loadRepos();
 }
 
-// ------------------------------------------------------------------ işler
+// ── işler ────────────────────────────────────────────────────────────────
 function step(title, main, sub) {
   return `<div class="step"><small>${esc(title)}</small><b>${esc(main)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div>`;
 }
@@ -742,7 +909,7 @@ function jobCard(j) {
     body = `<div class="bar" style="margin-top:9px"><div style="width:${pct}%"></div></div>
       <div class="meta" style="margin-top:5px">${p.files_total ? `${p.files_done}/${p.files_total} dosya` : "başlıyor…"} · ${s.chunks_written ?? 0} chunk yazıldı</div>`;
   } else if (j.status === "failed") {
-    body = `<div class="errtxt">${esc(j.error)}</div>`;
+    body = `<div class="errtxt" style="margin-top:8px">${esc(j.error)}</div>`;
   } else if (j.status === "done") {
     body = `<div class="flow">
       ${step("kaynak", s.commit ? s.commit.slice(0, 8) : "yerel", s.forced ? "tam yeniden index" : "artımlı")}
@@ -774,7 +941,7 @@ async function loadJobs() {
   } catch (e) { toast("işler yüklenemedi: " + e.message); }
 }
 
-// ----------------------------------------------------------------- bağlan
+// ── bağlan: kompakt kartlar + ⓘ popover ─────────────────────────────────
 function copyText(btn) {
   navigator.clipboard.writeText(btn.dataset.copy).then(() => {
     const old = btn.textContent; btn.textContent = "✓"; setTimeout(() => (btn.textContent = old), 1200);
@@ -783,6 +950,22 @@ function copyText(btn) {
 function copyRow(value) {
   return `<div class="copyrow"><code>${esc(value)}</code><button data-copy="${esc(value)}" onclick="copyText(this)">kopyala</button></div>`;
 }
+function togglePop(btn) {
+  const pop = btn.closest(".ccard").querySelector(".pop");
+  const wasHidden = pop.hidden;
+  document.querySelectorAll(".pop").forEach(p => p.hidden = true);
+  pop.hidden = !wasHidden;
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".pop") && !e.target.closest(".info")) {
+    document.querySelectorAll(".pop").forEach(p => p.hidden = true);
+  }
+});
+function ccard(title, popHtml, bodyHtml) {
+  return `<div class="ccard"><h3>${title}<span class="spacer"></span>
+    <button class="info" onclick="togglePop(this)" aria-label="Ayrıntı" title="Ayrıntı">i</button></h3>
+    <div class="pop" hidden>${popHtml}</div>${bodyHtml}</div>`;
+}
 function renderConnect() {
   const h = window._health || {};
   const origin = location.origin;
@@ -790,33 +973,43 @@ function renderConnect() {
   const az = repos.filter(r => r.provider === "azure" && r.web_url);
   const parts = [];
   if (h.webhook_secret_set === false) {
-    parts.push(`<div class="warnbox">⚠ <b>RAG_WEBHOOK_SECRET ayarlanmamış</b> — gelen webhook'lar 401 ile reddedilir. <code>.env</code>'e bir sır yazıp servisi yeniden başlat.</div>`);
+    parts.push(`<div class="warnbox">⚠ <b>RAG_WEBHOOK_SECRET ayarlanmamış</b> — webhook'lar reddedilir. <code>.env</code>'e sır yazıp yeniden başlat.</div>`);
   }
-  parts.push(`<h3><span class="no">1</span>Push webhook'ları — repo değişince otomatik tazeleme</h3>
-    <p><b>GitHub:</b> repo → Settings → Webhooks → <i>Add webhook</i>. Payload URL:</p>
-    ${copyRow(origin + "/webhooks/github/push")}
-    <p class="note">Content type <code>application/json</code> · Secret = <code>RAG_WEBHOOK_SECRET</code> (HMAC-SHA256 doğrulanır) · "Just the push event". Teslimatları repo'daki <i>Recent Deliveries</i> sekmesinden izlersin; ping'e servis <code>pong</code> döner.</p>
-    ${gh.length ? `<p class="note">Kayıtlı GitHub repoların: ${gh.map(r => `<a href="${esc(r.web_url)}/settings/hooks" target="_blank" rel="noopener">${esc(r.name)} ↗</a>`).join(" · ")}</p>` : ""}
-    <p style="margin-top:12px"><b>Azure DevOps:</b> Project Settings → Service Hooks → <i>Web Hooks</i> → olay <i>Code pushed</i>. URL:</p>
-    ${copyRow(origin + "/webhooks/azure/push")}
-    <p class="note">"Basic authentication password" ya da <code>X-RAG-Webhook-Secret</code> header'ı = <code>RAG_WEBHOOK_SECRET</code>. Aynı commit iki kez gelirse ikinci iş açılmaz.</p>
-    ${az.length ? `<p class="note">Kayıtlı Azure repoların: ${az.map(r => `<a href="${esc(r.web_url.split("/_git/")[0])}/_settings/serviceHooks" target="_blank" rel="noopener">${esc(r.name)} ↗</a>`).join(" · ")}</p>` : ""}`);
-  parts.push(`<h3><span class="no">2</span>Poller — webhook'suz yedek</h3>
-    <p>${h.poll_interval_seconds ? `Her <b>${h.poll_interval_seconds} sn</b>'de bir Azure/GitHub branch head'i son indexlenen commit'le karşılaştırılır; webhook kuramasan bile index en geç bu aralıkta tazelenir. (<code>RAG_POLL_INTERVAL_SECONDS</code>, 0 = kapalı)` : `Kapalı (<code>RAG_POLL_INTERVAL_SECONDS=0</code>). Webhook yoksa tazeleme yalnızca <i>Güncelle</i> düğmesiyle olur.`}</p>`);
-  parts.push(`<h3><span class="no">3</span>HTTP API</h3>
-    <p>Tüm uçlar ve şemalar: <a href="/docs" target="_blank">/docs</a> (OpenAPI). En çok kullanılan ikisi:</p>
-    ${copyRow(`curl -X POST ${origin}/search -H 'content-type: application/json' -d '{"q":"jwt nerede üretiliyor","k":8}'`)}
-    ${copyRow(`curl '${origin}/repos/<repo-id>/file?path=src/index.ts&start=1&end=120'`)}
-    <p class="note">Her arama sonucu kanal skorlarını taşır (dense/bm25/rrf/rerank) — hangi kanalın neyi bulduğu görünür.</p>`);
-  parts.push(`<h3><span class="no">4</span>MCP / agent entegrasyonu</h3>
-    <p>Bir asistana bağlamak için iki araç yeter: <code>search_code</code> → <code>POST /search</code>, <code>read_code</code> → <code>GET /repos/{id}/file</code>. Milvus API'nin MCP sunucusunda bu araçlar hazır; api tarafında tek ayar:</p>
-    ${copyRow("RAG_SERVICE_URL=" + origin)}
-    <p class="note">Dönen kod parçaları ajana <i>untrusted veri</i> olarak işaretlenip verilir (prompt-injection koruması). Başka bir MCP istemcisi ya da agent framework'ü de aynı iki HTTP ucunu sararak bağlanabilir. Bu servisin kendi kimlik doğrulaması yok — URL'i iç ağda tut (bkz. DEPLOYMENT.md).</p>`);
+  parts.push(`<div class="cgrid">`);
+  parts.push(ccard("GitHub webhook",
+    `repo → Settings → Webhooks → <i>Add webhook</i>. Content type <code>application/json</code>,
+     Secret = <code>RAG_WEBHOOK_SECRET</code> (HMAC-SHA256 doğrulanır), olay: yalnızca <i>push</i>.
+     Teslimatlar repo'daki <i>Recent Deliveries</i>'te; ping'e servis <code>pong</code> döner.
+     Aynı commit iki kez gelirse ikinci iş açılmaz.`,
+    copyRow(origin + "/webhooks/github/push") +
+    `<div class="mini">Push gelince değişen dosyalar otomatik indexlenir.${gh.length ? " Hook sayfaları: " + gh.map(r => `<a href="${esc(r.web_url)}/settings/hooks" target="_blank" rel="noopener">${esc(r.name)} ↗</a>`).join(" · ") : ""}</div>`));
+  parts.push(ccard("Azure DevOps webhook",
+    `Project Settings → Service Hooks → <i>Web Hooks</i> → olay <i>Code pushed</i>.
+     "Basic authentication password" ya da <code>X-RAG-Webhook-Secret</code> header'ı =
+     <code>RAG_WEBHOOK_SECRET</code>. Aynı commit iki kez gelirse ikinci iş açılmaz.`,
+    copyRow(origin + "/webhooks/azure/push") +
+    `<div class="mini">Push gelince değişen dosyalar otomatik indexlenir.${az.length ? " Hook sayfaları: " + az.map(r => `<a href="${esc(r.web_url.split("/_git/")[0])}/_settings/serviceHooks" target="_blank" rel="noopener">${esc(r.name)} ↗</a>`).join(" · ") : ""}</div>`));
+  parts.push(ccard("HTTP API",
+    `Tüm uçlar ve şemalar <a href="/docs" target="_blank">/docs</a>'ta (OpenAPI). İkinci sık uç:
+     <code>GET /repos/{id}/file?path=&start=&end=</code> dosyadan satır aralığı okur.
+     Her arama sonucu kanal skorlarını taşır (dense/bm25/rrf/rerank).`,
+    copyRow(`curl -X POST ${origin}/search -H 'content-type: application/json' -d '{"q":"jwt nerede üretiliyor","k":8}'`) +
+    `<div class="mini">Arama, dosya okuma, repo/iş yönetimi — hepsi düz HTTP.</div>`));
+  parts.push(ccard("MCP / agent",
+    `İki araç yeter: <code>search_code</code> → <code>POST /search</code>,
+     <code>read_code</code> → <code>GET /repos/{id}/file</code>. Milvus API'nin MCP sunucusunda hazırlar.
+     Dönen kod ajana <i>untrusted veri</i> olarak işaretlenir (prompt-injection koruması).
+     Servisin kendi auth'u yok — URL'i iç ağda tut (DEPLOYMENT.md).`,
+    copyRow("RAG_SERVICE_URL=" + origin) +
+    `<div class="mini">Asistanın api tarafında tek ayar bu.</div>`));
+  parts.push(`</div>`);
+  parts.push(`<p class="mini" style="margin-top:14px">Poller: ${h.poll_interval_seconds
+    ? `webhook kurulmasa bile her <b>${h.poll_interval_seconds} sn</b>'de bir uzak head karşılaştırılır — index en geç bu aralıkta tazelenir.`
+    : `kapalı (<code>RAG_POLL_INTERVAL_SECONDS=0</code>) — webhook yoksa tazeleme yalnızca <i>Güncelle</i> ile.`}</p>`);
   $("connect").innerHTML = parts.join("");
 }
 
 loadHealth(); loadRepos();
-// ?q= ve ?tab= ile paylaşılabilir görünümler.
 const params = new URLSearchParams(location.search);
 const startTab = params.get("tab");
 showTab(["repolar", "isler", "baglan"].includes(startTab) ? startTab : "ara");
@@ -824,7 +1017,7 @@ if (params.get("add")) { showTab("repolar"); $("btnAddRepo").click(); }
 if (params.get("q")) {
   $("q").value = params.get("q");
   if (params.get("mode")) $("mode").value = params.get("mode");
-  doSearch();
+  doSearch().then(() => { if (params.get("open") && (window._hits || []).length) openDrawer(0); });
 }
 </script>
 </body>
