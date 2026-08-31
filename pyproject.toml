@@ -1,0 +1,73 @@
+[project]
+name = "milvus-rag"
+version = "0.1.0"
+description = "Kod tabanı RAG servisi: Azure DevOps repo → tree-sitter chunk → Milvus (dense + BM25) → rerank; push'ta artımlı güncelleme."
+readme = "README.md"
+# Sistem Python'ı 3.14; torch / pymilvus için kararlı wheel'ler 3.12'de. uv bunu kendi indirir.
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "httpx>=0.28",
+    "typer>=0.15",
+    "rich>=13.9",
+    "pymilvus>=2.5",
+    "sentence-transformers>=3.3",
+    "numpy>=2.1",
+    "tree-sitter>=0.26.0",
+    "tree-sitter-language-pack>=1.15.8",
+    "anthropic>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[project.scripts]
+rag = "milvus_rag.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/milvus_rag"]
+
+[tool.uv]
+package = true
+
+# Linux sunucuda (Docker dahil) CUDA'sız torch: imaj ~5 GB küçülür. macOS etkilenmez.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: Milvus ya da model indirmesi gerektiren testler (RAG_LIVE=1 ile çalışır)",
+]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "PTH"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # Türkçe metinlerdeki karakter uyarıları
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true

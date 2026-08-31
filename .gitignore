@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+# Türev veri: klonlar, SQLite, ölçüm çıktıları. Kaynak Azure'da; index Milvus'ta.
+data/
+evals/results/*.json
+# Golden setler indexlenen repoya özel ve iç dosya yollarını içerir; şablon hariç yayınlanmaz.
+evals/golden.*.jsonl
+!evals/golden.example.jsonl
