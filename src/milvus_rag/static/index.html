@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#070b09">
 <title>Milvus RAG</title>
 <style>
-  /* ── Fosfor konsol: koyu-tek tema, neon yeşil tek vurgu ─────────────────── */
+  /* ── Fosfor konsol: koyu tema, neon yeşil tek vurgu, tablo düzeni ───────── */
   :root {
     color-scheme: dark;
     --bg: #070b09;
@@ -19,7 +19,7 @@
     --faint: #566b5e;
     --neon: #3bf66b;
     --neon-dim: #29b34e;
-    --neon-ink: #03150a;          /* neon zeminde okunur koyu metin */
+    --neon-ink: #03150a;
     --neon-soft: rgba(59, 246, 107, .09);
     --glow: rgba(59, 246, 107, .28);
     --warn: #ffc24b;
@@ -29,46 +29,71 @@
   }
   * { box-sizing: border-box; }
   html { scrollbar-color: var(--line-2) var(--bg); }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 14px/1.55 var(--sans);
-    /* radar ekranı dokusu: çok soluk nokta ızgarası */
-    background-image: radial-gradient(rgba(59,246,107,.05) 1px, transparent 1px);
-    background-size: 26px 26px;
-  }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--sans); }
   ::selection { background: var(--neon); color: var(--neon-ink); }
   a { color: var(--neon); text-decoration-color: rgba(59,246,107,.4); }
   a:hover { text-decoration-color: var(--neon); }
   :focus-visible { outline: 2px solid var(--neon); outline-offset: 2px; border-radius: 4px; }
 
-  /* ── Üst bar ─────────────────────────────────────────────────────────── */
-  header {
-    display: flex; align-items: center; gap: 14px; padding: 14px 24px;
-    border-bottom: 1px solid var(--line);
-    background: color-mix(in srgb, var(--bg) 88%, transparent);
-    backdrop-filter: blur(6px); position: sticky; top: 0; z-index: 5;
+  /* ── Kabuk: sol nav + içerik ─────────────────────────────────────────── */
+  .shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+  nav {
+    border-right: 1px solid var(--line); background: var(--panel);
+    display: flex; flex-direction: column; padding: 18px 14px; gap: 4px;
+    position: sticky; top: 0; height: 100vh;
   }
-  .brand { font: 700 15px/1 var(--mono); letter-spacing: .08em; display: flex; align-items: center; gap: 10px; }
-  .brand .sig { color: var(--neon); text-shadow: 0 0 12px var(--glow); }
+  .brand { font: 700 14px/1 var(--mono); letter-spacing: .08em; padding: 4px 10px 18px; display: flex; gap: 9px; align-items: center; }
+  .brand .sig { color: var(--neon); text-shadow: 0 0 12px var(--glow); font-size: 16px; }
   .brand .sub { color: var(--faint); font-weight: 400; }
-  header .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
-  .chip {
-    font: 11px/1 var(--mono); padding: 5px 10px; border-radius: 999px;
-    background: var(--panel); color: var(--muted); border: 1px solid var(--line);
+  nav .item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    background: none; border: 0; border-radius: 9px; padding: 10px 12px;
+    font: 600 13px/1 var(--sans); color: var(--muted); cursor: pointer; text-align: left;
+    transition: background .12s, color .12s;
   }
-  .chip.ok { color: var(--neon); border-color: rgba(59,246,107,.35); }
-  .chip.err { color: var(--err); border-color: rgba(255,107,94,.4); }
+  nav .item .ico { font-family: var(--mono); width: 16px; text-align: center; color: var(--faint); }
+  nav .item:hover { background: var(--inset); color: var(--ink); }
+  nav .item.active { background: var(--neon-soft); color: var(--neon); }
+  nav .item.active .ico { color: var(--neon); text-shadow: 0 0 10px var(--glow); }
+  nav .item .cnt { margin-left: auto; font: 11px/1 var(--mono); color: var(--faint); }
+  nav .foot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 4px 2px; border-top: 1px solid var(--line); }
+  .chip { font: 11px/1.5 var(--mono); color: var(--faint); display: flex; gap: 7px; align-items: center; padding: 2px 8px; }
+  .chip::before { content: "●"; font-size: 8px; color: var(--faint); }
+  .chip.ok::before { color: var(--neon); }
+  .chip.err { color: var(--err); } .chip.err::before { color: var(--err); }
 
-  /* ── Komut çubuğu (imza) ─────────────────────────────────────────────── */
-  .deck { max-width: 1280px; margin: 26px auto 0; padding: 0 24px; }
-  .deck .hint { font: 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); margin: 0 0 10px 2px; }
+  content, .content { display: block; padding: 26px 32px 60px; max-width: 1180px; }
+
+  /* Görünüm başlığı: sol başlık, sağ tek eylem (Carna'daki Publish gibi) */
+  .vhead { display: flex; align-items: center; gap: 14px; margin: 0 0 18px; }
+  .vhead h1 { font: 700 17px/1.2 var(--sans); margin: 0; }
+  .vhead .sub { color: var(--faint); font: 12px var(--mono); }
+  .vhead .spacer { flex: 1; }
+
+  button {
+    font: 600 13px/1 var(--sans); border: 1px solid var(--line-2); border-radius: 9px;
+    background: var(--panel); color: var(--ink); padding: 9px 15px; cursor: pointer;
+    transition: border-color .12s, background .12s, box-shadow .12s, transform .12s;
+  }
+  button:hover { border-color: var(--neon-dim); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary {
+    background: var(--neon); border-color: var(--neon); color: var(--neon-ink);
+    font-family: var(--mono); font-weight: 700; box-shadow: 0 0 18px rgba(59,246,107,.22);
+  }
+  button.primary:hover { transform: translateY(-1px); box-shadow: 0 0 26px rgba(59,246,107,.38); }
+  button.quiet { background: none; border-color: transparent; color: var(--muted); padding: 6px 9px; font-weight: 500; font-size: 12.5px; }
+  button.quiet:hover { color: var(--ink); border-color: var(--line-2); }
+  button.quiet.danger:hover { color: var(--err); border-color: var(--err); }
+
+  /* ── Komut çubuğu (Ara görünümünün kahramanı) ───────────────────────── */
   .cmd {
     display: flex; align-items: center; gap: 12px;
     background: var(--panel); border: 1px solid var(--line-2); border-radius: 14px;
     padding: 6px 8px 6px 18px; position: relative;
     transition: border-color .15s, box-shadow .15s;
   }
-  .cmd::after {  /* fosfor süpürme çizgisi */
+  .cmd::after {
     content: ""; position: absolute; left: 14px; right: 14px; bottom: -1px; height: 2px;
     border-radius: 2px;
     background: linear-gradient(90deg, transparent, var(--neon), transparent);
@@ -77,47 +102,20 @@
   }
   .cmd:focus-within { border-color: var(--neon-dim); box-shadow: 0 0 0 1px rgba(59,246,107,.25), 0 0 28px rgba(59,246,107,.12); }
   .cmd:focus-within::after { opacity: 1; animation: sweep 1.6s ease-out; background-position: 120% 0; }
-  @keyframes sweep { from { background-position: -120% 0; } to { background-position: 120% 0; } }
+  @keyframes sweep { from { background-position: -120% 0; } }
   .cmd .prompt { font: 700 22px/1 var(--mono); color: var(--neon); text-shadow: 0 0 14px var(--glow); user-select: none; }
-  .cmd input {
-    flex: 1; min-width: 0; border: 0; background: none; color: var(--ink);
-    font: 16px/1.4 var(--mono); padding: 14px 0; caret-color: var(--neon);
-  }
+  .cmd input { flex: 1; min-width: 0; border: 0; background: none; color: var(--ink); font: 16px/1.4 var(--mono); padding: 14px 0; caret-color: var(--neon); }
   .cmd input::placeholder { color: var(--faint); }
   .cmd input:focus { outline: none; }
   .cmd .actions { display: flex; gap: 8px; flex: none; }
 
-  button {
-    font: 600 13px/1 var(--sans); border: 1px solid var(--line-2); border-radius: 9px;
-    background: var(--panel); color: var(--ink); padding: 10px 16px; cursor: pointer;
-    transition: border-color .12s, background .12s, transform .12s, box-shadow .12s;
-  }
-  button:hover { border-color: var(--neon-dim); }
-  button:disabled { opacity: .45; cursor: default; }
-  button.primary {
-    background: var(--neon); border-color: var(--neon); color: var(--neon-ink);
-    font-family: var(--mono); font-weight: 700; letter-spacing: .02em;
-    box-shadow: 0 0 18px rgba(59,246,107,.25);
-  }
-  button.primary:hover { transform: translateY(-1px); box-shadow: 0 0 26px rgba(59,246,107,.4); }
-  button.ghost { background: none; }
-  button.small { font-size: 12px; padding: 6px 11px; }
-  button.danger { color: var(--err); }
-  button.wide { border: 1px solid var(--neon-dim); color: var(--neon); background: none; font-family: var(--mono); font-weight: 700; }
-  button.wide:hover { background: var(--neon-soft); }
-  button.danger:hover { border-color: var(--err); }
-
-  .deckrow { display: flex; gap: 10px 18px; align-items: center; flex-wrap: wrap; margin: 12px 2px 0; }
-  .try { font: 11px/1 var(--mono); color: var(--faint); letter-spacing: .1em; text-transform: uppercase; }
-  .exq {
-    font: 12px/1 var(--mono); color: var(--muted); background: none;
-    border: 1px dashed var(--line-2); border-radius: 999px; padding: 7px 12px; font-weight: 400;
-  }
+  .deckrow { display: flex; gap: 10px 16px; align-items: center; flex-wrap: wrap; margin: 12px 2px 0; }
+  .try { font: 10.5px/1 var(--mono); color: var(--faint); letter-spacing: .12em; }
+  .exq { font: 12px/1 var(--mono); color: var(--muted); background: none; border: 1px dashed var(--line-2); border-radius: 999px; padding: 7px 12px; font-weight: 400; }
   .exq:hover { color: var(--neon); border-color: var(--neon-dim); border-style: solid; }
   details.adv { margin-left: auto; }
-  details.adv summary { cursor: pointer; list-style: none; font: 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: 7px 4px; }
+  details.adv summary { cursor: pointer; list-style: none; font: 11px/1 var(--mono); letter-spacing: .1em; color: var(--faint); padding: 7px 4px; }
   details.adv summary::before { content: "⚙ "; }
-  details.adv summary:hover { color: var(--muted); }
   details.adv[open] summary { color: var(--neon); }
   .advbody {
     display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
@@ -125,92 +123,72 @@
     padding: 10px 14px; margin-top: 10px; font-size: 12.5px; color: var(--muted); width: 100%;
   }
   .advbody label { margin-right: 6px; }
-  .advbody select, .advbody input[type=number] {
-    background: var(--inset); color: var(--ink); border: 1px solid var(--line); border-radius: 7px;
-    padding: 5px 8px; font: 12.5px var(--sans);
-  }
+  select, input[type=number] { background: var(--inset); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; font: 12.5px var(--sans); }
   .repofilter { display: flex; flex-wrap: wrap; gap: 10px; }
   .repofilter label { display: inline-flex; gap: 5px; align-items: center; margin: 0; }
   input[type=checkbox] { accent-color: var(--neon); width: 14px; height: 14px; }
 
-  /* ── Yerleşim ────────────────────────────────────────────────────────── */
-  main { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 18px; padding: 18px 24px 60px; max-width: 1280px; margin: 0 auto; }
-  main > * { min-width: 0; }  /* uzun içerik sayfayı esnetmesin */
-  @media (max-width: 900px) {
-    main { grid-template-columns: 1fr; }
-    .deck { margin-top: 16px; }
-    details.adv { margin-left: 0; }
-  }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
-  h2 { font: 700 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .16em; color: var(--muted); margin: 0 0 14px; }
-  h2::before { content: "❯ "; color: var(--neon); }
-  .empty { color: var(--muted); padding: 26px 8px; text-align: center; font-size: 13.5px; }
-
-  /* ── Repolar ─────────────────────────────────────────────────────────── */
-  .repo { border: 1px solid var(--line); background: var(--inset); border-radius: 11px; padding: 12px; margin-bottom: 10px; transition: border-color .12s; }
-  .repo:hover { border-color: var(--line-2); }
-  .repo .top { display: flex; align-items: center; gap: 9px; }
-  .repo .name { font: 600 13px/1.3 var(--mono); overflow-wrap: anywhere; }
-  .led { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--faint); }
+  /* ── Tablo (Repolar) ─────────────────────────────────────────────────── */
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 13px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font: 600 10.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  td { padding: 13px 14px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: middle; }
+  tbody tr:last-child > td { border-bottom: 0; }
+  tbody tr.mainrow:hover { background: var(--inset); }
+  td.cname { font: 600 13px var(--mono); white-space: nowrap; }
+  td .led { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 9px; background: var(--faint); vertical-align: 1px; }
   .led.ready { background: var(--neon); box-shadow: 0 0 8px var(--glow); }
   .led.indexing { background: var(--warn); box-shadow: 0 0 8px rgba(255,194,75,.5); animation: pulse 1.1s ease-in-out infinite; }
   .led.error { background: var(--err); box-shadow: 0 0 8px rgba(255,107,94,.5); }
   @keyframes pulse { 50% { opacity: .35; } }
-  .tag { font: 10.5px/1 var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; margin-left: auto; }
-  .repo .meta { color: var(--muted); font-size: 12px; margin: 7px 0 9px; }
-  .repo .errtxt { color: var(--err); font-size: 12px; margin: 4px 0 8px; overflow-wrap: anywhere; }
-  .repo .row2 { display: flex; gap: 8px; align-items: center; }
-  .repo .row2 a { font-size: 12px; }
-  .bar { height: 5px; border-radius: 3px; background: var(--inset); border: 1px solid var(--line); overflow: hidden; margin: 8px 0 6px; }
+  td.dim { color: var(--muted); font: 12px var(--mono); }
+  td.num { color: var(--muted); font: 12px var(--mono); text-align: right; }
+  .st { font: 12px var(--mono); }
+  .st.ready { color: var(--neon); } .st.indexing { color: var(--warn); } .st.error { color: var(--err); } .st.pending { color: var(--muted); }
+  td.acts { text-align: right; white-space: nowrap; }
+  td.acts a { font-size: 12.5px; margin: 0 4px; }
+  tr.subrow td { padding: 0 14px 12px; border-bottom: 1px solid var(--line); }
+  tr.subrow .bar { margin: 0 0 6px; }
+  .bar { height: 5px; border-radius: 3px; background: var(--inset); border: 1px solid var(--line); overflow: hidden; }
   .bar > div { height: 100%; background: var(--neon); box-shadow: 0 0 10px var(--glow); transition: width .5s; }
+  .errtxt { color: var(--err); font-size: 12.5px; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 12px; }
 
-  .starter { text-align: left; }
-  .starter ol { margin: 0 0 14px; padding-left: 20px; color: var(--muted); font-size: 13px; }
-  .starter li { margin: 6px 0; }
-  .starter li b { color: var(--ink); }
+  /* Repo bağla paneli */
+  .addcard { background: var(--panel); border: 1px solid var(--line-2); border-radius: 13px; padding: 18px; margin-bottom: 16px; }
+  .addcard h3 { margin: 0 0 4px; font: 700 14px var(--sans); }
+  .addcard .note { color: var(--faint); font-size: 12.5px; margin: 0 0 12px; }
+  .addgrid { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+  .addgrid > div { min-width: 180px; flex: 1; }
+  .addgrid label { font: 10.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 6px; }
+  .addgrid input, .addgrid select { width: 100%; background: var(--inset); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px var(--mono); }
+  .addgrid input:focus, .addgrid select:focus { outline: none; border-color: var(--neon-dim); box-shadow: 0 0 0 1px rgba(59,246,107,.25); }
+  .addgrid .btns { display: flex; gap: 8px; flex: none; }
 
-  details.add { margin-top: 4px; }
-  details.add summary { list-style: none; cursor: pointer; }
-  details.add summary button { pointer-events: none; width: 100%; }
-  .addform label { font: 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); display: block; margin: 12px 0 5px; }
-  .addform input, .addform select {
-    width: 100%; background: var(--inset); color: var(--ink); border: 1px solid var(--line);
-    border-radius: 8px; padding: 9px 11px; font: 13px var(--mono);
-  }
-  .addform input:focus, .addform select:focus { outline: none; border-color: var(--neon-dim); box-shadow: 0 0 0 1px rgba(59,246,107,.25); }
-  .addform .row { display: flex; gap: 8px; align-items: end; }
-  .addform .row > div { flex: 1; }
+  .starter { padding: 34px 20px; text-align: center; color: var(--muted); }
+  .starter .steps { font: 13px/2 var(--sans); }
+  .starter b { color: var(--ink); }
 
-  /* ── Sekmeler ────────────────────────────────────────────────────────── */
-  .tabs { display: flex; gap: 22px; margin: 2px 4px 14px; border-bottom: 1px solid var(--line); }
-  .tabs button {
-    background: none; border: 0; border-radius: 0; padding: 8px 2px 11px; color: var(--muted);
-    font: 600 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase;
-    border-bottom: 2px solid transparent; margin-bottom: -1px;
-  }
-  .tabs button:hover { color: var(--ink); }
-  .tabs button.active { color: var(--neon); border-bottom-color: var(--neon); text-shadow: 0 0 10px var(--glow); }
+  .empty { color: var(--muted); padding: 30px 12px; text-align: center; font-size: 13.5px; }
 
   /* ── Sonuçlar ────────────────────────────────────────────────────────── */
-  .timing { color: var(--muted); font: 12px var(--mono); margin: 2px 0 4px; }
+  .timing { color: var(--muted); font: 12px var(--mono); margin: 14px 2px 2px; }
   .timing b { color: var(--neon); font-weight: 600; }
-  .hit { border: 1px solid var(--line); background: var(--inset); border-radius: 11px; margin-top: 10px; overflow: hidden; animation: rise .25s ease-out both; }
+  .hit { border: 1px solid var(--line); background: var(--panel); border-radius: 11px; margin-top: 10px; overflow: hidden; animation: rise .25s ease-out both; }
   @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
   .hit .head { display: flex; gap: 8px 10px; align-items: baseline; padding: 10px 14px; cursor: pointer; flex-wrap: wrap; }
   .hit .head:hover .path { color: var(--neon); }
   .hit .path { font: 600 12.5px var(--mono); overflow-wrap: anywhere; transition: color .12s; }
   .hit .sym { color: var(--muted); font-size: 12px; }
   .badge { font: 10.5px/1.6 var(--mono); background: var(--neon-soft); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--muted); }
-  .hit pre, .job pre {
-    margin: 0; padding: 12px 14px; background: var(--bg); font: 12px/1.5 var(--mono);
-    overflow-x: auto; border-top: 1px solid var(--line); max-height: 132px; max-width: 100%;
-  }
+  .hit pre, .job pre { margin: 0; padding: 12px 14px; background: var(--bg); font: 12px/1.5 var(--mono); overflow-x: auto; border-top: 1px solid var(--line); max-height: 132px; max-width: 100%; }
   .hit.open pre { max-height: none; }
-  .answer { white-space: pre-wrap; background: var(--neon-soft); border: 1px solid var(--line-2); border-radius: 11px; padding: 14px 16px; margin-top: 10px; font-size: 13.5px; }
+  .answer { white-space: pre-wrap; background: var(--neon-soft); border: 1px solid var(--line-2); border-radius: 11px; padding: 14px 16px; margin-top: 12px; font-size: 13.5px; }
   .srcs { font: 12px/1.8 var(--mono); color: var(--muted); margin-top: 10px; }
 
   /* ── İşler ───────────────────────────────────────────────────────────── */
-  .job { border: 1px solid var(--line); background: var(--inset); border-radius: 11px; padding: 12px 14px; margin-top: 10px; }
+  .opts { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
+  .job { border: 1px solid var(--line); background: var(--panel); border-radius: 11px; padding: 12px 14px; margin-top: 10px; }
   .job .head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .job .head b { font: 600 13px var(--mono); }
   .job .when { color: var(--faint); font: 11.5px var(--mono); margin-left: auto; }
@@ -220,30 +198,24 @@
   .badge.trigger-webhook { color: var(--neon); }
   .badge.trigger-poll { color: var(--warn); }
   .flow { display: flex; gap: 7px; align-items: stretch; flex-wrap: wrap; margin-top: 10px; }
-  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 11px; min-width: 92px; }
+  .step { background: var(--inset); border: 1px solid var(--line); border-radius: 8px; padding: 6px 11px; min-width: 92px; }
   .step small { display: block; font: 10px/1.6 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
   .step b { display: block; font: 600 12.5px/1.5 var(--mono); }
   .arrow { align-self: center; color: var(--neon-dim); font-family: var(--mono); }
-  .job .errtxt { color: var(--err); font-size: 12.5px; margin-top: 8px; overflow-wrap: anywhere; }
+  .job .errtxt { margin-top: 8px; }
   .job details { margin-top: 8px; }
   .job summary { font: 11px var(--mono); color: var(--faint); cursor: pointer; }
   .job details pre { border: 1px solid var(--line); border-radius: 8px; margin-top: 6px; }
-  .meta { color: var(--muted); font-size: 12px; }
-  .opts { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; font-size: 12.5px; color: var(--muted); }
-  .opts select { background: var(--inset); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; }
 
   /* ── Bağlan ──────────────────────────────────────────────────────────── */
   .connect h3 { font: 700 13px var(--mono); margin: 24px 0 8px; }
-  .connect h3:first-of-type { margin-top: 0; }
+  .connect h3:first-of-type { margin-top: 6px; }
   .connect h3 .no { color: var(--neon); text-shadow: 0 0 10px var(--glow); margin-right: 6px; }
   .connect p, .connect li { font-size: 13.5px; }
   .connect .note { color: var(--muted); font-size: 12.5px; }
   .connect code { font: 12px var(--mono); color: var(--ink); background: var(--inset); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
-  .warnbox { border: 1px solid rgba(255,194,75,.5); background: rgba(255,194,75,.07); color: var(--warn); border-radius: 10px; padding: 10px 14px; font-size: 13px; margin-bottom: 14px; }
-  .copyrow {
-    display: flex; gap: 10px; align-items: center; background: var(--bg);
-    border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; margin: 8px 0;
-  }
+  .warnbox { border: 1px solid rgba(255,194,75,.5); background: rgba(255,194,75,.07); color: var(--warn); border-radius: 10px; padding: 10px 14px; font-size: 13px; margin: 4px 0 14px; }
+  .copyrow { display: flex; gap: 10px; align-items: center; background: var(--inset); border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; margin: 8px 0; }
   .copyrow code { flex: 1; white-space: pre; overflow-x: auto; font: 12px/1.6 var(--mono); background: none; border: 0; padding: 0; color: var(--ink); }
   .copyrow button { flex: none; font: 600 11px var(--mono); padding: 5px 10px; color: var(--neon); }
 
@@ -253,106 +225,115 @@
     padding: 10px 16px; border-radius: 10px; font-size: 13px; max-width: 90vw; display: none; z-index: 10;
   }
 
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    nav { position: static; height: auto; flex-direction: row; align-items: center; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); }
+    .brand { padding-bottom: 4px; width: 100%; }
+    nav .item { width: auto; }
+    nav .foot { display: none; }
+    .content { padding: 18px 16px 50px; }
+    td.dim, td.num, th.hides { display: none; }
+  }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
 </style>
 </head>
 <body>
-<header>
-  <div class="brand"><span class="sig">❯</span> MILVUS<span class="sub">//</span>RAG <span class="sub">kod arama konsolu</span></div>
-  <div class="chips" id="chips"></div>
-</header>
+<div class="shell">
+  <nav>
+    <div class="brand"><span class="sig">❯</span> MILVUS<span class="sub">//</span>RAG</div>
+    <button class="item" id="tabbtn-ara" onclick="showTab('ara')"><span class="ico">❯</span> Ara</button>
+    <button class="item" id="tabbtn-repolar" onclick="showTab('repolar')"><span class="ico">▤</span> Repolar <span class="cnt" id="repoCount"></span></button>
+    <button class="item" id="tabbtn-isler" onclick="showTab('isler')"><span class="ico">⟲</span> İşler</button>
+    <button class="item" id="tabbtn-baglan" onclick="showTab('baglan')"><span class="ico">⇄</span> Bağlan</button>
+    <div class="foot" id="chips"></div>
+  </nav>
 
-<!-- İmza: komut çubuğu — sayfanın tek büyük eylemi -->
-<div class="deck">
-  <p class="hint">Kod tabanına sor</p>
-  <div class="cmd">
-    <span class="prompt" aria-hidden="true">❯</span>
-    <input id="q" placeholder="Soru yaz ya da fonksiyon adı yapıştır…" autofocus
-           aria-label="Kod tabanında ara">
-    <div class="actions">
-      <button class="primary" id="btnSearch">Ara</button>
-      <button class="ghost" id="btnAsk" title="Bulunan kodla LLM'den atıflı cevap ister">AI'ya sor</button>
-    </div>
-  </div>
-  <div class="deckrow">
-    <span class="try">Dene</span>
-    <button class="exq" onclick="tryQuery(this)">jwt token nerede üretiliyor</button>
-    <button class="exq" onclick="tryQuery(this)">withSession</button>
-    <button class="exq" onclick="tryQuery(this)">webhook eventleri nasıl kuyruğa alınıyor</button>
-    <details class="adv">
-      <summary>Ayarlar</summary>
-      <div class="advbody">
-        <span><label for="mode">arama modu</label><select id="mode">
-          <option value="">Otomatik (önerilen)</option>
-          <option value="dense">Anlamsal</option>
-          <option value="bm25">Kelime (BM25)</option>
-          <option value="hybrid">Karma (RRF)</option>
-        </select></span>
-        <span><label for="k">sonuç</label><input id="k" type="number" value="8" min="1" max="50" style="width:64px"></span>
-        <span><label for="rr">yeniden sırala</label><input id="rr" type="checkbox" title="Cross-encoder; daha isabetli ama saniyeler sürer"></span>
-        <span class="repofilter" id="repoFilter"></span>
+  <div class="content">
+    <!-- ── Ara ─────────────────────────────────────────────────────────── -->
+    <div id="tab-ara">
+      <div class="cmd">
+        <span class="prompt" aria-hidden="true">❯</span>
+        <input id="q" placeholder="Soru yaz ya da fonksiyon adı yapıştır…" autofocus aria-label="Kod tabanında ara">
+        <div class="actions">
+          <button class="primary" id="btnSearch">Ara</button>
+          <button id="btnAsk" title="Bulunan kodla AI'dan atıflı cevap ister">AI'ya sor</button>
+        </div>
       </div>
-    </details>
-  </div>
-</div>
-
-<main>
-  <aside>
-    <div class="panel">
-      <h2>Repolar</h2>
-      <div id="repos"><div class="empty">yükleniyor…</div></div>
-      <details class="add" id="addBox">
-        <summary><button class="wide" style="width:100%" tabindex="-1">+ Repo bağla</button></summary>
-        <div class="addform">
-          <label for="aProvider">Nereden</label>
-          <select id="aProvider">
-            <option value="github">GitHub</option>
-            <option value="azure">Azure DevOps</option>
-            <option value="local">Sunucudaki dizin</option>
-            <option value="git">Git URL</option>
-          </select>
-          <div id="fGithub"><label for="aGh">owner/repo</label><input id="aGh" placeholder="örn: vercel/next.js"></div>
-          <div id="fAzure" hidden>
-            <label for="aProj">Proje</label><input id="aProj" placeholder="Platform">
-            <label for="aRepo">Repo adı</label><input id="aRepo" placeholder="backend-api">
+      <div class="deckrow">
+        <span class="try">DENE</span>
+        <button class="exq" onclick="tryQuery(this)">jwt token nerede üretiliyor</button>
+        <button class="exq" onclick="tryQuery(this)">withSession</button>
+        <button class="exq" onclick="tryQuery(this)">webhook eventleri nasıl kuyruğa alınıyor</button>
+        <details class="adv">
+          <summary>Ayarlar</summary>
+          <div class="advbody">
+            <span><label for="mode">arama modu</label><select id="mode">
+              <option value="">Otomatik (önerilen)</option>
+              <option value="dense">Anlamsal</option>
+              <option value="bm25">Kelime (BM25)</option>
+              <option value="hybrid">Karma (RRF)</option>
+            </select></span>
+            <span><label for="k">sonuç</label><input id="k" type="number" value="8" min="1" max="50" style="width:64px"></span>
+            <span><label for="rr">yeniden sırala</label><input id="rr" type="checkbox" title="Cross-encoder; daha isabetli ama saniyeler sürer"></span>
+            <span class="repofilter" id="repoFilter"></span>
           </div>
+        </details>
+      </div>
+      <div id="out"><div class="empty">Yaz, Enter'a bas — o kadar.</div></div>
+    </div>
+
+    <!-- ── Repolar ─────────────────────────────────────────────────────── -->
+    <div id="tab-repolar" hidden>
+      <div class="vhead">
+        <h1>Repolar</h1><span class="sub" id="repoSub"></span>
+        <span class="spacer"></span>
+        <button class="primary" id="btnAddRepo">＋ Repo bağla</button>
+      </div>
+      <div class="addcard" id="addBox" hidden>
+        <h3>Repo bağla</h3>
+        <p class="note">Bağlanınca klonlanır ve indexlenir; sonrasında her push'ta yalnızca değişen dosyalar güncellenir.</p>
+        <div class="addgrid">
+          <div style="flex:0 0 170px"><label for="aProvider">Nereden</label>
+            <select id="aProvider">
+              <option value="github">GitHub</option>
+              <option value="azure">Azure DevOps</option>
+              <option value="local">Sunucudaki dizin</option>
+              <option value="git">Git URL</option>
+            </select></div>
+          <div id="fGithub"><label for="aGh">owner/repo</label><input id="aGh" placeholder="örn: vercel/next.js"></div>
+          <div id="fAzure" hidden><label for="aProj">Proje</label><input id="aProj" placeholder="Platform"></div>
+          <div id="fAzure2" hidden><label for="aRepo">Repo adı</label><input id="aRepo" placeholder="backend-api"></div>
           <div id="fLocal" hidden><label for="aPath">Dizin yolu</label><input id="aPath" placeholder="/opt/repos/my-api"></div>
           <div id="fGit" hidden><label for="aUrl">Clone URL</label><input id="aUrl" placeholder="https://…/repo.git"></div>
-          <div class="row">
-            <div><label for="aBranch">Branch (boş = varsayılan)</label><input id="aBranch" placeholder="main"></div>
-            <button class="primary" id="aSubmit" style="flex:0 0 auto">Bağla & indexle</button>
+          <div style="flex:0 0 140px"><label for="aBranch">Branch</label><input id="aBranch" placeholder="varsayılan"></div>
+          <div class="btns">
+            <button class="primary" id="aSubmit">Bağla & indexle</button>
+            <button class="quiet" id="aCancel">Vazgeç</button>
           </div>
         </div>
-      </details>
+      </div>
+      <div class="card"><div id="repos"><div class="empty">yükleniyor…</div></div></div>
     </div>
-  </aside>
 
-  <section>
-    <div class="tabs" role="tablist">
-      <button id="tabbtn-ara" onclick="showTab('ara')">Sonuçlar</button>
-      <button id="tabbtn-isler" onclick="showTab('isler')">İşler</button>
-      <button id="tabbtn-baglan" onclick="showTab('baglan')">Bağlan</button>
-    </div>
-    <div id="tab-ara" class="panel">
-      <div id="out"><div class="empty">Yukarıdaki çubuğa yaz, Enter'a bas — o kadar.<br>
-        Fonksiyon adı yazarsan tam eşleşme, soru sorarsan anlamca en yakın kod gelir.</div></div>
-    </div>
-    <div id="tab-isler" class="panel" hidden>
-      <h2>Index işleri</h2>
-      <div class="opts">
-        <span><label for="jobRepo">repo</label> <select id="jobRepo" onchange="loadJobs()"><option value="">hepsi</option></select></span>
-        <span>4 sn'de bir yenilenir · tetik: manual / webhook / poll</span>
+    <!-- ── İşler ───────────────────────────────────────────────────────── -->
+    <div id="tab-isler" hidden>
+      <div class="vhead">
+        <h1>Index işleri</h1><span class="sub">4 sn'de bir yenilenir</span>
+        <span class="spacer"></span>
+        <span class="opts"><label for="jobRepo">repo</label> <select id="jobRepo" onchange="loadJobs()"><option value="">hepsi</option></select></span>
       </div>
       <div id="jobs"><div class="empty">yükleniyor…</div></div>
     </div>
-    <div id="tab-baglan" class="panel connect" hidden>
-      <h2>Bağlan</h2>
+
+    <!-- ── Bağlan ──────────────────────────────────────────────────────── -->
+    <div id="tab-baglan" hidden class="connect">
+      <div class="vhead"><h1>Bağlan</h1><span class="sub">webhook · API · MCP</span></div>
       <div id="connect"><div class="empty">yükleniyor…</div></div>
     </div>
-  </section>
-</main>
+  </div>
+</div>
 <div class="toast" id="toast" role="alert"></div>
 
 <script>
@@ -381,43 +362,61 @@ async function loadHealth() {
     const h = (window._health = await api("/health"));
     if (!$("tab-baglan").hidden) renderConnect();
     $("chips").innerHTML =
-      `<span class="chip ${h.milvus ? "ok" : "err"}">milvus ${h.milvus ? "●" : "✗"}</span>` +
-      `<span class="chip">${esc(h.embedding)}</span>` +
+      `<span class="chip ${h.milvus ? "ok" : "err"}">milvus</span>` +
+      `<span class="chip ok">${esc(h.embedding.split("/").pop())}</span>` +
       `<span class="chip ${h.llm ? "ok" : ""}">${h.llm ? esc(h.llm) : "LLM kapalı"}</span>`;
-  } catch (e) { $("chips").innerHTML = `<span class="chip err">servis yok: ${esc(e.message)}</span>`; }
+  } catch (e) { $("chips").innerHTML = `<span class="chip err">servis yok</span>`; }
 }
 
 // ---------------------------------------------------------------- repolar
-function repoCard(r) {
+function repoRow(r) {
   const job = r.active_job;
   const p = job?.stats?.progress;
   const pct = p && p.files_total ? Math.round(100 * p.files_done / p.files_total) : null;
-  const led = job ? "indexing" : r.status;
-  return `<div class="repo">
-    <div class="top"><span class="led ${esc(led)}"></span><span class="name">${esc(r.name)}</span>
-      <span class="tag">${esc(r.provider)}</span></div>
-    <div class="meta">${STATUS_TR[r.status] ?? esc(r.status)} · ${r.file_count} dosya · ${r.chunk_count} chunk${r.branch ? " · " + esc(r.branch) : ""}</div>
-    ${r.status === "error" ? `<div class="errtxt">${esc(r.error)}</div>` : ""}
-    ${job ? `<div class="bar"><div style="width:${pct ?? 5}%"></div></div>
-      <div class="meta">${job.status === "running" ? (pct !== null ? `indexleniyor… ${p.files_done}/${p.files_total} dosya` : "indexleniyor…") : "sırada"}</div>` : ""}
-    <div class="row2">
-      <button class="small" onclick="syncRepo('${esc(r.id)}')" ${job ? "disabled" : ""} title="Değişen dosyaları şimdi tara">Güncelle</button>
-      ${r.web_url ? `<a href="${esc(r.web_url)}" target="_blank" rel="noopener">kaynak ↗</a>` : ""}
-      <button class="small ghost danger" style="margin-left:auto" onclick="removeRepo('${esc(r.id)}')" ${job ? "disabled" : ""}>Kaldır</button>
-    </div></div>`;
+  const state = job ? "indexing" : r.status;
+  const when = r.last_indexed_at ? r.last_indexed_at.slice(5, 16).replace("T", " ") : "—";
+  let sub = "";
+  if (job) {
+    sub = `<tr class="subrow"><td colspan="8">
+      <div class="bar"><div style="width:${pct ?? 5}%"></div></div>
+      <div class="meta">${job.status === "running" ? (pct !== null ? `indexleniyor — ${p.files_done}/${p.files_total} dosya` : "indexleniyor…") : "sırada bekliyor"}</div>
+    </td></tr>`;
+  } else if (r.status === "error") {
+    sub = `<tr class="subrow"><td colspan="8"><div class="errtxt">${esc(r.error)}</div></td></tr>`;
+  }
+  return `<tr class="mainrow">
+    <td class="cname"><span class="led ${esc(state)}"></span>${esc(r.name)}</td>
+    <td class="dim">${esc(r.provider)}</td>
+    <td><span class="st ${esc(state)}">${STATUS_TR[state] ?? esc(state)}</span></td>
+    <td class="num">${r.file_count}</td>
+    <td class="num">${r.chunk_count}</td>
+    <td class="dim">${esc(r.branch || "—")}</td>
+    <td class="dim">${esc(when)}</td>
+    <td class="acts">
+      <button class="quiet" onclick="syncRepo('${esc(r.id)}')" ${job ? "disabled" : ""} title="Değişen dosyaları şimdi tara">Güncelle</button>
+      ${r.web_url ? `<a href="${esc(r.web_url)}" target="_blank" rel="noopener">↗</a>` : ""}
+      <button class="quiet danger" onclick="removeRepo('${esc(r.id)}')" ${job ? "disabled" : ""}>Kaldır</button>
+    </td>
+  </tr>${sub}`;
 }
 const STARTER = `<div class="starter">
-  <ol>
-    <li><b>Repo bağla</b> — GitHub'dan, Azure'dan ya da sunucudaki bir dizinden.</li>
-    <li><b>Index'i bekle</b> — ilerlemeyi burada ve İşler sekmesinde görürsün.</li>
-    <li><b>Sor</b> — yukarıdaki çubuğa yaz, Enter'a bas.</li>
-  </ol>
+  <div class="steps"><b>1</b> — Sağ üstten repo bağla &nbsp;·&nbsp; <b>2</b> — index'in bitmesini bekle &nbsp;·&nbsp; <b>3</b> — Ara'ya geç, soruyu sor</div>
 </div>`;
 async function loadRepos() {
   try {
     repos = await api("/repos");
-    $("repos").innerHTML = repos.length ? repos.map(repoCard).join("") : STARTER;
-    $("addBox").open = $("addBox").open || repos.length === 0;
+    $("repoCount").textContent = repos.length || "";
+    $("repoSub").textContent = repos.length
+      ? `${repos.length} repo · ${repos.reduce((n, r) => n + r.chunk_count, 0)} chunk`
+      : "";
+    if (repos.length) {
+      $("repos").innerHTML = `<table>
+        <thead><tr><th>Repo</th><th>Tür</th><th>Durum</th><th class="hides" style="text-align:right">Dosya</th><th class="hides" style="text-align:right">Chunk</th><th class="hides">Branch</th><th class="hides">Güncellendi</th><th></th></tr></thead>
+        <tbody>${repos.map(repoRow).join("")}</tbody></table>`;
+    } else {
+      $("repos").innerHTML = STARTER;
+      $("addBox").hidden = false;
+    }
     $("repoFilter").innerHTML = repos.length < 2 ? "" : `<label style="color:var(--faint)">repolar:</label>` + repos.map(r =>
       `<label><input type="checkbox" value="${esc(r.id)}" checked> ${esc(r.id)}</label>`).join("");
     const jobSel = $("jobRepo");
@@ -437,10 +436,14 @@ async function removeRepo(id) {
   if (!confirm(`${id} kaldırılsın mı? Index'i ve klonu silinir.`)) return;
   try { await api(`/repos/${id}`, { method: "DELETE" }); loadRepos(); } catch (e) { toast(e.message); }
 }
+$("btnAddRepo").onclick = () => { $("addBox").hidden = !$("addBox").hidden; if (!$("addBox").hidden) $("aGh").focus(); };
+$("aCancel").onclick = () => { $("addBox").hidden = true; };
 $("aProvider").onchange = () => {
   const v = $("aProvider").value;
-  $("fGithub").hidden = v !== "github"; $("fAzure").hidden = v !== "azure";
-  $("fLocal").hidden = v !== "local"; $("fGit").hidden = v !== "git";
+  $("fGithub").hidden = v !== "github";
+  $("fAzure").hidden = $("fAzure2").hidden = v !== "azure";
+  $("fLocal").hidden = v !== "local";
+  $("fGit").hidden = v !== "git";
 };
 $("aSubmit").onclick = async () => {
   const provider = $("aProvider").value;
@@ -452,7 +455,7 @@ $("aSubmit").onclick = async () => {
   $("aSubmit").disabled = true;
   try {
     await api("/repos", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body) });
-    $("addBox").open = false; loadRepos();
+    $("addBox").hidden = true; loadRepos();
   } catch (e) { toast(e.message); } finally { $("aSubmit").disabled = false; }
 };
 
@@ -481,8 +484,7 @@ async function doSearch() {
     const t = Object.entries(d.timings_ms).map(([k, v]) => `${k} ${Math.round(v)}ms`).join(" · ");
     const head = `<div class="timing">${d.hits.length} sonuç · mod <b>${esc(d.mode)}</b>${d.reranked ? " + rerank" : ""} · ${t}${d.cached ? " · önbellek" : ""}</div>`;
     if (!d.hits.length) {
-      $("out").innerHTML = head + `<div class="empty">Eşleşme yok. Sorguyu değiştir: sembolse tam adını tek başına yaz,
-        kavramsa cümle kur. Ayarlar'dan repo filtresini de kontrol et.</div>`;
+      $("out").innerHTML = head + `<div class="empty">Eşleşme yok — sorguyu değiştirip tekrar dene.</div>`;
       return;
     }
     $("out").innerHTML = head + d.hits.map(h => `
@@ -500,7 +502,7 @@ async function doAsk() {
   const body = searchBody();
   if (!body.q) { $("q").focus(); return; }
   showTab("ara");
-  $("out").innerHTML = `<div class="empty">AI okuyor… (bulunan kod parçalarıyla cevap yazıyor, birkaç saniye)</div>`;
+  $("out").innerHTML = `<div class="empty">AI okuyor… birkaç saniye</div>`;
   try {
     const d = await api("/ask", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body) });
     $("out").innerHTML =
@@ -513,15 +515,16 @@ $("btnSearch").onclick = doSearch;
 $("btnAsk").onclick = doAsk;
 $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
 
-// ---------------------------------------------------------------- sekmeler
+// ---------------------------------------------------------------- görünümler
 function showTab(name) {
-  for (const tab of ["ara", "isler", "baglan"]) {
+  for (const tab of ["ara", "repolar", "isler", "baglan"]) {
     $("tab-" + tab).hidden = tab !== name;
     $("tabbtn-" + tab).classList.toggle("active", tab === name);
   }
   clearInterval(window._jobsTimer);
   if (name === "isler") { loadJobs(); window._jobsTimer = setInterval(loadJobs, 4000); }
   if (name === "baglan") renderConnect();
+  if (name === "repolar") loadRepos();
 }
 
 // ------------------------------------------------------------------ işler
@@ -534,8 +537,8 @@ function jobCard(j) {
   let body = "";
   if (j.status === "running" || j.status === "queued") {
     const pct = p.files_total ? Math.round(100 * p.files_done / p.files_total) : 5;
-    body = `<div class="bar"><div style="width:${pct}%"></div></div>
-      <div class="meta">${p.files_total ? `${p.files_done}/${p.files_total} dosya` : "başlıyor…"} · ${s.chunks_written ?? 0} chunk yazıldı</div>`;
+    body = `<div class="bar" style="margin-top:9px"><div style="width:${pct}%"></div></div>
+      <div class="meta" style="margin-top:5px">${p.files_total ? `${p.files_done}/${p.files_total} dosya` : "başlıyor…"} · ${s.chunks_written ?? 0} chunk yazıldı</div>`;
   } else if (j.status === "failed") {
     body = `<div class="errtxt">${esc(j.error)}</div>`;
   } else if (j.status === "done") {
@@ -614,7 +617,7 @@ loadHealth(); loadRepos();
 // ?q= ve ?tab= ile paylaşılabilir görünümler.
 const params = new URLSearchParams(location.search);
 const startTab = params.get("tab");
-showTab(startTab === "isler" || startTab === "baglan" ? startTab : "ara");
+showTab(["repolar", "isler", "baglan"].includes(startTab) ? startTab : "ara");
 if (params.get("q")) {
   $("q").value = params.get("q");
   if (params.get("mode")) $("mode").value = params.get("mode");
