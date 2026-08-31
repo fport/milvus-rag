@@ -74,6 +74,12 @@ CREATE TABLE IF NOT EXISTS webhook_events (
     PRIMARY KEY (repo_id, commit_sha)
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS enrichment (
     chunk_hash TEXT NOT NULL,
     model      TEXT NOT NULL,
@@ -338,6 +344,29 @@ class Database:
                 (repo_id, commit_sha, now_iso()),
             )
         return cursor.rowcount == 1
+
+    # ------------------------------------------------------------ ayarlar
+    def get_app_settings(self, keys: Sequence[str]) -> dict[str, str]:
+        """UI'dan kaydedilen ayarlar (kimlik bilgileri dahil). Env'i ezerler."""
+        if not keys:
+            return {}
+        marks = ", ".join("?" for _ in keys)
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                f"SELECT key, value FROM app_settings WHERE key IN ({marks})", list(keys)
+            ).fetchall()
+        return {str(row["key"]): str(row["value"]) for row in rows}
+
+    def set_app_setting(self, key: str, value: str | None) -> None:
+        """None ya da boş değer kaydı siler → env'deki değere geri düşülür."""
+        with self._connect() as connection:
+            if value:
+                connection.execute(
+                    "INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)",
+                    (key, value, now_iso()),
+                )
+            else:
+                connection.execute("DELETE FROM app_settings WHERE key = ?", (key,))
 
     # ------------------------------------------------------------- enrichment
     def get_enrichments(self, chunk_hashes: Sequence[str], model: str) -> dict[str, str]:

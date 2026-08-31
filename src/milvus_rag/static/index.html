@@ -258,6 +258,22 @@
   .copyrow code { flex: 1; white-space: pre; overflow-x: auto; font: 12px/1.6 var(--mono); background: none; border: 0; padding: 0; color: var(--ink); }
   .copyrow button { flex: none; font: 600 11px var(--mono); padding: 5px 10px; color: var(--neon); }
 
+  /* kimlik + repo seçici */
+  .credzone { margin: 2px 0 14px; }
+  .credline { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .credline .okmark { color: var(--neon); font-family: var(--mono); }
+  .minigrid { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-top: 10px; }
+  .minigrid > div { flex: 1; min-width: 200px; }
+  .minigrid label { font: 10.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: 6px; }
+  .minigrid input { width: 100%; background: var(--inset); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 13px var(--mono); }
+  .minigrid input:focus { outline: none; border-color: var(--neon-dim); box-shadow: 0 0 0 1px rgba(59,246,107,.25); }
+  .pick { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; max-height: 240px; overflow: auto; background: var(--inset); }
+  .pickrow { display: flex; gap: 10px; align-items: center; padding: 9px 13px; border-bottom: 1px solid var(--line); cursor: pointer; font: 12.5px var(--mono); }
+  .pickrow:last-child { border-bottom: 0; }
+  .pickrow:hover { background: var(--neon-soft); }
+  .pickrow .dim2 { color: var(--faint); font-size: 11.5px; }
+  .pickrow .right { margin-left: auto; color: var(--faint); font-size: 11px; }
+  .pickrow.taken { opacity: .5; cursor: default; }
   .toast {
     position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
     background: #2a1210; border: 1px solid var(--err); color: #ffd9d5;
@@ -342,6 +358,7 @@
       <div class="addcard" id="addBox" hidden>
         <h3>Repo bağla</h3>
         <p class="note">Bağlanınca klonlanır ve indexlenir; sonrasında her push'ta yalnızca değişen dosyalar güncellenir.</p>
+        <div class="credzone" id="credZone"></div>
         <div class="addgrid">
           <div style="flex:0 0 170px"><label for="aProvider">Nereden</label>
             <select id="aProvider">
@@ -361,6 +378,7 @@
             <button class="quiet" id="aCancel">Vazgeç</button>
           </div>
         </div>
+        <div id="pickZone"></div>
       </div>
       <div class="card"><div id="repos"><div class="empty">yükleniyor…</div></div></div>
     </div>
@@ -496,7 +514,130 @@ async function removeRepo(id) {
   if (!confirm(`${id} kaldırılsın mı? Index'i ve klonu silinir.`)) return;
   try { await api(`/repos/${id}`, { method: "DELETE" }); loadRepos(); } catch (e) { toast(e.message); }
 }
-$("btnAddRepo").onclick = () => { $("addBox").hidden = !$("addBox").hidden; if (!$("addBox").hidden) $("aGh").focus(); };
+let credState = null;
+async function loadCredState() {
+  try { credState = await api("/settings/credentials"); } catch { credState = null; }
+  renderCredZone();
+}
+async function saveCreds(fields, btn) {
+  btn.disabled = true; btn.textContent = "doğrulanıyor…";
+  try {
+    const r = await api("/settings/credentials", {
+      method: "PUT", headers: {"content-type": "application/json"},
+      body: JSON.stringify({ ...fields, verify: true }),
+    });
+    if (r.github) toast(r.github.ok ? `GitHub bağlandı: ${r.github.login} ✓` : "GitHub: " + r.github.detail);
+    if (r.azure) toast(r.azure.ok ? `Azure bağlandı: ${r.azure.projects} proje ✓` : "Azure: " + r.azure.detail);
+    if (!r.github && !r.azure) toast("Kaydedildi");
+    await loadCredState(); loadHealth();
+  } catch (e) { toast(e.message); }
+  finally { btn.disabled = false; btn.textContent = btn.dataset.label; }
+}
+function renderCredZone() {
+  const v = $("aProvider").value;
+  const zone = $("credZone");
+  $("pickZone").innerHTML = "";
+  if (v === "github") {
+    const g = credState?.github;
+    zone.innerHTML = g?.token_set
+      ? `<div class="credline"><span class="okmark">●</span> GitHub token kayıtlı (${g.source === "ui" ? "arayüzden" : "env"}) — private repolar da görünür.
+           <button class="quiet" onclick="toggleGhToken()">değiştir</button></div>
+         <div class="minigrid" id="ghTokenForm" hidden></div>
+         <div class="minigrid">
+           <div><label>Repoları listele — kullanıcı ya da org</label><input id="ghOwner" placeholder="örn: fport"></div>
+           <div style="flex:0 0 auto"><button data-label="Listele" onclick="listGithub(this)">Listele</button></div>
+         </div>`
+      : `<div class="credline">Token yok — public repolar yine bağlanır. Private için:
+           <button class="quiet" onclick="toggleGhToken()">token ekle</button></div>
+         <div class="minigrid" id="ghTokenForm" hidden></div>
+         <div class="minigrid">
+           <div><label>Repoları listele — kullanıcı ya da org</label><input id="ghOwner" placeholder="örn: fport"></div>
+           <div style="flex:0 0 auto"><button data-label="Listele" onclick="listGithub(this)">Listele</button></div>
+         </div>`;
+  } else if (v === "azure") {
+    const a = credState?.azure;
+    zone.innerHTML = a?.configured
+      ? `<div class="credline"><span class="okmark">●</span> Azure bağlı: ${esc(a.org_url)} (${a.source === "ui" ? "arayüzden" : "env"})
+           <button class="quiet" onclick="toggleAzForm()">değiştir</button>
+           <button data-label="Projeleri listele" onclick="listAzure(this)">Projeleri listele</button></div>
+         <div class="minigrid" id="azForm" hidden></div>`
+      : `<div class="credline">Azure bağlı değil — organizasyon adresi ve PAT gerekli (kapsam: Code → Read).</div>
+         <div class="minigrid" id="azForm">
+           <div><label>Organizasyon URL</label><input id="azOrg" placeholder="https://dev.azure.com/sirket" value="${esc(a?.org_url || "")}"></div>
+           <div><label>Personal Access Token</label><input id="azPat" type="password" placeholder="PAT"></div>
+           <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet & doğrula" onclick="saveAzure(this)">Kaydet & doğrula</button></div>
+         </div>`;
+  } else {
+    zone.innerHTML = "";
+  }
+}
+function toggleGhToken() {
+  const form = $("ghTokenForm");
+  form.hidden = !form.hidden;
+  if (!form.hidden) form.innerHTML = `
+    <div><label>GitHub token (fine-grained, Contents: Read)</label><input id="ghTok" type="password" placeholder="github_pat_… ya da ghp_…"></div>
+    <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet & doğrula" onclick="saveCreds({ github_token: $('ghTok').value }, this)">Kaydet & doğrula</button></div>
+    <div style="flex:0 0 auto"><button class="quiet" data-label="Sil" onclick="saveCreds({ github_token: '' }, this)">Sil</button></div>`;
+}
+function toggleAzForm() {
+  const form = $("azForm");
+  form.hidden = !form.hidden;
+  if (!form.hidden) form.innerHTML = `
+    <div><label>Organizasyon URL</label><input id="azOrg" placeholder="https://dev.azure.com/sirket" value="${esc(credState?.azure?.org_url || "")}"></div>
+    <div><label>Personal Access Token</label><input id="azPat" type="password" placeholder="PAT"></div>
+    <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet & doğrula" onclick="saveAzure(this)">Kaydet & doğrula</button></div>
+    <div style="flex:0 0 auto"><button class="quiet" data-label="Sil" onclick="saveCreds({ azure_org_url: '', azure_pat: '' }, this)">Sil</button></div>`;
+}
+function saveAzure(btn) { saveCreds({ azure_org_url: $("azOrg").value, azure_pat: $("azPat").value }, btn); }
+async function listGithub(btn) {
+  const owner = $("ghOwner").value.trim();
+  if (!owner) { $("ghOwner").focus(); return; }
+  btn.disabled = true; btn.textContent = "yükleniyor…";
+  try {
+    const rows = await api(`/github/${encodeURIComponent(owner)}/repos`);
+    renderPicks(rows.map(r => ({
+      title: r.full_name, sub: r.private ? "private 🔒" : "public", right: r.default_branch,
+      taken: r.registered_as, fill: () => { $("aGh").value = r.full_name; $("aBranch").placeholder = r.default_branch; },
+    })));
+  } catch (e) { toast(e.message); }
+  finally { btn.disabled = false; btn.textContent = btn.dataset.label; }
+}
+async function listAzure(btn) {
+  btn.disabled = true; btn.textContent = "yükleniyor…";
+  try {
+    const projects = await api("/azure/projects");
+    renderPicks(projects.map(pr => ({
+      title: pr.name, sub: "proje", right: "repoları aç →",
+      fill: () => listAzureRepos(pr.name),
+    })));
+  } catch (e) { toast(e.message); }
+  finally { btn.disabled = false; btn.textContent = btn.dataset.label; }
+}
+async function listAzureRepos(project) {
+  try {
+    const rows = await api(`/azure/projects/${encodeURIComponent(project)}/repos`);
+    renderPicks(rows.map(r => ({
+      title: r.name, sub: project, right: r.default_branch,
+      taken: r.registered_as, fill: () => { $("aProj").value = project; $("aRepo").value = r.name; $("aBranch").placeholder = r.default_branch; },
+    })));
+  } catch (e) { toast(e.message); }
+}
+function renderPicks(items) {
+  window._picks = items;
+  $("pickZone").innerHTML = items.length
+    ? `<div class="pick">` + items.map((it, i) => `
+        <div class="pickrow${it.taken ? " taken" : ""}" onclick="pickItem(${i})" title="${it.taken ? "zaten bağlı: " + esc(it.taken) : "Seç"}">
+          <span>${esc(it.title)}</span><span class="dim2">${esc(it.sub)}</span>
+          <span class="right">${it.taken ? "bağlı ✓" : esc(it.right)}</span>
+        </div>`).join("") + `</div>`
+    : `<div class="empty">Liste boş.</div>`;
+}
+function pickItem(i) { const it = window._picks[i]; if (!it.taken) it.fill(); }
+
+$("btnAddRepo").onclick = () => {
+  $("addBox").hidden = !$("addBox").hidden;
+  if (!$("addBox").hidden) { loadCredState(); $("aGh").focus(); }
+};
 $("aCancel").onclick = () => { $("addBox").hidden = true; };
 $("aProvider").onchange = () => {
   const v = $("aProvider").value;
@@ -504,6 +645,7 @@ $("aProvider").onchange = () => {
   $("fAzure").hidden = $("fAzure2").hidden = v !== "azure";
   $("fLocal").hidden = v !== "local";
   $("fGit").hidden = v !== "git";
+  renderCredZone();
 };
 $("aSubmit").onclick = async () => {
   const provider = $("aProvider").value;
@@ -678,6 +820,7 @@ loadHealth(); loadRepos();
 const params = new URLSearchParams(location.search);
 const startTab = params.get("tab");
 showTab(["repolar", "isler", "baglan"].includes(startTab) ? startTab : "ara");
+if (params.get("add")) { showTab("repolar"); $("btnAddRepo").click(); }
 if (params.get("q")) {
   $("q").value = params.get("q");
   if (params.get("mode")) $("mode").value = params.get("mode");

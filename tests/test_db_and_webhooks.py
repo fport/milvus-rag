@@ -137,3 +137,14 @@ def test_find_repo_by_external_scopes_provider(db):
     assert db.find_repo_by_external("123456", provider="github").id == "gh"
     assert db.find_repo_by_external("123456", provider="azure") is None
     assert db.find_repo_by_external("123456", branch="dev") is None
+
+
+def test_app_settings_roundtrip(db):
+    db.set_app_setting("github_token", "ghp_abc")
+    db.set_app_setting("azure_org_url", "https://dev.azure.com/acme")
+    assert db.get_app_settings(["github_token", "azure_org_url", "yok"]) == {
+        "github_token": "ghp_abc",
+        "azure_org_url": "https://dev.azure.com/acme",
+    }
+    db.set_app_setting("github_token", "")  # boş = sil
+    assert db.get_app_settings(["github_token"]) == {}

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshot.png" alt="Milvus RAG arayüzü — Türkçe soruyla kod araması, kanal skorları ve repo durumu" width="920">
+  <img src="docs/hero.svg" alt="Milvus RAG akışı: push → tree-sitter chunk → BGE-M3 + BM25 → Milvus → MCP + RAG ile kodunu bilen agent" width="100%">
 </p>
 
 <h1 align="center">Milvus RAG</h1>
@@ -23,16 +23,20 @@ ile Milvus'a yazar; sorguda sembol biçimli sorgular BM25'e, düz cümleler dens
 (hybrid RRF ve cross-encoder rerank bayrakla açılır — ikisi de ölçüldü, tabloya bak).
 Repoya push geldiğinde yalnızca değişen dosyalar yeniden indexlenir.
 
+```mermaid
+flowchart LR
+    KAYNAK["Azure / GitHub / yerel"] -->|"clone / fetch"| KOPYA["çalışma kopyası"]
+    HOOK["push webhook · poller"] --> KUYRUK["iş kuyruğu"] --> KOPYA
+    KOPYA -->|"sha256 manifest farkı"| FARK["değişen dosyalar"]
+    FARK -->|"tree-sitter chunk<br>sil + yeniden yaz"| MILVUS[("Milvus<br>dense + BM25")]
 ```
-Azure / GitHub ──git clone/fetch──▶ çalışma kopyası ──sha256 manifest──▶ değişen dosyalar
-   │                                                                        │
-   │ webhook (git.push / push + HMAC)  /  poller                          tree-sitter chunk
-   ▼                                                                        │
-/webhooks/azure/push ──▶ iş kuyruğu ──▶ sil + yeniden yaz ──▶ Milvus (dense + BM25, repo_id partition)
-                                                                            │
-POST /search  ──▶ sembol mü? ──▶ BM25 ─────────────────────────┐            │
-              └▶ düz cümle ──▶ dense ─(bayrak: +BM25→RRF, rerank)─┴─▶ 8 hit (kanal skorlarıyla)
-POST /ask     ──▶ /search + LLM (atıflı cevap)
+
+```mermaid
+flowchart LR
+    ASK["POST /ask"] --> SEARCH["POST /search"] --> ROTA{"sembol mü?"}
+    ROTA -->|evet| BM25["BM25"] --> HIT["8 hit<br>kanal skorlarıyla"]
+    ROTA -->|hayır| DENSE["dense<br>(bayrak: hybrid RRF · rerank)"] --> HIT
+    HIT -->|"/ask ise"| CEVAP["LLM → atıflı cevap"]
 ```
 
 ## Kurulum
@@ -84,6 +88,9 @@ uv run rag search withSession --mode bm25
 uv run rag ask "optimistic lock nasıl çalışıyor?" -r my-api
 uv run rag eval evals/golden.example.jsonl -r my-api --tag v1   # şablonu kopyalayıp doldur
 
+# Kimlikler arayüzden de kaydedilebilir: Repolar → Repo bağla panelinde GitHub token /
+# Azure org+PAT gir, doğrulanır ve data/rag.db'de saklanıp env'i ezer; repoları listeden seçersin.
+
 # Tazele
 uv run rag sync my-api                            # artımlı: yalnızca değişen dosyalar
 uv run rag sync my-api --force                    # tam yeniden index
@@ -94,6 +101,7 @@ Aynı işlemler HTTP'den. `/` altında basit bir web arayüzü de var — üç s
 **Ara** (kanal skorlarıyla arama, LLM'e soru), **İşler** (her index çalışmasının
 pipeline akışı: kaynak → fark → chunk → embed → Milvus, canlı ilerleme),
 **Bağlan** (kopyalanabilir webhook URL'leri, poller, curl örnekleri, MCP ayarı):
+
 
 | Uç | İş |
 |---|---|

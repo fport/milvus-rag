@@ -297,3 +297,33 @@ def test_home_serves_ui(client: TestClient):
     health = client.get("/health").json()
     assert health["webhook_secret_set"] is True  # conftest sırrı ayarlıyor
     assert "poll_interval_seconds" in health
+
+
+def test_credentials_flow(client: TestClient):
+    # Başlangıç: hiçbir kimlik yok.
+    state = client.get("/settings/credentials").json()
+    assert state["github"]["token_set"] is False and state["azure"]["configured"] is False
+
+    # Azure kimliği kaydet (doğrulama kapalı: ağ yok) → istemci canlı kurulur.
+    saved = client.put(
+        "/settings/credentials",
+        json={
+            "azure_org_url": "https://dev.azure.com/acme",
+            "azure_pat": "pat123",
+            "verify": False,
+        },
+    )
+    assert saved.status_code == 200
+    state = client.get("/settings/credentials").json()
+    assert state["azure"]["configured"] is True and state["azure"]["source"] == "ui"
+    assert "acme" in state["azure"]["org_url"]
+
+    # GitHub token'ı kaydet → /health canlı istemciyi yansıtır.
+    client.put("/settings/credentials", json={"github_token": "ghp_x", "verify": False})
+    assert client.get("/health").json()["github_token"] is True
+
+    # Gönderilmeyen alan korunur; boş string siler.
+    client.put("/settings/credentials", json={"github_token": "", "verify": False})
+    state = client.get("/settings/credentials").json()
+    assert state["github"]["token_set"] is False
+    assert state["azure"]["configured"] is True  # dokunulmadı

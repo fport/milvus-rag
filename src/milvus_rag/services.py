@@ -22,6 +22,37 @@ from milvus_rag.sources.github import GitHub
 
 log = get_logger("services")
 
+CREDENTIAL_KEYS = ("github_token", "azure_org_url", "azure_pat")
+
+
+def resolve_credentials(settings: Settings, db: Database) -> dict[str, str | None]:
+    """UI'dan kaydedilen değer env'i ezer; kayıt silinince env'e geri düşülür."""
+    saved = db.get_app_settings(CREDENTIAL_KEYS)
+    return {
+        "github_token": saved.get("github_token") or settings.github_token,
+        "azure_org_url": saved.get("azure_org_url") or settings.azure_org_url,
+        "azure_pat": saved.get("azure_pat") or settings.azure_pat,
+    }
+
+
+def apply_credentials(services: Services) -> None:
+    """İstemcileri güncel kimliklerle yeniden kurar — süreç yeniden başlamadan."""
+    creds = resolve_credentials(services.settings, services.db)
+    if services.github is not None:
+        services.github.close()
+    if services.azure is not None:
+        services.azure.close()
+    services.github = GitHub(creds["github_token"], services.settings.github_api_url)
+    services.azure = (
+        AzureDevOps(creds["azure_org_url"] or "", creds["azure_pat"] or "")
+        if creds["azure_org_url"] and creds["azure_pat"]
+        else None
+    )
+    # Aynı istemci nesnesini tutan herkes yenisini görsün.
+    for holder in (services.indexer, services.repos, services.jobs):
+        holder.github = services.github
+        holder.azure = services.azure
+
 
 @dataclass(slots=True)
 class Services:
@@ -73,12 +104,13 @@ def build_services(settings: Settings | None = None) -> Services:
     )
     if settings.enrich_enabled and llm is None:
         log.warning("RAG_ENRICH_ENABLED açık ama LLM yok; enrichment atlanacak")
+    creds = resolve_credentials(settings, db)
     azure = (
-        AzureDevOps(settings.azure_org_url or "", settings.azure_pat or "")
-        if settings.azure_configured
+        AzureDevOps(creds["azure_org_url"] or "", creds["azure_pat"] or "")
+        if creds["azure_org_url"] and creds["azure_pat"]
         else None
     )
-    github = GitHub(settings.github_token, settings.github_api_url)
+    github = GitHub(creds["github_token"], settings.github_api_url)
     indexer = Indexer(settings, db, store, embedder, enricher, azure, github)
     repos = RepoService(settings, db, store, azure, github)
     jobs = JobRunner(settings, db, indexer, retriever, azure, github)

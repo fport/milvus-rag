@@ -22,7 +22,7 @@ from milvus_rag.log import get_logger
 from milvus_rag.repos import RepoError
 from milvus_rag.search.answer import ask as run_ask
 from milvus_rag.search.retrieve import SearchRequest
-from milvus_rag.services import Services, build_services
+from milvus_rag.services import Services, apply_credentials, build_services
 from milvus_rag.sources.azure import AzureError
 from milvus_rag.sources.github import GitHubError
 from milvus_rag.webhooks import (
@@ -58,6 +58,15 @@ class AddRepoBody(BaseModel):
 
 class SyncBody(BaseModel):
     force: bool = False
+
+
+class CredentialsBody(BaseModel):
+    """Gönderilmeyen alana dokunulmaz; boş string kaydı siler (env'e dönülür)."""
+
+    github_token: str | None = None
+    azure_org_url: str | None = None
+    azure_pat: str | None = None
+    verify: bool = True
 
 
 class SearchBody(BaseModel):
@@ -151,10 +160,61 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
             "rerank": s.reranker.model_name if s.reranker else None,
             "llm": s.llm.model if s.llm else None,
             "azure": s.azure is not None,
-            "github_token": s.settings.github_token is not None,
+            "github_token": bool(s.github and s.github.token),
             "webhook_secret_set": bool(s.settings.webhook_secret),
             "poll_interval_seconds": s.settings.poll_interval_seconds,
         }
+
+    # ------------------------------------------------------------- kimlikler
+    @app.get("/settings/credentials")
+    def get_credentials(s: S) -> dict[str, Any]:
+        """Maskelenmiş durum: hangi kimlik nereden geliyor. Sırların kendisi dönmez."""
+        saved = s.db.get_app_settings(["github_token", "azure_org_url", "azure_pat"])
+
+        def source(key: str, env_value: str | None) -> str | None:
+            if saved.get(key):
+                return "ui"
+            return "env" if env_value else None
+
+        return {
+            "github": {
+                "token_set": bool(s.github and s.github.token),
+                "source": source("github_token", s.settings.github_token),
+            },
+            "azure": {
+                "configured": s.azure is not None,
+                "org_url": s.azure.org_url if s.azure else (s.settings.azure_org_url or ""),
+                "source": source("azure_pat", s.settings.azure_pat),
+            },
+        }
+
+    @app.put("/settings/credentials")
+    def put_credentials(body: CredentialsBody, s: S) -> dict[str, Any]:
+        """Kimlikleri kaydet, istemcileri canlı yeniden kur, istenirse doğrula.
+
+        Sırlar data/rag.db'de düz metin durur — servis zaten iç ağ içindir
+        (bkz. DEPLOYMENT.md). Boş string gönderilen alan silinir.
+        """
+        for key in ("github_token", "azure_org_url", "azure_pat"):
+            if key in body.model_fields_set:
+                value = getattr(body, key)
+                s.db.set_app_setting(key, (value or "").strip() or None)
+        apply_credentials(s)
+
+        result: dict[str, Any] = {"github": None, "azure": None}
+        if body.verify:
+            if s.github and s.github.token:
+                try:
+                    result["github"] = {"ok": True, "login": s.github.whoami()}
+                except GitHubError as error:
+                    result["github"] = {"ok": False, "detail": str(error)}
+            if s.azure is not None:
+                try:
+                    projects = s.azure.list_projects()
+                    result["azure"] = {"ok": True, "projects": len(projects)}
+                except AzureError as error:
+                    result["azure"] = {"ok": False, "detail": str(error)}
+        return result
 
     # ----------------------------------------------------------------- azure
     @app.get("/azure/projects")

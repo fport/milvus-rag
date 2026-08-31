@@ -149,6 +149,12 @@ class GitHub:
                 return items
             page += 1
 
+    def whoami(self) -> str | None:
+        """Token'ın kime ait olduğu; token yoksa None. Doğrulama için kullanılır."""
+        if not self.token:
+            return None
+        return str(self._get("/user").json().get("login") or "")
+
     def git_auth_header(self) -> str | None:
         """Token yoksa None: public repo kimliksiz klonlanır."""
         return git_auth_header(self.token) if self.token else None
