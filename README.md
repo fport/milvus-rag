@@ -90,8 +90,10 @@ uv run rag sync my-api --force                    # tam yeniden index
 uv run rag poll                                   # Azure head'lerini bir kez kontrol et
 ```
 
-Aynı işlemler HTTP'den (`/` altında basit bir web arayüzü de var: repo ekle,
-index ilerlemesi, kanal skorlarıyla arama, LLM'e soru):
+Aynı işlemler HTTP'den. `/` altında basit bir web arayüzü de var — üç sekme:
+**Ara** (kanal skorlarıyla arama, LLM'e soru), **İşler** (her index çalışmasının
+pipeline akışı: kaynak → fark → chunk → embed → Milvus, canlı ilerleme),
+**Bağlan** (kopyalanabilir webhook URL'leri, poller, curl örnekleri, MCP ayarı):
 
 | Uç | İş |
 |---|---|

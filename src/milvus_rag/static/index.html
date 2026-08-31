@@ -77,6 +77,34 @@
   .repofilter { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
   .repofilter label { display: inline-flex; gap: 4px; align-items: center; margin: 0; }
   a { color: var(--accent); }
+  /* sekmeler */
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs button { border-radius: 8px; padding: 6px 14px; color: var(--muted); }
+  .tabs button.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  /* işler */
+  .job { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+  .job .head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .job .when { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .badge.trigger-webhook { color: var(--ok); } .badge.trigger-poll { color: var(--warn); }
+  .badge.st-done { color: var(--ok); } .badge.st-failed { color: var(--err); } .badge.st-running { color: var(--warn); }
+  .flow { display: flex; gap: 6px; align-items: stretch; flex-wrap: wrap; margin-top: 8px; }
+  .step { background: var(--soft); border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; font-size: 12px; min-width: 86px; }
+  .step b { display: block; font-size: 12.5px; }
+  .step small { color: var(--muted); display: block; }
+  .arrow { align-self: center; color: var(--muted); }
+  .job .err { color: var(--err); font-size: 12.5px; margin-top: 6px; overflow-wrap: anywhere; }
+  .job details { margin-top: 6px; }
+  .job details pre { background: var(--code); padding: 8px; border-radius: 6px; overflow-x: auto; font: 11.5px/1.4 var(--mono); }
+  .job summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+  /* bağlan */
+  .connect h3 { font-size: 14px; margin: 20px 0 6px; }
+  .connect h3:first-of-type { margin-top: 0; }
+  .connect p, .connect li { font-size: 13.5px; }
+  .connect .note { color: var(--muted); font-size: 12.5px; }
+  .warnbox { border: 1px solid var(--warn); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 12px; }
+  .copyrow { display: flex; gap: 8px; align-items: center; background: var(--code); border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; margin: 6px 0; font: 12px/1.5 var(--mono); }
+  .copyrow code { flex: 1; white-space: pre; overflow-x: auto; }
+  .copyrow button { flex: none; font-size: 11px; padding: 2px 8px; }
 </style>
 </head>
 <body>
@@ -113,7 +141,12 @@
     </div>
   </aside>
   <section>
-    <div class="panel">
+    <div class="tabs">
+      <button id="tabbtn-ara" onclick="showTab('ara')">Ara</button>
+      <button id="tabbtn-isler" onclick="showTab('isler')">İşler</button>
+      <button id="tabbtn-baglan" onclick="showTab('baglan')">Bağlan</button>
+    </div>
+    <div id="tab-ara" class="panel">
       <h2>Ara</h2>
       <div class="searchbar">
         <input id="q" placeholder='"jwt token nerede üretiliyor" ya da handleAuthCallback' autofocus>
@@ -129,6 +162,18 @@
         <span class="repofilter" id="repoFilter"></span>
       </div>
       <div id="out"><div class="empty">Bir şey ara — sembol yaz (BM25'e gider) ya da soru sor (dense).</div></div>
+    </div>
+    <div id="tab-isler" class="panel" hidden>
+      <h2>Index işleri — pipeline akışı</h2>
+      <div class="opts">
+        <span><label for="jobRepo">repo</label><select id="jobRepo" onchange="loadJobs()"><option value="">hepsi</option></select></span>
+        <span>4 sn'de bir yenilenir · tetik: manual / webhook / poll</span>
+      </div>
+      <div id="jobs"><div class="empty">yükleniyor…</div></div>
+    </div>
+    <div id="tab-baglan" class="panel connect" hidden>
+      <h2>Bağlan — webhook, API, MCP</h2>
+      <div id="connect"><div class="empty">yükleniyor…</div></div>
     </div>
   </section>
 </main>
@@ -153,7 +198,8 @@ async function api(path, options) {
 // ---------------------------------------------------------------- sağlık
 async function loadHealth() {
   try {
-    const h = await api("/health");
+    const h = (window._health = await api("/health"));
+    if (!$("tab-baglan").hidden) renderConnect();
     $("chips").innerHTML =
       `<span class="chip ${h.milvus ? "ok" : "err"}">milvus ${h.milvus ? "✓" : "✗"}</span>` +
       `<span class="chip">${esc(h.embedding)}</span>` +
@@ -186,6 +232,12 @@ async function loadRepos() {
     $("repos").innerHTML = repos.length ? repos.map(repoCard).join("") : `<div class="empty">Henüz repo yok — aşağıdan ekle.</div>`;
     $("repoFilter").innerHTML = repos.map(r =>
       `<label><input type="checkbox" value="${esc(r.id)}" checked> ${esc(r.id)}</label>`).join("");
+    const jobSel = $("jobRepo");
+    if (jobSel) {
+      const current = jobSel.value;
+      jobSel.innerHTML = `<option value="">hepsi</option>` + repos.map(r => `<option>${esc(r.id)}</option>`).join("");
+      jobSel.value = current;
+    }
     if (repos.some(r => r.active_job)) setTimeout(loadRepos, 3000);
   } catch (e) { toast("repolar yüklenemedi: " + e.message); }
 }
@@ -267,9 +319,108 @@ $("btnSearch").onclick = doSearch;
 $("btnAsk").onclick = doAsk;
 $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
 
+// ---------------------------------------------------------------- sekmeler
+function showTab(name) {
+  for (const tab of ["ara", "isler", "baglan"]) {
+    $("tab-" + tab).hidden = tab !== name;
+    $("tabbtn-" + tab).classList.toggle("active", tab === name);
+  }
+  clearInterval(window._jobsTimer);
+  if (name === "isler") { loadJobs(); window._jobsTimer = setInterval(loadJobs, 4000); }
+  if (name === "baglan") renderConnect();
+}
+
+// ------------------------------------------------------------------ işler
+function step(title, main, sub) {
+  return `<div class="step"><small>${esc(title)}</small><b>${esc(main)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div>`;
+}
+function jobCard(j) {
+  const s = j.stats || {};
+  const p = s.progress || {};
+  let body = "";
+  if (j.status === "running" || j.status === "queued") {
+    const pct = p.files_total ? Math.round(100 * p.files_done / p.files_total) : 5;
+    body = `<div class="bar"><div style="width:${pct}%"></div></div>
+      <div class="meta">${p.files_total ? `${p.files_done}/${p.files_total} dosya` : "başlıyor…"} · ${s.chunks_written ?? 0} chunk yazıldı</div>`;
+  } else if (j.status === "failed") {
+    body = `<div class="err">${esc(j.error)}</div>`;
+  } else if (j.status === "done") {
+    body = `<div class="flow">
+      ${step("kaynak", s.commit ? s.commit.slice(0, 8) : "yerel", s.forced ? "tam yeniden index" : "artımlı")}
+      <span class="arrow">→</span>
+      ${step("fark", `+${s.added ?? 0} ~${s.modified ?? 0} −${s.deleted ?? 0}`, `${s.unchanged ?? 0} aynı · ${s.skipped ?? 0} atlandı`)}
+      <span class="arrow">→</span>
+      ${step("chunk", `${s.chunks_written ?? 0} yazıldı`, s.redactions ? `${s.redactions} karartma` : " ")}
+      <span class="arrow">→</span>
+      ${step("embed", `${s.embed_seconds ?? 0} sn`, " ")}
+      <span class="arrow">→</span>
+      ${step("Milvus", "✓", `toplam ${s.total_seconds ?? 0} sn`)}
+    </div>`;
+  }
+  const when = (j.created_at || "").slice(5, 16).replace("T", " ");
+  return `<div class="job">
+    <div class="head"><span class="badge st-${esc(j.status)}">${esc(j.status)}</span>
+      <b>${esc(j.repo_id)}</b>
+      <span class="badge trigger-${esc(j.trigger)}">${esc(j.trigger)}</span>
+      <span class="when">${esc(when)}</span></div>
+    ${body}
+    <details><summary>ham istatistik</summary><pre>${esc(JSON.stringify(j, null, 2))}</pre></details>
+  </div>`;
+}
+async function loadJobs() {
+  try {
+    const repo = $("jobRepo").value;
+    const jobs = await api("/jobs?limit=30" + (repo ? "&repo_id=" + encodeURIComponent(repo) : ""));
+    $("jobs").innerHTML = jobs.length ? jobs.map(jobCard).join("") : `<div class="empty">Henüz iş yok — bir repo ekleyince ilk index işi burada akar.</div>`;
+  } catch (e) { toast("işler yüklenemedi: " + e.message); }
+}
+
+// ----------------------------------------------------------------- bağlan
+function copyText(btn) {
+  navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+    const old = btn.textContent; btn.textContent = "✓"; setTimeout(() => (btn.textContent = old), 1200);
+  });
+}
+function copyRow(value) {
+  return `<div class="copyrow"><code>${esc(value)}</code><button data-copy="${esc(value)}" onclick="copyText(this)">kopyala</button></div>`;
+}
+function renderConnect() {
+  const h = window._health || {};
+  const origin = location.origin;
+  const gh = repos.filter(r => r.provider === "github" && r.web_url);
+  const az = repos.filter(r => r.provider === "azure" && r.web_url);
+  const parts = [];
+  if (h.webhook_secret_set === false) {
+    parts.push(`<div class="warnbox">⚠ <b>RAG_WEBHOOK_SECRET ayarlanmamış</b> — gelen webhook'lar 401 ile reddedilir. <code>.env</code>'e bir sır yazıp servisi yeniden başlat.</div>`);
+  }
+  parts.push(`<h3>1 · Push webhook'ları — repo değişince otomatik tazeleme</h3>
+    <p><b>GitHub:</b> repo → Settings → Webhooks → <i>Add webhook</i>. Payload URL:</p>
+    ${copyRow(origin + "/webhooks/github/push")}
+    <p class="note">Content type <code>application/json</code> · Secret = <code>RAG_WEBHOOK_SECRET</code> (HMAC-SHA256 doğrulanır) · "Just the push event". Teslimatları repo'daki <i>Recent Deliveries</i> sekmesinden izlersin; ping'e servis <code>pong</code> döner.</p>
+    ${gh.length ? `<p class="note">Kayıtlı GitHub repoların: ${gh.map(r => `<a href="${esc(r.web_url)}/settings/hooks" target="_blank" rel="noopener">${esc(r.name)} ↗</a>`).join(" · ")}</p>` : ""}
+    <p style="margin-top:10px"><b>Azure DevOps:</b> Project Settings → Service Hooks → <i>Web Hooks</i> → olay <i>Code pushed</i>. URL:</p>
+    ${copyRow(origin + "/webhooks/azure/push")}
+    <p class="note">"Basic authentication password" ya da <code>X-RAG-Webhook-Secret</code> header'ı = <code>RAG_WEBHOOK_SECRET</code>. Aynı commit iki kez gelirse ikinci iş açılmaz.</p>
+    ${az.length ? `<p class="note">Kayıtlı Azure repoların: ${az.map(r => `<a href="${esc(r.web_url.split("/_git/")[0])}/_settings/serviceHooks" target="_blank" rel="noopener">${esc(r.name)} ↗</a>`).join(" · ")}</p>` : ""}`);
+  parts.push(`<h3>2 · Poller — webhook'suz yedek</h3>
+    <p>${h.poll_interval_seconds ? `Her <b>${h.poll_interval_seconds} sn</b>'de bir Azure/GitHub branch head'i son indexlenen commit'le karşılaştırılır; webhook kuramasan bile index en geç bu aralıkta tazelenir. (<code>RAG_POLL_INTERVAL_SECONDS</code>, 0 = kapalı)` : `Kapalı (<code>RAG_POLL_INTERVAL_SECONDS=0</code>). Webhook yoksa tazeleme yalnızca elle <i>Sync</i> ile olur.`}</p>`);
+  parts.push(`<h3>3 · HTTP API</h3>
+    <p>Tüm uçlar ve şemalar: <a href="/docs" target="_blank">/docs</a> (OpenAPI). En çok kullanılan ikisi:</p>
+    ${copyRow(`curl -X POST ${origin}/search -H 'content-type: application/json' -d '{"q":"jwt nerede üretiliyor","k":8}'`)}
+    ${copyRow(`curl '${origin}/repos/<repo-id>/file?path=src/index.ts&start=1&end=120'`)}
+    <p class="note">Her arama sonucu kanal skorlarını taşır (dense/bm25/rrf/rerank) — hangi kanalın neyi bulduğu görünür.</p>`);
+  parts.push(`<h3>4 · MCP / agent entegrasyonu</h3>
+    <p>Bir asistana bağlamak için iki araç yeter: <code>search_code</code> → <code>POST /search</code>, <code>read_code</code> → <code>GET /repos/{id}/file</code>. Milvus API'nin MCP sunucusunda bu araçlar hazır; api tarafında tek ayar:</p>
+    ${copyRow("RAG_SERVICE_URL=" + origin)}
+    <p class="note">Dönen kod parçaları ajana <i>untrusted veri</i> olarak işaretlenip verilir (prompt-injection koruması). Başka bir MCP istemcisi ya da agent framework'ü de aynı iki HTTP ucunu sararak bağlanabilir. Bu servisin kendi kimlik doğrulaması yok — URL'i iç ağda tut (bkz. DEPLOYMENT.md).</p>`);
+  $("connect").innerHTML = parts.join("");
+}
+
 loadHealth(); loadRepos();
 // ?q=... ile paylaşılabilir aramalar: parametre varsa yükleyince ara.
 const params = new URLSearchParams(location.search);
+const startTab = params.get("tab");
+showTab(startTab === "isler" || startTab === "baglan" ? startTab : "ara");
 if (params.get("q")) {
   $("q").value = params.get("q");
   if (params.get("mode")) $("mode").value = params.get("mode");

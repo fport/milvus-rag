@@ -291,3 +291,9 @@ def test_home_serves_ui(client: TestClient):
     assert response.status_code == 200
     assert "Milvus RAG" in response.text
     assert "text/html" in response.headers["content-type"]
+    # Sekmeler: pipeline görünümü ve entegrasyon rehberi arayüzde var.
+    assert "Index işleri" in response.text and "webhooks/github/push" in response.text
+
+    health = client.get("/health").json()
+    assert health["webhook_secret_set"] is True  # conftest sırrı ayarlıyor
+    assert "poll_interval_seconds" in health

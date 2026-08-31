@@ -152,6 +152,8 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
             "llm": s.llm.model if s.llm else None,
             "azure": s.azure is not None,
             "github_token": s.settings.github_token is not None,
+            "webhook_secret_set": bool(s.settings.webhook_secret),
+            "poll_interval_seconds": s.settings.poll_interval_seconds,
         }
 
     # ----------------------------------------------------------------- azure
