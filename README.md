@@ -81,6 +81,12 @@ ollama pull qwen3.5:9b                               # yerel LLM (6.6 GB) — /a
 cp .env.example .env                                 # aşağıdaki değerleri doldur (yerel deneme için hiçbiri şart değil)
 ```
 
+### NOT
+```bash
+brew install ollama
+brew services start ollama
+```
+
 `.env`'de gerekenler — yerel bir dizin + yerel LLM ile denemek için **hiçbiri gerekmez**:
 
 | Değişken | Ne |
