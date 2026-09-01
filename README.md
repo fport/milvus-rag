@@ -7,6 +7,7 @@
 <p align="center"><em>Kod tabanını anlayan, push'ta kendini tazeleyen arama servisi.</em></p>
 
 <p align="center">
+  <a href="#neden-bu-yığın">Neden bu yığın</a> ·
   <a href="#kurulum">Kurulum</a> ·
   <a href="#kullanım">Kullanım</a> ·
   <a href="#repo-değişince-ne-olur">Tazeleme akışı</a> ·
@@ -38,6 +39,35 @@ flowchart LR
     ROTA -->|hayır| DENSE["dense<br>(bayrak: hybrid RRF · rerank)"] --> HIT
     HIT -->|"/ask ise"| CEVAP["LLM → atıflı cevap"]
 ```
+
+## Neden bu yığın
+
+Kod tabanı için RAG'ın zor kısmı vektör aramak değil. Zor olan dört şey: **sembolü tam
+bulmak**, **Türkçe soruyu İngilizce koda bağlamak**, **repo değişince bayat kalmamak** ve
+**cevap yokken "yok" diyebilmek**. Her parça bu dört soruya göre seçildi; ölçülebilen her
+karar aşağıda "ölçüldü" diye işaretli ve rakamı [Ölçüm defteri](#ölçüm-defteri)'nde.
+
+| Parça | Ne işe yarıyor | Neden bu | Alternatifler — neden değil |
+|---|---|---|---|
+| **Milvus 2.6** (Docker) | Vektör deposu: dense + BM25 sparse aynı collection'da, `repo_id` partition key | BM25'i Milvus'un kendi `Function`'ı üretir → ayrı leksik index kodu yok; partition key ile repo filtresi ucuz; range search var | **pgvector**: BM25 yok, hybrid için tsvector ayrı yol · **Qdrant**: sparse alanı var ama BM25 hesabı istemcide · **Chroma / FAISS**: tek süreç, filtre ve ölçek zayıf · **Elasticsearch**: hybrid iyi ama ayrı dünya, ağır |
+| **BGE-M3** (yerel, 1024d) | Düz cümleyi vektöre çevirir; Türkçe soru ile İngilizce kod aynı uzayda | Çok dilli: TR düz cümlede R@8 0.684 — MiniLM'de 0.04'tü (ölçüldü); kod makineden çıkmaz; 8192 token pencere | **OpenAI text-embedding-3**: iyi ama kod dışarı gider, ücret (`RAG_EMBEDDING_BACKEND=openai` ile açılır) · **MiniLM**: Türkçede çöktü (ölçüldü) · **Voyage-code**: API, aynı sebep |
+| **BM25** (Milvus sparse) | `handleAuthCallback`, `QUEUE_NAMES` gibi sembolleri tam bulur | Embedding sembolde kördür; BM25 sembollerde 1.0 / 1.0 (ölçüldü) | **Yalnız dense**: sembolde MRR 0.875 · **grep**: canlı ama anlam/sıralama yok — o zaten ajanın kendi aracı |
+| **Sorgu yönlendirme** (regex) | Sembol biçimli sorgu → BM25, düz cümle → dense | Bedava MRR: 0.678 → 0.690; hybrid'i hep açmak bulamayan kanalı da terfi ettiriyor (MRR 0.604) (ölçüldü) | **Her zaman hybrid RRF**: daha kötü (ölçüldü) · **LLM router**: gecikme + maliyet, bir regex yetiyor |
+| **RRF** (bayrak) | dense + BM25 listelerini *sırayla* birleştirir | cosine (0–1) ile BM25 (0–30) toplanamaz; RRF skora değil sıraya bakar | **Ağırlıklı toplam / Milvus WeightedRanker**: normalize etsen de korpusa göre kayar |
+| **Cross-encoder rerank** bge-reranker-v2-m3 (bayrak, kapalı) | 40 adayı soruyla yan yana okuyup yeniden sıralar | Ölçüldü: bu korpusta sıralamayı bozdu (MRR 0.690 → 0.514), p50 2–4 sn → kapalı. recall@40 = 0.95 boşluğu duruyor, daha iyi bir reranker tabloya satır olarak girer | **Cohere / Voyage rerank**: API; denenmedi |
+| **tree-sitter** chunking | Dosyayı fonksiyon / sınıf / metod sınırından böler, sembol adını taşır (20+ dil) | Chunk = kod birimi: atıf "dosya:satır — fonksiyon" olur, embedding tek bir şeyi temsil eder | **Sabit pencere / RecursiveCharacterTextSplitter**: fonksiyonu ortadan keser · **LLM chunking**: pahalı · `.sql` tree-sitter dışı: grammar segfault veriyor (ölçüldü), satır pencereleriyle bölünür |
+| **sha256 manifest** ile artımlı sync | Push gelince yalnız değişen dosya yeniden indexlenir | İçerik hash'i: rename / mod / submodule kenar durumu yok, yerel dizin de aynı yoldan; yarıda kesilen iş eksik bırakmaz | **git diff**: kenar durumları · **Tam yeniden index**: 300 dosya ≈ dakikalar |
+| **Webhook + poller** | Azure "Code pushed", GitHub push (HMAC); kaçarsa poller yakalar | Push anında tazelik, poller güvenlik ağı | **Yalnız cron**: bayat pencere · **Yalnız webhook**: kaçan event kalıcı boşluk |
+| **SQLite** + tek worker kuyruk | repos / files / jobs / webhook_events; repo başına tek bekleyen iş | Tek süreç, tek dosya; Postgres + Redis kurulumu istemez | **Postgres + Celery / BullMQ**: iki ek servis, burada iş yok |
+| **scrub** (regex) | Index'e girmeden sır ve PII karartır | Tutucu kurallar: aynı repoda isim bazlı kural 247 yanlış pozitif verdi, bu sürüm 2 (biri gerçek) (ölçüldü) | **detect-secrets / gitleaks**: bağımlılık + aynı yanlış pozitif sorunu |
+| **Üç bant** (0.45 taban · 0.55 not) | Cevap yokken "yok" der; gri bölgeyi uyarıyla döner | kNN "yakın olan yok" demez; cosine gri bölgede ayırmıyor (bulunan min 0.526 / çöp max 0.587) → sert kapı değil, sinyal + hakem ajan (CRAG'ın üç bandı) | **Tek cosine eşiği**: gerçekleri de keser · **Reranker kapısı**: %29 yanlış alarm, +550 ms (ölçüldü) · **LLM hakem**: her sorguya bir LLM çağrısı |
+| **MCP** (aynı süreç, `/mcp`) | Claude Code / Cursor için `search_code` · `read_code` · `list_repos` | Aynı retriever, ek süreç yok; ajan adayları alır, gerisini okuyarak karar verir; `read_code` yalnız indexli dosyayı okur | **stdio ayrı süreç**: model iki kez yüklenir · **Yalnız HTTP**: her ajan aracı elle sarılır |
+| **Golden eval** (Recall@k · MRR · abstain) | Her retrieval kararını sayıyla verir | 42 soru + 13 negatif; "sanki iyi oldu" yok, bayrak varsayılanı JSON düşmeden değişmez | **Ragas / TruLens**: LLM hakemli, yavaş ve pahalı; retrieval'ı doğrudan ölçmek yetiyor |
+| **Claude** (`/ask`, enrichment; isteğe bağlı) | Atıflı cevap; istenirse chunk'lara Türkçe açıklama | Retrieval LLM'siz çalışır, LLM yalnız cevap katmanında; OpenAI / Ollama da bağlanır | **Ollama qwen2.5** açıklama için: Çince'ye kayıyor (ölçüldü) → alfabe kontrolü var |
+
+Çevresi: Python 3.12 + uv, FastAPI + uvicorn, typer CLI, pydantic-settings; tek `docker compose`
+ile Milvus + etcd + MinIO. Dış dünyayla yalnızca HTTP konuşur, indexlediği repolara asla yazmaz.
+Bu tablo özet; her satırın gerekçesi ve tuzakları [Tasarım notları](#tasarım-notları)'nda.
 
 ## Kurulum
 
