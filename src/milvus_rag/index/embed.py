@@ -81,7 +81,11 @@ class LocalEmbedder(Embedder):
             started = time.perf_counter()
             model = SentenceTransformer(self.model_name, device=self.device)
             model.max_seq_length = self.max_tokens
-            dimension = model.get_sentence_embedding_dimension()
+            # sentence-transformers 5.x adı değiştirdi; eski sürümde yeni ad yok.
+            get_dimension = getattr(
+                model, "get_embedding_dimension", model.get_sentence_embedding_dimension
+            )
+            dimension = get_dimension()
             if dimension != self.expected_dimension:
                 msg = (
                     f"{self.model_name} {dimension} boyutlu vektör üretiyor, ayarlarda "
