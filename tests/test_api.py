@@ -365,3 +365,30 @@ def test_mcp_endpoint(client: TestClient):
         "/mcp", json=MCP_INIT, headers={**MCP_HEADERS, "host": "evil.example.com"}
     )
     assert foreign.status_code == 421
+
+
+def test_search_signal_and_file_guard(client: TestClient):
+    """`/search` weak_match taşır; `/repos/{id}/file` yalnızca indexli dosyayı okur,
+    değişmişse `stale` der, sırrı karartır."""
+    repo_dir: Path = client.repo_dir  # type: ignore[attr-defined]
+    (repo_dir / "node_modules").mkdir()
+    (repo_dir / "node_modules" / "x.js").write_text("module.exports = 1\n")
+    (repo_dir / ".env").write_text("DB_PASSWORD=hunter2hunter2x1\n")
+    created = client.post("/repos", json={"provider": "local", "path": str(repo_dir)})
+    job = _wait_job(client, created.json()["job"]["id"])
+    assert job["status"] == "done" and job["stats"]["added"] == 1  # .env ve node_modules index dışı
+
+    search = client.post("/search", json={"q": "how does auth work"}).json()
+    assert search["weak_match"] is False and search["dropped"] == 0  # sahte store dense=1.0
+
+    fresh = client.get("/repos/demo/file", params={"path": "src/auth.ts", "end": 1}).json()
+    assert fresh["stale"] is False and fresh["path"] == "src/auth.ts"
+    for path in ("node_modules/x.js", ".env", "src/made-up.ts"):
+        response = client.get("/repos/demo/file", params={"path": path})
+        assert (
+            response.status_code == 404 and "indexli değil ya da yok" in response.json()["detail"]
+        )
+
+    (repo_dir / "src" / "auth.ts").write_text('const API_TOKEN="abc123def456ghi789";\n')
+    edited = client.get("/repos/demo/file", params={"path": "src/auth.ts"}).json()
+    assert edited["stale"] is True and "[SECRET]" in edited["text"]

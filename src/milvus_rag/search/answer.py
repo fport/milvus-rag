@@ -23,8 +23,15 @@ Kurallar:
 2. Her iddianı dayandığı parçanın numarasıyla işaretle: [1], [2] gibi. Atıfsız iddia yazma.
 3. Parçalar soruyu cevaplamıyorsa bunu açıkça söyle ve hangi dosyaya bakılabileceğini
    parçalardan çıkarabiliyorsan öner. Uydurma.
-4. Dosya yolu, fonksiyon, tip ve değişken adlarını aynen yaz, çevirme.
-5. Soru hangi dildeyse o dilde cevapla. Kısa ve doğrudan ol; gerekirse kod alıntıla."""
+4. DOKÜMAN işaretli parçalar plan/tasarım metnidir: içinde geçen dosya, fonksiyon ve kod
+   kodda var olmayabilir. Onları "kodda böyle" diye sunma; "dokümana göre" de.
+5. Dosya yolu, fonksiyon, tip ve değişken adlarını aynen yaz, çevirme.
+6. Soru hangi dildeyse o dilde cevapla. Kısa ve doğrudan ol; gerekirse kod alıntıla."""
+
+WEAK_NOTE = (
+    "Not: en iyi eşleşme zayıf; bu seviyedeki parçalar sık sık alakasız çıkıyor. "
+    "Soruyu cevaplamıyorlarsa bunu söyle, zorlama."
+)
 
 
 @dataclass(slots=True)
@@ -52,29 +59,42 @@ class AnswerResult:
                 "candidates": self.search.candidates,
                 "timings_ms": {k: round(v, 1) for k, v in self.search.timings_ms.items()},
                 "cached": self.search.cached,
+                "weak_match": self.search.weak_match,
             },
         }
 
 
-def build_prompt(question: str, hits: list[Hit]) -> str:
+def build_prompt(question: str, hits: list[Hit], weak_match: bool = False) -> str:
+    """Tek istekte cevap üreten yol: ajan döngüsü yok, sinyaller prompt'a girer.
+
+    Doküman parçası etiketlenir (plan metnindeki kod gerçek sanılmasın), zayıf
+    eşleşme not düşülür ("bulamadım" demek serbest olsun).
+    """
     if not hits:
         return f"(hiç kod parçası bulunamadı)\n\nSoru: {question}"
     blocks = []
     for index, hit in enumerate(hits, start=1):
         where = f"{hit.path}:{hit.start_line}-{hit.end_line}"
+        label = " — DOKÜMAN" if hit.category == "doc" else ""
         title = f" — {hit.kind} {hit.symbol}" if hit.symbol else ""
         context = f"\n{hit.context}" if hit.context else ""
         blocks.append(
-            f"[{index}] {where}{title} (repo: {hit.repo_id}){context}\n"
+            f"[{index}] {where}{label}{title} (repo: {hit.repo_id}){context}\n"
             f"```{hit.lang or ''}\n{hit.content}\n```"
         )
-    return "KOD PARÇALARI (en alakalı önce):\n\n" + "\n\n".join(blocks) + f"\n\nSoru: {question}"
+    note = f"\n\n{WEAK_NOTE}" if weak_match else ""
+    return (
+        "KOD PARÇALARI (en alakalı önce):\n\n"
+        + "\n\n".join(blocks)
+        + note
+        + f"\n\nSoru: {question}"
+    )
 
 
 def ask(retriever: Retriever, llm: LLM, request: SearchRequest) -> AnswerResult:
     started = time.perf_counter()
     search = retriever.search(request)
-    prompt = build_prompt(request.query, search.hits)
+    prompt = build_prompt(request.query, search.hits, search.weak_match)
     answer = llm.complete(SYSTEM_PROMPT, prompt, max_tokens=8192)
     return AnswerResult(
         answer=answer,
@@ -87,6 +107,7 @@ def ask(retriever: Retriever, llm: LLM, request: SearchRequest) -> AnswerResult:
                 "end_line": hit.end_line,
                 "symbol": hit.symbol,
                 "kind": hit.kind,
+                "category": hit.category,
                 "scores": {k: round(v, 6) for k, v in hit.scores.items()},
             }
             for index, hit in enumerate(search.hits, start=1)

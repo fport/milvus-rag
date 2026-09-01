@@ -158,6 +158,8 @@ yeniden index yapar.
 | `RAG_RERANK_ENABLED` | `false` | `RAG_CANDIDATES=40` aday → `bge-reranker-v2-m3` → `RAG_TOP_K=8` — ölçüldü, zarar etti |
 | `RAG_CHUNK_MAX_BYTES` / `MIN` | 2000 / 200 | chunk sınırları (≈500 token tavan) |
 | `RAG_ENRICH_ENABLED` | `false` | her chunk için LLM'den Türkçe açıklama, `indexed_text`'e girer (cache'li) |
+| `RAG_MIN_DENSE_SCORE` | `0.45` | sert taban: dense skoru bunun altındaki parça hiç dönmez (`dropped` sayar); BM25'e uygulanmaz; 0 = kapalı — ölçüldü, aşağıya bak |
+| `RAG_WEAK_DENSE_SCORE` | `0.55` | en iyi dense skoru bunun altındaysa yanıt `weak_match: true` taşır — **sinyal, filtre değil**; sonuçlar yine döner — ölçüldü, aşağıya bak |
 
 Her bayrağı `POST /search` gövdesinde ve `rag eval` parametrelerinde istek başına ezebilirsin;
 ablation için tasarlandı.
@@ -187,6 +189,38 @@ BGE-M3 çok dilli olduğu için Türkçe sorular çalışıyor (eski MiniLM dene
 Recall@40 = 0.95: reranker'ın kapatabileceği +0.17'lik alan VAR ama bge-reranker-v2-m3
 onu kapatmak yerine sıralamayı bozdu ve saniyeler yedi → kapalı. Daha iyi bir reranker
 denenecekse tabloya yeni satır olarak girer.
+
+**Çekimserlik (2026-09-01).** kNN araması "en yakın k" demektir, "yakın olan yok" diye bir
+kavramı yoktur: retriever "Beş yıldızlı bir tatil köyüne gittiniz mi?" sorusuna da 8 parça
+döndürür (en iyisi 0.366). Halüsinasyon buradan başlar. Golden'a cevabı repoda OLMAYAN 12
+negatif soru eklendi (`expect: []`); `abstain` = boş sonuç ya da `weak_match` sinyali,
+`false_weak` = pozitifte sinyalin yanlış yanması. Cosine gri bölgede ayırmıyor (golden top-1
+dense medyan 0.636 / min 0.526; alakasız medyan 0.531 / max 0.598 — örtüşüyor). Çözüm
+CRAG'ın üç bandı: **< 0.45 → atılır** (`RAG_MIN_DENSE_SCORE`, golden'ın en düşük gerçek
+cevabının hayli altında, yalnız saçma kuyruğu keser), **0.45–0.55 → döner ama "zayıf
+eşleşme" notuyla** (`RAG_WEAK_DENSE_SCORE`), **≥ 0.55 → normal**. Karar tüketicinin
+(ajan / LLM / arayüzdeki insan); taban sadece "cevap olamaz" bandını temizler.
+
+| Kapı | abstain (negatif) | false_weak (42 pozitif) | Recall@8 / MRR | ek gecikme |
+|---|---|---|---|---|
+| dense < 0.55 notu | 10/12 = 0.833 | 2/42 = 0.048 | 0.786 / 0.690 (değişmedi) | 0 |
+| **taban 0.45 + not 0.55** ✓ | 11/13 = 0.846 (2'si boş döndü) | 2/42 = 0.048 | 0.786 / 0.690 (değişmedi) | 0 |
+| rerank < 0.05 (bge-reranker-v2-m3, yalnız top-8) | 12/12 | 12/42 = 0.286 | — | +550 ms p50 |
+| rerank < 0.5 | 12/12 | 25/42 | — | +550 ms |
+
+Eşikler resmi değil, **bu model + bu korpus için ölçülmüş**: cosine dağılımı embedding
+modeline göre kayar (aynı iş için Mistral ~0.73, Gemini ~0.46 çıkabiliyor). Model değişince
+yeniden kalibre et: `rag eval` raporundaki `calibration` bloğu bulunan pozitiflerin en düşük
+top-dense'ini ve negatiflerin en yükseğini verir; taban ilkinin altına, not eşiği ikisinin
+arasına konur. fport-site (blog) için de bakıldı: 6 gerçek soru 0.567–0.700, ikisi de güvende.
+
+Okuma: reranker negatifleri kusursuz yakalıyor ama gerçek cevapların p25'ine de 0.039
+veriyor — her üç sorgudan birinde yanlış alarm, ajanın notu yok saymayı öğrenmesi için
+yeterli; cosine notu %5 yanlış alarmla yakalıyor → o kaldı. Taban 0.45 golden'dan hiçbir
+şey düşürmedi, "tatil köyü" (0.366) ve "Kafka rebalance" (0.418) sorularını sıfır sonuca
+indirdi. Kaçan ikisi ("CSV export stream", "puppeteer") repoda gerçekten *benzer* kod olan
+sorular (0.598 / 0.544); orada karar ajanın. Sinyalin nasıl sunulduğu: MCP bölümü ve
+arayüz (zayıf eşleşme notu, DOKÜMAN rozeti, "N elendi").
 
 ```bash
 G=evals/golden.example.jsonl   # kendi setinle değiştir
@@ -248,15 +282,27 @@ gelir, hepsi salt okuma:
 
 | Araç | İş |
 |---|---|
-| `search_code(query, repo?, path_prefix?, k?)` | kanal skorlarıyla ilk adaylar |
-| `read_code(repo, path, start?, end?)` | bulunan dosyadan satır aralığı — ajan gerisini okuyarak karar verir |
+| `search_code(query, repo?, path_prefix?, category?, k?)` | kanal skorlarıyla ilk adaylar; `category` = `code` / `doc` / `other` |
+| `read_code(repo, path, start?, end?)` | bulunan dosyadan satır aralığı — ajan gerisini okuyarak karar verir; yalnızca **indexli** dosya okunur |
 | `list_repos()` | hangi kod tabanları bağlı |
+
+Retriever her sorguya bir şey döndürür, alakasız sorguya da; kapı koymak yerine
+(cosine ayırmıyor, ölçüm defterine bak) ajanı hakem yapıyoruz ve ona dürüst sinyal
+veriyoruz — profesyonel sistemlerin de yaptığı bu (kalibre skor ya da LLM hakem + atıf +
+doğrulama). `search_code` başlığında: kaç sonucun **DOKÜMAN** olduğu (plan metnindeki
+kod gerçek sanılmasın), **zayıf eşleşme** notu (`RAG_WEAK_DENSE_SCORE`), reponun son index
+zamanı ve durumu. `read_code` yalnızca manifest'teki dosyayı okur — uydurma yol,
+`node_modules`, `.env` hepsi "indexli değil ya da yok" döner, dosya son indexten sonra
+değişmişse ⚠ der, çıktı index'e giren metin gibi scrub'lanır. Sunucu talimatı da
+"bulamadım" demeyi açıkça serbest bırakır ve her iddiaya `repo/dosya:satır` ister.
+Aynı sinyaller `POST /search` (`weak_match`, hit başına `category`) ve `/ask`
+prompt'unda da var: tek istek atan tüketici de görsün.
 
 Uç, DNS rebinding'e karşı varsayılan olarak yalnızca localhost'tan gelen istekleri
 kabul eder; başka bir adresten bağlanılacaksa host'u `RAG_MCP_ALLOWED_HOSTS`'a ekle.
 Dönen kod parçaları ajana **veri** olarak işaretlenir (talimat değil).
 
 MCP konuşmayan bir uygulama aynı işi düz HTTP ile yapar: `POST /search` ve
-`GET /repos/{id}/file`. Kendi MCP sunucusu olan bir servisi bu RAG'a bağlamak için o servis tarafında tek ayar yeter: `RAG_SERVICE_URL=http://<host>:8090`.
+`GET /repos/{id}/file` (`stale` alanı ve 404 = indexli değil). Kendi MCP sunucusu olan bir servisi bu RAG'a bağlamak için o servis tarafında tek ayar yeter: `RAG_SERVICE_URL=http://<host>:8090`.
 
 Sunucuya kurulum için `DEPLOYMENT.md`. Lisans: MIT.

@@ -27,6 +27,7 @@ from milvus_rag.search.answer import ask as run_ask
 from milvus_rag.search.retrieve import SearchRequest
 from milvus_rag.services import Services, apply_credentials, build_services
 from milvus_rag.sources.azure import AzureError
+from milvus_rag.sources.files import FileReadError, read_indexed_slice
 from milvus_rag.sources.github import GitHubError
 from milvus_rag.webhooks import (
     PushEvent,
@@ -348,23 +349,28 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
         start: int = Query(1, ge=1),
         end: int | None = Query(None, ge=1),
     ) -> dict[str, Any]:
-        """Bir dosyanın satır aralığı — agent'ın `read_file` aracı için."""
+        """Bir dosyanın satır aralığı — agent'ın `read_code` aracı için.
+
+        Yalnızca indexlenmiş dosya okunur (manifest); `stale` diskteki içeriğin
+        son indexten sonra değiştiğini söyler. Gerekçe: sources/files.py.
+        """
         repo = s.db.get_repo(repo_id)
         if repo is None:
             raise HTTPException(404, "repo yok")
-        root = Path(repo.local_path).resolve()
-        target = (root / path).resolve()
-        if root not in target.parents or not target.is_file():
-            raise HTTPException(404, "dosya yok")
-        lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
-        stop = min(end or start + 199, len(lines), start + 999)
+        try:
+            piece = read_indexed_slice(
+                Path(repo.local_path), s.db.manifest(repo_id), path, start, end, max_lines=1000
+            )
+        except FileReadError as error:
+            raise HTTPException(404, str(error)) from error
         return {
             "repo_id": repo_id,
-            "path": path,
-            "start": start,
-            "end": stop,
-            "total_lines": len(lines),
-            "text": "\n".join(lines[start - 1 : stop]),
+            "path": piece.path,
+            "start": piece.start,
+            "end": piece.end,
+            "total_lines": piece.total_lines,
+            "text": piece.text,
+            "stale": piece.stale,
         }
 
     @app.get("/repos/{repo_id}/chunks")

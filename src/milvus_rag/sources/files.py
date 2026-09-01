@@ -10,8 +10,11 @@ koduyla dolar.
 import hashlib
 import os
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Literal
 
+from milvus_rag.index.scrub import scrub
 from milvus_rag.models import Category, SourceFile
 from milvus_rag.sources import git
 
@@ -279,3 +282,70 @@ def iter_source_files(
 def parse_extra_extensions(raw: str) -> frozenset[str]:
     items = {item.strip().lower() for item in raw.split(",") if item.strip()}
     return frozenset(item if item.startswith(".") else f".{item}" for item in items)
+
+
+# ------------------------------------------------------------ dosya okuma
+
+
+class FileReadError(ValueError):
+    """`reason`: "not_indexed" (yol manifest'te yok) ya da "missing" (indexli ama diskte yok)."""
+
+    def __init__(self, reason: Literal["not_indexed", "missing"], message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+@dataclass(frozen=True, slots=True)
+class FileSlice:
+    path: str
+    start: int
+    end: int
+    total_lines: int
+    text: str
+    # Diskteki içerik manifest'teki sha ile uyuşmuyor: dosya son indexten sonra
+    # değişmiş, aramanın verdiği satır numaraları kaymış olabilir.
+    stale: bool
+
+
+def normalize_path(path: str) -> str:
+    """ "./src/a.ts", "/src/a.ts" → "src/a.ts": manifest'in tuttuğu biçim."""
+    return str(PurePosixPath(path.strip().lstrip("/")))
+
+
+def read_indexed_slice(
+    root: Path,
+    manifest: dict[str, str],
+    path: str,
+    start: int = 1,
+    end: int | None = None,
+    default_lines: int = 200,
+    max_lines: int = 400,
+) -> FileSlice:
+    """Yalnızca manifest'teki (indexlenmiş) bir dosyadan satır aralığı okur.
+
+    Neden manifest: ajan bu aracı aramanın verdiği yolla çağırır. Uydurduğu ya da
+    index dışı bir yolu (node_modules, .env) okuyabilmesi hem sır sızdırır hem
+    "o dosya var" yanılgısı üretir. Manifest dışı = "indexli değil ya da yok";
+    ajanın duyması gereken cevap budur. Çıktı, index'e giren metin gibi scrub'lanır.
+    """
+    clean = normalize_path(path)
+    expected_sha = manifest.get(clean)
+    if expected_sha is None:
+        msg = f"{clean} indexli değil ya da yok"
+        raise FileReadError("not_indexed", msg)
+    target = (root / clean).resolve()
+    if root.resolve() not in target.parents or not target.is_file():
+        msg = f"{clean} indexlenmiş ama artık diskte yok"
+        raise FileReadError("missing", msg)
+    data = target.read_bytes()
+    lines = scrub(data.decode("utf-8", errors="replace")).text.splitlines()
+    stop = min(end or start + default_lines - 1, len(lines), start + max_lines - 1)
+    stop = max(stop, start - 1)  # aralık dosyanın sonundan sonra başlıyorsa boş dilim
+    return FileSlice(
+        path=clean,
+        start=start,
+        end=stop,
+        total_lines=len(lines),
+        text="\n".join(lines[start - 1 : stop]),
+        stale=sha256_of(data) != expected_sha,
+    )

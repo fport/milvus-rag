@@ -63,6 +63,12 @@ class SearchResponse:
     candidates: int
     timings_ms: dict[str, float] = field(default_factory=dict)
     cached: bool = False
+    # En iyi dense skoru `weak_dense_score`'un altında: sonuçlar döner ama tüketici
+    # "bulamadım" demeyi düşünmeli. Filtre değil sinyal — bkz. config.
+    weak_match: bool = False
+    # `min_dense_score` tabanının altında kaldığı için atılan parça sayısı: "8 aday
+    # vardı, hepsi saçmaydı" ile "hiç aday yoktu" tüketici için farklı cümleler.
+    dropped: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -72,6 +78,8 @@ class SearchResponse:
             "candidates": self.candidates,
             "timings_ms": {key: round(value, 1) for key, value in self.timings_ms.items()},
             "cached": self.cached,
+            "weak_match": self.weak_match,
+            "dropped": self.dropped,
         }
 
 
@@ -135,6 +143,8 @@ class Retriever:
                 candidates=cached.candidates,
                 timings_ms=dict(cached.timings_ms),
                 cached=True,
+                weak_match=cached.weak_match,
+                dropped=cached.dropped,
             )
         response = self._search(request)
         self._cache.set(key, response)
@@ -183,8 +193,10 @@ class Retriever:
             timings["rerank"] = _ms(mark)
         else:
             hits = candidates[:top_k]
-            for rank, hit in enumerate(hits):
-                hit.rank = rank
+
+        hits, dropped = apply_floor(mode, hits, settings.min_dense_score)
+        for rank, hit in enumerate(hits):
+            hit.rank = rank
 
         timings["total"] = _ms(started)
         return SearchResponse(
@@ -193,7 +205,28 @@ class Retriever:
             reranked=bool(use_rerank and candidates),
             candidates=len(candidates),
             timings_ms=timings,
+            weak_match=is_weak_match(mode, hits, settings.weak_dense_score),
+            dropped=dropped,
         )
+
+
+def apply_floor(mode: str, hits: Sequence[Hit], floor: float) -> tuple[list[Hit], int]:
+    """Sert taban: dense skoru tabanın altındaki parça atılır. BM25 skoru sınırsız
+    olduğundan sembol aramasına dokunulmaz; hybrid'de yalnız BM25'ten gelen (dense skoru
+    olmayan) parça tam kelime eşleşmesidir, kalır."""
+    if mode == "bm25" or floor <= 0:
+        return list(hits), 0
+    kept = [hit for hit in hits if hit.scores.get("dense", 1.0) >= floor]
+    return kept, len(hits) - len(kept)
+
+
+def is_weak_match(mode: str, hits: Sequence[Hit], floor: float) -> bool:
+    """Boş sonuç zayıf değil, "yok"tur; BM25 skoru sınırsız olduğundan sembol
+    aramasında karar verilmez. Dense/hybrid'de en iyi dense skoru eşiğin altındaysa zayıf."""
+    if not hits or mode == "bm25":
+        return False
+    best = max((hit.scores.get("dense", 0.0) for hit in hits), default=0.0)
+    return best < floor
 
 
 def _resolve_mode(mode: str, prose_mode: str, query: str) -> str:

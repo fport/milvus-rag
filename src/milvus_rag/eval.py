@@ -10,6 +10,12 @@ Golden satırı (JSONL):
 `expect` girdisi `path` ya da `path::symbol`. Satır numarası yok: kod değişince
 satırlar kayar, semboller kalır. `mode: any` → listedekilerden biri yeter;
 `all` (varsayılan) → hepsi gelmeli.
+
+Negatif vaka: `expect: []` — cevabı kodda OLMAYAN soru. Retriever her sorguya
+bir şey döndürür; ölçülen şey "bunu belli etti mi": boş sonuç ya da
+`weak_match` sinyali = çekimser (abstain). Pozitiflerde aynı sinyalin yanlış
+yanma oranı da (`false_weak`) raporlanır; sinyal ancak ikisi birlikte okunursa
+bir şey söyler.
 """
 
 from __future__ import annotations
@@ -33,6 +39,10 @@ class Case:
     mode: str = "all"
     kind: str = "prose"
 
+    @property
+    def negative(self) -> bool:
+        return not self.expect
+
 
 @dataclass(slots=True)
 class CaseResult:
@@ -43,6 +53,13 @@ class CaseResult:
     latency_ms: float
     found: list[str]
     top: list[str]
+    negative: bool = False
+    weak: bool = False
+    # Negatif vaka için: sistem "cevap yok"u belli etti mi (boş sonuç ya da weak_match).
+    abstained: bool = False
+    # Dönen hit'lerin en iyi dense skoru: eşikleri (`min_dense_score`, `weak_dense_score`)
+    # yeniden kalibre etmenin ham malzemesi — pozitiflerin min'i ile negatiflerin max'ı.
+    top_dense: float | None = None
 
 
 @dataclass(slots=True)
@@ -58,6 +75,13 @@ class EvalReport:
     misses: list[CaseResult]
     config: dict[str, Any] = field(default_factory=dict)
     results: list[CaseResult] = field(default_factory=list)
+    # Negatif vakalarda çekimser kalma oranı (negatif yoksa None); pozitiflerde
+    # zayıf-eşleşme sinyalinin yanlış yanma oranı.
+    abstain_rate: float | None = None
+    false_weak_rate: float = 0.0
+    # Kalibrasyon özeti: bulunan pozitiflerin en düşük top-dense'i ile negatiflerin en
+    # yükseği. Taban ilkinin altında, not eşiği ikisinin arasında olmalı.
+    calibration: dict[str, float | None] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -66,6 +90,9 @@ class EvalReport:
             "n": self.n,
             "recall@k": round(self.recall_at_k, 3),
             "mrr": round(self.mrr, 3),
+            "abstain_rate": None if self.abstain_rate is None else round(self.abstain_rate, 3),
+            "false_weak_rate": round(self.false_weak_rate, 3),
+            "calibration": self.calibration,
             "p50_ms": round(self.p50_ms),
             "p95_ms": round(self.p95_ms),
             "by_kind": self.by_kind,
@@ -81,6 +108,9 @@ class EvalReport:
                     "rr": round(result.reciprocal_rank, 3),
                     "ms": round(result.latency_ms),
                     "found": result.found,
+                    "weak": result.weak,
+                    "top_dense": None if result.top_dense is None else round(result.top_dense, 3),
+                    **({"abstained": result.abstained} if result.negative else {}),
                 }
                 for result in self.results
             ],
@@ -94,12 +124,13 @@ def load_golden(path: Path) -> list[Case]:
         if not line or line.startswith("#"):
             continue
         row = json.loads(line)
+        expect = tuple(str(item) for item in row["expect"])
         cases.append(
             Case(
                 question=str(row["q"]),
-                expect=tuple(str(item) for item in row["expect"]),
+                expect=expect,
                 mode=str(row.get("mode", "all")),
-                kind=str(row.get("kind", "prose")),
+                kind=str(row.get("kind", "prose" if expect else "negative")),
             )
         )
     return cases
@@ -156,7 +187,11 @@ def run_eval(
             )
         )
         latency = (time.perf_counter() - started) * 1000
-        recall, reciprocal, found = score_case(case, response.hits)
+        abstained = not response.hits or response.weak_match
+        if case.negative:
+            recall, reciprocal, found = float(abstained), 0.0, list[str]()
+        else:
+            recall, reciprocal, found = score_case(case, response.hits)
         results.append(
             CaseResult(
                 question=case.question,
@@ -166,13 +201,28 @@ def run_eval(
                 latency_ms=latency,
                 found=found,
                 top=[hit.ref for hit in response.hits[:k]],
+                negative=case.negative,
+                weak=response.weak_match,
+                abstained=abstained,
+                top_dense=max(
+                    (hit.scores["dense"] for hit in response.hits if "dense" in hit.scores),
+                    default=None,
+                ),
             )
         )
 
+    positives = [result for result in results if not result.negative]
+    negatives = [result for result in results if result.negative]
     latencies = sorted(result.latency_ms for result in results) or [0.0]
     by_kind: dict[str, dict[str, float]] = {}
     for kind in sorted({result.kind for result in results}):
         subset = [result for result in results if result.kind == kind]
+        if all(result.negative for result in subset):
+            by_kind[kind] = {
+                "n": len(subset),
+                "abstain": round(statistics.mean(float(r.abstained) for r in subset), 3),
+            }
+            continue
         by_kind[kind] = {
             "n": len(subset),
             "recall@k": round(statistics.mean(r.recall for r in subset), 3),
@@ -183,12 +233,18 @@ def run_eval(
         tag=tag,
         k=k,
         n=len(results),
-        recall_at_k=statistics.mean(r.recall for r in results) if results else 0.0,
-        mrr=statistics.mean(r.reciprocal_rank for r in results) if results else 0.0,
+        recall_at_k=statistics.mean(r.recall for r in positives) if positives else 0.0,
+        mrr=statistics.mean(r.reciprocal_rank for r in positives) if positives else 0.0,
         p50_ms=latencies[len(latencies) // 2],
         p95_ms=latencies[min(len(latencies) - 1, int(len(latencies) * 0.95))],
         by_kind=by_kind,
+        # Pozitifte bulunamayan + negatifte çekimser kalınamayan: ikisi de "kaçırma".
         misses=[result for result in results if result.recall < 1.0],
+        abstain_rate=(
+            statistics.mean(float(r.abstained) for r in negatives) if negatives else None
+        ),
+        false_weak_rate=(statistics.mean(float(r.weak) for r in positives) if positives else 0.0),
+        calibration=_calibration(positives, negatives),
         config={
             "mode": mode or settings.search_mode,
             "prose_mode": settings.prose_mode,
@@ -198,10 +254,24 @@ def run_eval(
             "rerank_model": settings.rerank_model if settings.rerank_enabled else None,
             "rrf_k": settings.rrf_k,
             "chunk": f"{settings.chunk_min_bytes}-{settings.chunk_max_bytes}",
+            "weak_dense_score": settings.weak_dense_score,
             "repo_ids": list(repo_ids),
         },
         results=results,
     )
+
+
+def _calibration(
+    positives: list[CaseResult], negatives: list[CaseResult]
+) -> dict[str, float | None]:
+    found = [r.top_dense for r in positives if r.recall >= 1.0 and r.top_dense is not None]
+    junk = [r.top_dense for r in negatives if r.top_dense is not None]
+    return {
+        "positive_found_min_top_dense": round(min(found), 3) if found else None,
+        "positive_found_median_top_dense": round(statistics.median(found), 3) if found else None,
+        "negative_max_top_dense": round(max(junk), 3) if junk else None,
+        "negative_median_top_dense": round(statistics.median(junk), 3) if junk else None,
+    }
 
 
 def save_report(report: EvalReport, results_dir: Path) -> Path:

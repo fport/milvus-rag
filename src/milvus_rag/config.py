@@ -67,6 +67,20 @@ class Settings(BaseSettings):
     rerank_max_tokens: int = Field(default=1024, gt=0)
     cache_ttl_seconds: int = Field(default=300, ge=0)
     cache_size: int = Field(default=1000, ge=0)
+    # Zayıf eşleşme SİNYALİ, filtre değil: en iyi dense skoru bunun altındaysa yanıt
+    # `weak_match=True` taşır; sonuçlar yine döner, karar tüketicinin (ajan / LLM).
+    # Ölçüldü (2026-09-01, sample-api, 38 golden düz cümle + 12 alakasız sorgu):
+    # golden bulunanların top-1 dense'i medyan 0.636 / min 0.526, alakasızlarınki
+    # medyan 0.531 / max 0.598. Dağılımlar örtüşüyor → sert eşik koyulamaz; 0.55
+    # alakasızların 10/12'sini işaretliyor, gerçeklerin 3/29'unu yanlış işaretliyor.
+    # Cosine kalibre değildir: embedding modeli değişirse yeniden ölç.
+    weak_dense_score: float = Field(default=0.55, ge=0.0, le=1.0)
+    # Sert TABAN (CRAG'ın alt eşiği): dense skoru bunun altındaki parça hiç dönmez —
+    # "Beş yıldızlı tatil köyü" sorusuna 0.37'lik blog parçası gelmesin. Ölçüldü
+    # (2026-09-01): golden'da bulunan hiçbir cevap 0.526'nın altına düşmedi, alakasız
+    # sorguların en iyisi 0.37-0.60 arası. 0.45 yalnız saçma kuyruğu keser; gri bölge
+    # (0.45-0.55) `weak_match` ile işaretlenip yine döner. 0 = kapalı. BM25'e uygulanmaz.
+    min_dense_score: float = Field(default=0.45, ge=0.0, le=1.0)
 
     # --- Chunking ------------------------------------------------------------
     chunk_max_bytes: int = Field(default=2000, gt=0)
@@ -115,6 +129,12 @@ class Settings(BaseSettings):
             msg = (
                 f"chunk_min_bytes ({self.chunk_min_bytes}) chunk_max_bytes'tan "
                 f"({self.chunk_max_bytes}) küçük olmalı"
+            )
+            raise ValueError(msg)
+        if self.min_dense_score > self.weak_dense_score:
+            msg = (
+                f"min_dense_score ({self.min_dense_score}) weak_dense_score'u "
+                f"({self.weak_dense_score}) geçemez: taban, zayıf-eşleşme notunun altında kalır"
             )
             raise ValueError(msg)
         return self

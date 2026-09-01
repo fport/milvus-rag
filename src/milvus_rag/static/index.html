@@ -153,6 +153,9 @@
   .hit .path { font: 600 12.5px var(--mono); overflow-wrap: anywhere; transition: color .12s; }
   .hit .sym { color: var(--muted); font-size: 12px; }
   .badge { font: 10.5px/1.6 var(--mono); background: var(--neon-soft); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--muted); }
+  .badge.doc { color: var(--warn); border-color: rgba(255,194,75,.35); }
+  /* Halüsinasyon sinyalleri: retriever alakasız sorguya da sonuç döndürür; bunu söylemek UI'ın işi. */
+  .note { font: 12.5px/1.5 var(--mono); color: var(--warn); border: 1px solid rgba(255,194,75,.35); background: rgba(255,194,75,.06); border-radius: 9px; padding: 8px 12px; margin-top: 10px; }
   .hit pre { margin: 0; padding: 12px 14px; background: var(--bg); font: 12px/1.5 var(--mono); overflow: hidden; border-top: 1px solid var(--line); max-height: 96px; max-width: 100%; }
   .answer { white-space: pre-wrap; background: var(--neon-soft); border: 1px solid var(--line-2); border-radius: 11px; padding: 14px 16px; margin-top: 12px; font-size: 13.5px; }
   .srcs { font: 12px/1.8 var(--mono); color: var(--muted); margin-top: 10px; }
@@ -851,18 +854,28 @@ async function doSearch() {
     vizPlaceResults(); if (REDUCED) vizDraw(0);
     $("spaceHint").textContent = d.hits.length
       ? "düğüme tıkla → kod sağdan açılır · çekirdeğe yakın = daha alakalı"
-      : "eşleşme yok — sorguyu değiştirip tekrar dene";
+      : d.dropped ? "eşleşme yok — en yakın parçalar bile skor tabanının altında" : "eşleşme yok — sorguyu değiştirip tekrar dene";
     const t = Object.entries(d.timings_ms).map(([k, v]) => `${k} ${Math.round(v)}ms`).join(" · ");
-    const head = `<div class="timing">${d.hits.length} sonuç · mod <b>${esc(d.mode)}</b>${d.reranked ? " + rerank" : ""} · ${t}${d.cached ? " · önbellek" : ""}</div>`;
-    $("out").innerHTML = head + d.hits.map((h, i) => `
+    const docs = d.hits.filter(h => h.category === "doc").length;
+    const head = `<div class="timing">${d.hits.length} sonuç${docs ? ` · ${docs} doküman` : ""}${d.dropped ? ` · ${d.dropped} elendi (skor tabanı)` : ""} · mod <b>${esc(d.mode)}</b>${d.reranked ? " + rerank" : ""} · ${t}${d.cached ? " · önbellek" : ""}</div>`;
+    // Sinyaller sonuçların ÜSTÜNDE: sonuç gelmesi cevabın var olduğu anlamına gelmez.
+    const best = Math.max(0, ...d.hits.map(h => h.scores.dense ?? 0));
+    const notes =
+      (d.weak_match ? `<div class="note">⚠ zayıf eşleşme — en iyi dense ${best.toFixed(3)}. Bu seviyedeki sonuçlar çoğu zaman alakasız; sorduğun şey bu kod tabanında olmayabilir.</div>` : "") +
+      (docs ? `<div class="note">DOKÜMAN işaretli sonuçlar plan/tasarım metni; içinde geçen dosya ve fonksiyonlar kodda var olmayabilir.</div>` : "");
+    const empty = d.dropped
+      ? `<div class="empty">En yakın ${d.dropped} parça da skor tabanının altında kaldı — bu konu büyük ihtimalle bağlı kod tabanlarında yok.</div>`
+      : `<div class="empty">Eşleşme yok — sorguyu değiştirip tekrar dene.</div>`;
+    $("out").innerHTML = head + notes + (d.hits.length ? d.hits.map((h, i) => `
       <div class="hit" onclick="openDrawer(${i})" title="Detayı aç">
         <div class="head">
           <span class="path">${esc(h.path)}:${h.start_line}-${h.end_line}</span>
+          ${h.category === "doc" ? `<span class="badge doc">DOKÜMAN</span>` : ""}
           ${h.symbol ? `<span class="sym">${esc(h.kind)} <b>${esc(h.symbol)}</b>${h.parent_symbol ? " · " + esc(h.parent_symbol) : ""}</span>` : ""}
           <span class="badge">${esc(h.repo_id)}</span> ${scoreBadges(h.scores)}
         </div>
         <pre>${esc(h.content.split("\n").slice(0, 5).join("\n"))}</pre>
-      </div>`).join("");
+      </div>`).join("") : empty);
   } catch (e) { $("spaceHint").textContent = "vektör uzayı — bağlı repoların ve aramanın canlı haritası"; toast(e.message); }
 }
 async function doAsk() {
@@ -874,6 +887,7 @@ async function doAsk() {
     const d = await api("/ask", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body) });
     $("out").innerHTML =
       `<div class="timing">${esc(d.model)} · ${Math.round(d.elapsed_ms)}ms</div>` +
+      (d.search?.weak_match ? `<div class="note">⚠ zayıf eşleşme — modelin önündeki parçalar soruyla alakasız olabilir; "bulamadım" diyorsa doğrudur.</div>` : "") +
       `<div class="answer">${esc(d.answer)}</div>` +
       `<div class="srcs">${d.sources.map(s => `[${s.n}] ${esc(s.path)}:${s.start_line}-${s.end_line}`).join("<br>")}</div>`;
   } catch (e) { $("out").innerHTML = ""; toast(e.message); }

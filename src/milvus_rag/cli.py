@@ -319,13 +319,27 @@ def eval(
     table.add_column("MRR", justify="right")
     table.add_row("hepsi", str(report.n), f"{report.recall_at_k:.3f}", f"{report.mrr:.3f}")
     for kind, values in report.by_kind.items():
+        if "abstain" in values:
+            table.add_row(kind, str(int(values["n"])), f"abstain {values['abstain']:.3f}", "—")
+            continue
         table.add_row(
             kind, str(int(values["n"])), f"{values['recall@k']:.3f}", f"{values['mrr']:.3f}"
         )
     console.print(table)
-    console.print(f"[dim]p50={report.p50_ms:.0f}ms p95={report.p95_ms:.0f}ms · {report.config}[/]")
+    signal = f"false_weak={report.false_weak_rate:.3f}"
+    if report.abstain_rate is not None:
+        signal = f"abstain={report.abstain_rate:.3f} {signal}"
+    cal = report.calibration
+    if cal.get("positive_found_min_top_dense") is not None:
+        signal += (
+            f" · kalibrasyon: pozitif min {cal['positive_found_min_top_dense']}"
+            f" / negatif max {cal.get('negative_max_top_dense')}"
+        )
+    console.print(
+        f"[dim]p50={report.p50_ms:.0f}ms p95={report.p95_ms:.0f}ms · {signal} · {report.config}[/]"
+    )
     if report.misses:
-        console.print(f"\n[dim]ilk {k}'de bulunamayanlar:[/]")
+        console.print(f"\n[dim]ilk {k}'de bulunamayan / çekimser kalınamayan:[/]")
         for miss in report.misses:
             console.print(f"  · {miss.question}  [dim]→ {', '.join(miss.top[:3])}[/]")
     console.print(f"\n[dim]yazıldı: {path}[/]")

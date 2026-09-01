@@ -8,8 +8,12 @@
 # - `kind`: kırılım etiketi (prose-en / prose-tr / symbol gibi) — rapor buna göre bölünür.
 # - Bir soruyu eklemeden önce cevabın gerçekten orada olduğunu ELLE doğrula;
 #   etiketler repo okunarak yazılır, sistem çalıştırılarak değil.
+# - Negatif vaka: `expect: []` — cevabı bu repoda OLMAYAN soru (kind varsayılan "negative").
+#   Ölçülen: sistem bunu belli etti mi (boş sonuç ya da weak_match). Rapor `abstain_rate`
+#   ile pozitiflerde sinyalin yanlış yanma oranını (`false_weak_rate`) birlikte verir.
 {"q": "How is the authentication middleware implemented?", "expect": ["src/middlewares/auth.ts"], "mode": "all", "kind": "prose-en"}
 {"q": "Kimlik doğrulama middleware'i nasıl çalışıyor?", "expect": ["src/middlewares/auth.ts"], "mode": "all", "kind": "prose-tr"}
 {"q": "JWT nerede üretiliyor?", "expect": ["src/auth/session.ts::createSession"], "mode": "all", "kind": "prose-tr"}
 {"q": "withSession", "expect": ["src/middlewares/auth.ts::withSession"], "mode": "all", "kind": "symbol"}
 {"q": "how are webhook events queued", "expect": ["src/features/webhook/webhook.queue.ts", "src/features/webhook/webhook.worker.ts"], "mode": "any", "kind": "prose-en"}
+{"q": "Stripe abonelik faturalandırma webhook'u nerede işleniyor?", "expect": [], "kind": "negative"}
