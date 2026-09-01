@@ -72,7 +72,7 @@ Bu tablo özet; her satırın gerekçesi ve tuzakları [Tasarım notları](#tasa
 ## Kurulum
 
 ```bash
-git clone <repo> && cd <repo>
+git clone https://github.com/fport/milvus-rag.git && cd rag
 uv sync                                              # Python 3.12 + bağımlılıklar (uv indirir)
 docker compose -f infra/docker-compose.yml up -d     # Milvus 2.6 + etcd + MinIO
 curl -f http://localhost:9091/healthz                # "OK" (ilk açılış ~60-90 sn)
