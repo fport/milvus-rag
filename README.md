@@ -55,7 +55,7 @@ karar aşağıda "ölçüldü" diye işaretli ve rakamı [Ölçüm defteri](#öl
 | **Sorgu yönlendirme** (regex) | Sembol biçimli sorgu → BM25, düz cümle → dense | Bedava MRR: 0.678 → 0.690; hybrid'i hep açmak bulamayan kanalı da terfi ettiriyor (MRR 0.604) (ölçüldü) | **Her zaman hybrid RRF**: daha kötü (ölçüldü) · **LLM router**: gecikme + maliyet, bir regex yetiyor |
 | **RRF** (bayrak) | dense + BM25 listelerini *sırayla* birleştirir | cosine (0–1) ile BM25 (0–30) toplanamaz; RRF skora değil sıraya bakar | **Ağırlıklı toplam / Milvus WeightedRanker**: normalize etsen de korpusa göre kayar |
 | **Cross-encoder rerank** bge-reranker-v2-m3 (bayrak, kapalı) | 40 adayı soruyla yan yana okuyup yeniden sıralar | Ölçüldü: bu korpusta sıralamayı bozdu (MRR 0.690 → 0.514), p50 2–4 sn → kapalı. recall@40 = 0.95 boşluğu duruyor, daha iyi bir reranker tabloya satır olarak girer | **Cohere / Voyage rerank**: API; denenmedi |
-| **tree-sitter** chunking | Dosyayı fonksiyon / sınıf / metod sınırından böler, sembol adını taşır (20+ dil) | Chunk = kod birimi: atıf "dosya:satır — fonksiyon" olur, embedding tek bir şeyi temsil eder | **Sabit pencere / RecursiveCharacterTextSplitter**: fonksiyonu ortadan keser · **LLM chunking**: pahalı · `.sql` tree-sitter dışı: grammar segfault veriyor (ölçüldü), satır pencereleriyle bölünür |
+| **tree-sitter** chunking | Dosyayı fonksiyon / sınıf / metod sınırından böler, sembol adını taşır; dil kapsamı elle tablo değil, pack'in 371 grammar'ı (uzantı adı = grammar adı kuralı + küçük takma ad tablosu) | Chunk = kod birimi: atıf "dosya:satır — fonksiyon" olur, embedding tek bir şeyi temsil eder | **Sabit pencere / RecursiveCharacterTextSplitter**: fonksiyonu ortadan keser · **LLM chunking**: pahalı · `.sql` tree-sitter dışı: grammar segfault veriyor (ölçüldü), satır pencereleriyle bölünür |
 | **sha256 manifest** ile artımlı sync | Push gelince yalnız değişen dosya yeniden indexlenir | İçerik hash'i: rename / mod / submodule kenar durumu yok, yerel dizin de aynı yoldan; yarıda kesilen iş eksik bırakmaz | **git diff**: kenar durumları · **Tam yeniden index**: 300 dosya ≈ dakikalar |
 | **Webhook + poller** | Azure "Code pushed", GitHub push (HMAC); kaçarsa poller yakalar | Push anında tazelik, poller güvenlik ağı | **Yalnız cron**: bayat pencere · **Yalnız webhook**: kaçan event kalıcı boşluk |
 | **SQLite** + tek worker kuyruk | repos / files / jobs / webhook_events; repo başına tek bekleyen iş | Tek süreç, tek dosya; Postgres + Redis kurulumu istemez | **Postgres + Celery / BullMQ**: iki ek servis, burada iş yok |
@@ -308,6 +308,49 @@ indirdi. Kaçan ikisi ("CSV export stream", "puppeteer") repoda gerçekten *benz
 sorular (0.598 / 0.544); orada karar ajanın. Sinyalin nasıl sunulduğu: MCP bölümü ve
 arayüz (zayıf eşleşme notu, DOKÜMAN rozeti, "N elendi").
 
+**Chunk ablasyonu (2026-09-01).** Soru: tree-sitter (AST) chunk'ı düz pencereye göre ne
+kazandırıyor? Aynı korpus iki kez indexlendi: `ast` (mevcut chunker) ve `plain` (kod dosyaları
+boş satırdan bölünen ≤ 2000 B pencereler — bugün grammar'sız uzantıların, ör. `.vue`/`.razor`,
+gördüğü yol; `chunk_file`'ı `_chunk_plain`'e yönlendiren tek seferlik betik). Aynı golden,
+auto+dense, k=8. Golden'daki `expect`'ler yalnız dosya yolu (sembolsüz) → bu ölçüm atıf
+doğruluğunu (`path::symbol`) ödüllendirmiyor, saf retrieval'ı ölçüyor.
+
+| Etiket | chunk | Recall@8 | MRR | EN-prose R@8 / MRR | TR-prose R@8 / MRR | sembol R@8 / MRR | abstain / false_weak |
+|---|---|---|---|---|---|---|---|
+| **ablation-ast** ✓ | 2761 | **0.786** | **0.690** | 0.842 / 0.744 | 0.684 / 0.570 | 1.0 / 1.0 | 0.846 / 0.048 |
+| ablation-plain | 2100 | 0.762 | 0.598 | 0.895 / 0.737 | 0.632 / 0.518 | 0.75 / 0.321 | 0.923 / 0.071 |
+
+Okuma: recall farkı 1 soru (+0.024), MRR +0.09; kazancın neredeyse tamamı sembol sorgularında
+(MRR 0.32 → 1.0) ve TR düz cümlede. EN düz cümlede düz pencere eşit, hatta 1 soru önde (n=19,
+gürültü). AST chunk "daha çok bulmuyor", **doğru parçayı üste koyuyor ve adını söylüyor**;
+grammar'sız kalan bir dil için kayıp yıkıcı değil, sıralama + atıf kaybı. Dil desteğini
+genişletirken beklenti bu ölçekte tutulmalı.
+
+**Enrichment ölçümü (2026-09-01).** Soru: chunk başına LLM açıklaması (`RAG_ENRICH_ENABLED`,
+dil bağımsız — Anthropic "contextual retrieval") ne kazandırıyor? Tam korpusta yerel modelle
+~3,5 saat sürdüğü için küçük ve adil bir düzenek: golden'ın beklediği 21 dosya + rastgele 25 kod
+dosyası (46 dosya / 423 chunk) **aynı korpus iki kez** indexlendi — enrichment kapalı ve açık
+(Ollama `qwen3.5:9b`, açıklamalar Türkçe, 21 dk, 0 ret). Aynı golden, auto+dense, k=8. Mutlak
+sayılar küçük korpusta (az dikkat dağıtıcı) tam korpustan yüksek; okunacak şey iki kol arasındaki fark.
+
+| Etiket | Recall@8 | MRR | EN-prose R@8 / MRR | TR-prose R@8 / MRR | sembol | abstain / false_weak |
+|---|---|---|---|---|---|---|
+| subset-plain | 0.929 | 0.839 | 0.947 / 0.866 | 0.895 / 0.778 | 1.0 / 1.0 | 0.923 / 0.119 |
+| **subset-enriched** | **1.000** | **0.912** | 1.000 / 0.874 | **1.000 / 0.932** | 1.0 / 1.0 | 0.923 / **0.048** |
+
+Okuma: kazanç tam beklenen yerde — **TR düz cümlede MRR +0.15** (0.778 → 0.932), EN'de +0.01;
+recall'da 3 soru; `false_weak` yarıya indi (gerçek cevapların dense skoru yükseliyor, 0.55 notu
+daha az yanlış yanıyor); negatiflerde abstain değişmedi (açıklamalar alakasız soruya güven
+üretmedi). Kalibrasyon kaymadı: pozitif min top-dense / negatif max = 0.498 / 0.587 (kapalı) →
+0.483 / 0.582 (açık); 0.45 tabanı ve 0.55 notu enrichment'la da geçerli. Bu, chunk ablasyonundaki
+AST kazancından (MRR +0.09, çoğu sembol sorgusu) daha büyük ve dil/framework bağımsız.
+
+Maliyet: yerel 9B ile ~11 açıklama/dk → 2.8k chunk'lık repo ilk seferde ~4 saat, sonrası
+artımlı (chunk hash + model ile cache; değişmeyen chunk ikinci kez üretilmez); bulut modelle
+dakikalar. Varsayılan **kapalı kalıyor**: anahtarsız kurulumda her `add-*` saatlerce Ollama
+döndürürdü. Türkçe soru trafiği olan ve LLM bütçesi bulunan kurulumda `RAG_ENRICH_ENABLED=true`
+(`RAG_LLM_MODEL` ile ucuz bir model) — ölçülmüş kazanç bu tabloda.
+
 ```bash
 G=evals/golden.example.jsonl   # kendi setinle değiştir
 uv run rag eval $G -r my-api --tag dense  --mode dense  --no-rerank
@@ -340,7 +383,12 @@ uv run rag eval $G -r my-api --tag rerank --mode auto   --rerank
   `Node.start_point/end_point` okumak uzun süreçte segfault veriyor (aynı dosya tek başına
   geçiyor, 39. dosyada çöküyor); satır numaraları byte ofsetinden bisect ile hesaplanır.
   `tree-sitter-sql` drizzle migration dosyalarında doğrudan çöküyor; `.sql` kod sayılır ama
-  paragraf/satır pencereleriyle chunk'lanır (`CODE_WITHOUT_GRAMMAR`).
+  paragraf/satır pencereleriyle chunk'lanır (`CODE_WITHOUT_GRAMMAR`). Dil kapsamı elle tablo
+  değil: uzantı adı pack'te grammar adıysa (`.vue`, `.razor`, `.lua`, `.zig` …) o grammar kullanılır,
+  adı farklı olanlar (`.ts`, `.cs`, `.kt`) pack'e karşı doğrulanan küçük bir takma ad tablosundan
+  geçer; pack ≥ 1.15 grammar'ı ilk kullanımda indirdiği için Docker imajı `prefetch()` ile
+  `PREFETCH_GRAMMARS` listesini gömer ve `RAG_LIVE=1 pytest tests/test_grammars_live.py` her
+  grammar'ı ayrı süreçte dejenere girdiyle dener (segfault alt süreci düşürür, listeyi korur).
 - **PAT güvenliği.** Token URL'ye gömülmez; git'e `-c http.extraheader=` ile geçer,
   `.git/config`'e yazılmaz, hata mesajlarında redakte edilir. İndex'e girmeden önce
   `scrub` (API anahtarı, JWT, e-posta, `X_PASSWORD=...`) çalışır.

@@ -25,8 +25,11 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
+from milvus_rag.log import get_logger
 from milvus_rag.models import ChunkRecord
 from milvus_rag.sources.files import category_for, language_for
+
+log = get_logger("chunk")
 
 if TYPE_CHECKING:
     from tree_sitter import Node
@@ -92,6 +95,8 @@ UNIT_TYPES = frozenset(
         "declaration",
         # PHP
         "trait_declaration",
+        # Razor (.razor / .cshtml): @code / @functions blokları; üyeleri C# düğümleri
+        "razor_block",
     }
 )
 
@@ -116,6 +121,7 @@ CONTAINER_TYPES = frozenset(
         "object_declaration",
         "class",
         "trait_declaration",
+        "razor_block",
     }
 )
 
@@ -202,6 +208,7 @@ KIND_BY_TYPE: dict[str, str] = {
     "delegate_declaration": "delegate",
     "macro_definition": "macro",
     "declaration": "declaration",
+    "razor_block": "block",
 }
 
 HASH_COMMENT_LANGS = frozenset({"python", "ruby", "bash", "yaml", "toml", "r", "perl"})
@@ -320,16 +327,19 @@ _PARSERS: dict[str, Any] = {}
 
 
 def _parser_for(language: str) -> Any | None:
-    parser = _PARSERS.get(language)
-    if parser is not None:
-        return parser
+    if language in _PARSERS:
+        return _PARSERS[language]
     try:
         from tree_sitter import Parser
         from tree_sitter_language_pack import get_language
 
         grammar = get_language(language)
         parser = Parser(grammar)
-    except Exception:
+    except Exception as error:  # pack'te yok / indirilemedi (kapalı ağ) / yüklenemedi
+        # Bir kez logla ve başarısızlığı da önbelleğe al: yoksa o dilin her dosyası
+        # yeniden indirme denemesiyle bekler. Dosyalar düz pencereye iner.
+        log.warning("grammar yüklenemedi, düz pencere", language=language, error=str(error))
+        _PARSERS[language] = None
         return None
     _LANGUAGES[language] = grammar
     _PARSERS[language] = parser
@@ -424,9 +434,9 @@ def _body_of(node: Node) -> Node | None:
     for child in node.children:
         if child.type in BODY_TYPES or child.type.endswith("_body"):
             return child
-    # C# file-scoped namespace: üyeler doğrudan çocuk. Adı ve noktalı virgülü
-    # atlayıp gövde olarak düğümün kendisini kullan.
-    if node.type == "file_scoped_namespace_declaration":
+    # C# file-scoped namespace ve Razor @code bloğu: üyeler doğrudan çocuk. Adı /
+    # süslü parantezi atlayıp gövde olarak düğümün kendisini kullan.
+    if node.type in ("file_scoped_namespace_declaration", "razor_block"):
         return node
     return None
 

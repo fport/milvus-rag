@@ -31,5 +31,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY src ./src
 RUN uv sync --frozen --no-dev
 
+# tree-sitter-language-pack ≥ 1.15 grammar'ları ilk kullanımda indirir. Kapalı ağda ilk
+# .kt / .php dosyası indirme denemesine takılıp düz pencereye düşmesin diye duman
+# testinden geçen liste (files.py → PREFETCH_GRAMMARS) imaja gömülür. ~/.cache altına
+# yazar; volume değil, katmanda kalır. Servis aynı kullanıcıyla (root) çalışır.
+RUN uv run python -c "from tree_sitter_language_pack import prefetch; \
+    from milvus_rag.sources.files import PREFETCH_GRAMMARS; prefetch(sorted(PREFETCH_GRAMMARS))"
+
 EXPOSE 8090
 CMD ["uv", "run", "rag", "serve"]

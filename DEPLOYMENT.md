@@ -28,6 +28,10 @@ curl -f http://localhost:8090/health
 
 - İlk açılışta embedding modeli (~2.2 GB) Hugging Face'ten iner; `hf-cache`
   volume'ünde kalır, sonraki açılışlar saniyeler sürer.
+- tree-sitter grammar'ları (`PREFETCH_GRAMMARS`, ~60 dil) imaj build'inde indirilir ve
+  katmanda kalır; çalışma anında ağ gerekmez. Listede olmayan bir dil gelirse pack onu
+  ilk kullanımda indirmeyi dener, ağ yoksa o dosyalar düz pencereyle indexlenir (log'da
+  "grammar yüklenemedi").
 - `rag-data` volume'ü SQLite'ı (repo kayıtları, manifest, işler) ve repo
   klonlarını tutar. **Yedeklenecek tek şey budur** — Milvus'taki veri türevdir,
   `rag sync --force` ile yeniden üretilir.
@@ -41,6 +45,8 @@ curl -f http://localhost:8090/health
 docker compose -f infra/docker-compose.yml up -d      # yalnız Milvus + etcd + MinIO
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync --no-dev
+# grammar'ları şimdi indir (aksi halde ilk kullanımda iner; kapalı ağda düz pencereye düşer)
+uv run python -c "from tree_sitter_language_pack import prefetch; from milvus_rag.sources.files import PREFETCH_GRAMMARS; prefetch(sorted(PREFETCH_GRAMMARS))"
 ```
 
 `/etc/systemd/system/milvus-rag.service`:

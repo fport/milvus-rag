@@ -23,7 +23,13 @@ def test_indexable_paths():
     assert not is_indexable_path("package-lock.json")
     assert not is_indexable_path("image.png")
     assert not is_indexable_path("Foo.Designer.cs")
-    assert is_indexable_path("schema.proto", parse_extra_extensions("proto, graphql"))
+    assert not is_indexable_path("Connected Services/Svc/Reference.cs")
+    assert not is_indexable_path("Scripts/bootstrap.bundle.js")
+    assert not is_indexable_path("data/export.csv")  # csv grammar'ı var ama veri
+    assert is_indexable_path("schema.proto")
+    assert is_indexable_path("Pages/Index.razor") and is_indexable_path("Views/Home/Index.cshtml")
+    assert is_indexable_path("db/procs.sql") and is_indexable_path("Content/site.less")
+    assert is_indexable_path("x.weird", parse_extra_extensions("weird"))
 
 
 def test_language_and_category():
@@ -34,6 +40,20 @@ def test_language_and_category():
     assert category_for("main.go") == "code"
     assert category_for("config.yaml") == "other"
     assert language_for("m.sql") is None and category_for("m.sql") == "code"
+    assert language_for("PAY.cbl") is None and category_for("PAY.cbl") == "code"
+
+
+def test_grammar_mapping_is_generic():
+    """Dil tablosu değil kural: uzantı adı pack'te grammar adıysa eşleşir."""
+    assert language_for("x.lua") == "lua" and language_for("x.zig") == "zig"
+    assert language_for("Cart.vue") == "vue" and language_for("App.svelte") == "svelte"
+    assert language_for("Index.razor") == "razor" and language_for("Index.cshtml") == "razor"
+    assert language_for("main.tf") == "terraform" and language_for("X.KT") == "kotlin"
+    assert language_for("Dockerfile") == "dockerfile" and language_for("go.mod") == "gomod"
+    # Düz okunanlar grammar'ı olsa da parser'a gitmez; veri uzantıları hiç girmez.
+    assert language_for("a.json") is None and language_for("a.html") is None
+    assert language_for("a.css") is None and language_for("a.csv") is None
+    assert category_for("Cart.vue") == "code" and category_for("a.less") == "other"
 
 
 def test_iter_source_files_skips_binary_and_large(tmp_path: Path):

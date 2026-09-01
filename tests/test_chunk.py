@@ -138,3 +138,16 @@ def test_indexed_text_layers():
 
 def test_empty_file_yields_nothing():
     assert chunk_file("x.ts", "   \n", ChunkerConfig()) == []
+
+
+def test_razor_code_block_members_become_units():
+    source = (
+        '@page "/orders"\n@inject OrderService Svc\n<h1>Orders</h1>\n@code {\n'
+        "    private List<Order> orders = new();\n"
+        "    protected override async Task OnInitializedAsync() { orders = await Svc.All(); }\n"
+        "    void Save() { Svc.Save(orders); }\n}\n"
+    )
+    records = chunk_file("Pages/Orders.razor", source, ChunkerConfig(max_bytes=120, min_bytes=20))
+    symbols = {record.symbol for record in records}
+    assert {"OnInitializedAsync", "Save"} <= symbols
+    assert records[0].header.startswith("// file: Pages/Orders.razor")

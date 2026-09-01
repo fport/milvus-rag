@@ -54,6 +54,14 @@ güncelle → retriever cache'ini boşalt`.
 - **Chunk = kod birimi, ≤ 2000 byte.** Büyük sınıf üyelerine bölünür, küçükler birleşir,
   yorum/import bir sonraki birime yapışır. `text` temiz kalır; başlık (dosya, sembol,
   sınıf, import'lar) yalnızca `indexed_text`'e girer.
+- **Dil kapsamı tablo değil kural.** Uzantı adı `tree-sitter-language-pack`'te grammar adıysa
+  (`.lua`, `.vue`, `.razor`, `.zig`) o grammar; adı farklı olanlar (`.ts`, `.cs`, `.kt`) pack'e
+  karşı doğrulanan küçük takma ad tablosundan (`files.py`). Grammar'sız/verilmeyen her şey
+  yine indexlenir (düz pencere) — ölçüldü: AST'nin katkısı recall'da 1 soru, MRR +0.09
+  (README → "Chunk ablasyonu"), o yüzden dil/framework başına kural YAZILMAZ; rol etiketi,
+  regex sembol çıkarıcı yok. Çöken/takılan grammar `CODE_WITHOUT_GRAMMAR`'a (bugün `sql`, `cobol`); yeni
+  grammar `PREFETCH_GRAMMARS` + `RAG_LIVE=1 pytest tests/test_grammars_live.py` ile girer.
+  Pack ≥ 1.15 grammar'ı ilk kullanımda indirir → Dockerfile `prefetch()` ile imaja gömer.
 - **Sembol biçimli sorgu → BM25, düz cümle → dense; rerank kapalı.** Ölçüldü
   (README → Ölçüm defteri): auto+dense 0.786/0.690, semboller BM25'te 1.0/1.0;
   bge-reranker-v2-m3 zarar etti (0.762/0.508, p50 2-4 sn) → varsayılan kapalı.
