@@ -106,6 +106,9 @@ MCP) LLM'e hiç bağımlı değil.
 # 1. Ollama: https://ollama.com/download  (macOS: brew install ollama · Linux: curl -fsSL https://ollama.com/install.sh | sh)
 ollama pull qwen3.5:9b                 # 6.6 GB; zayıf makine için qwen3.5:4b (3.4 GB) → RAG_LLM_MODEL=qwen3.5:4b
 # 2. Ollama uygulaması açık olsun (ya da `ollama serve`), sonra:
+#    `ollama pull` "run ollama serve" diyorsa sunucu ayakta değil: macOS'ta uygulamayı aç
+#    (brew kurulumunda `brew services start ollama`), Linux'ta `sudo systemctl enable --now ollama`,
+#    ya da ayrı terminalde `ollama serve`. Kontrol: curl localhost:11434 → "Ollama is running"
 uv run rag add-local ~/code/my-api --name my-api
 uv run rag ask "webhook olayları nasıl kuyruğa alınıyor?" -r my-api
 ```
