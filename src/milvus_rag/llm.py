@@ -8,6 +8,7 @@ httpx istemcisiyle. Retrieval bu katmana bağımlı değil; LLM yoksa /search yi
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -21,6 +22,15 @@ Effort = str  # low | medium | high | xhigh | max
 
 class LLMError(RuntimeError):
     pass
+
+
+# Düşünen modeller (qwen3, deepseek-r1, gpt-oss) düşünceyi ayrı alanda ya da <think>
+# bloğunda döndürür; cevaba karışmasın.
+_THINK_BLOCK = re.compile(r"<think>.*?</think>\s*", re.S)
+
+
+def strip_thinking(text: str) -> str:
+    return _THINK_BLOCK.sub("", text).strip()
 
 
 class LLM(ABC):
@@ -106,11 +116,33 @@ class AnthropicLLM(LLM):
 
 
 class OpenAILLM(LLM):
+    """OpenAI ve OpenAI uyumlu sunucular (vLLM, LM Studio, llama.cpp): base_url değişir."""
+
     provider = "openai"
 
-    def __init__(self, model: str, api_key: str) -> None:
+    def __init__(
+        self, model: str, api_key: str, base_url: str = "https://api.openai.com/v1"
+    ) -> None:
         self.model = model
         self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.api_key}"}
+
+    def ping(self) -> str:
+        import httpx
+
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                response = client.get(f"{self.base_url}/models", headers=self._headers())
+        except httpx.HTTPError as error:
+            msg = f"{self.base_url} ulaşılamıyor: {error}"
+            raise LLMError(msg) from error
+        if response.status_code >= 400:
+            msg = f"OpenAI {response.status_code}: {response.text[:200]}"
+            raise LLMError(msg)
+        return self.model
 
     def complete(
         self, system: str, user: str, max_tokens: int = 4096, effort: Effort | None = None
@@ -128,12 +160,10 @@ class OpenAILLM(LLM):
         try:
             with httpx.Client(timeout=180.0) as client:
                 response = client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    json=payload,
+                    f"{self.base_url}/chat/completions", headers=self._headers(), json=payload
                 )
         except httpx.HTTPError as error:
-            msg = f"OpenAI'a ulaşılamadı: {error}"
+            msg = f"{self.base_url} ulaşılamıyor: {error}"
             raise LLMError(msg) from error
         if response.status_code >= 400:
             msg = f"OpenAI {response.status_code}: {response.text[:300]}"
@@ -142,54 +172,100 @@ class OpenAILLM(LLM):
         if not choices:
             msg = "OpenAI boş yanıt döndü"
             raise LLMError(msg)
-        return str(choices[0]["message"].get("content") or "")
+        return strip_thinking(str(choices[0]["message"].get("content") or ""))
 
 
 class OllamaLLM(LLM):
+    """Yerel model. Kurulum: https://ollama.com/download → `ollama pull <model>`."""
+
     provider = "ollama"
 
-    def __init__(self, model: str, host: str) -> None:
+    def __init__(self, model: str, host: str, num_ctx: int = 16384) -> None:
         self.model = model
         self.host = host.rstrip("/")
+        self.num_ctx = num_ctx
+
+    def _unreachable(self, error: Exception) -> LLMError:
+        return LLMError(
+            f"Ollama çalışmıyor ({self.host}): {error}. Uygulamayı aç ya da `ollama serve`; "
+            "kurulum: https://ollama.com/download"
+        )
+
+    def ping(self) -> str:
+        """Sunucu ayakta mı, model indirilmiş mi — yoksa tam komutu söyle."""
+        import httpx
+
+        try:
+            with httpx.Client(timeout=3.0) as client:
+                response = client.get(f"{self.host}/api/tags")
+        except httpx.HTTPError as error:
+            raise self._unreachable(error) from error
+        if response.status_code >= 400:
+            msg = f"Ollama {response.status_code}: {response.text[:200]}"
+            raise LLMError(msg)
+        names = {str(item.get("name", "")) for item in response.json().get("models") or []}
+        wanted = self.model if ":" in self.model else f"{self.model}:latest"
+        if wanted not in names:
+            msg = f"Ollama'da `{self.model}` indirilmemiş — `ollama pull {self.model}`"
+            raise LLMError(msg)
+        return self.model
 
     def complete(
         self, system: str, user: str, max_tokens: int = 4096, effort: Effort | None = None
     ) -> str:
         import httpx
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
             "stream": False,
-            "options": {"num_predict": max_tokens, "temperature": 0.2},
+            # Düşünme kapalı: cevap 10x daha hızlı, atıflı cevapta düşünce zinciri gerekmiyor.
+            "think": False,
+            "options": {
+                "num_predict": max_tokens,
+                "temperature": 0.2,
+                "num_ctx": self.num_ctx,
+            },
         }
         try:
             with httpx.Client(timeout=600.0) as client:
                 response = client.post(f"{self.host}/api/chat", json=payload)
+                if response.status_code == 400 and "think" in response.text.lower():
+                    # Düşünmeyen model `think` alanını tanımıyor: alan olmadan tekrar.
+                    retry = {key: value for key, value in payload.items() if key != "think"}
+                    response = client.post(f"{self.host}/api/chat", json=retry)
         except httpx.HTTPError as error:
-            msg = f"Ollama'ya ulaşılamadı ({self.host}): {error}"
-            raise LLMError(msg) from error
+            raise self._unreachable(error) from error
+        if response.status_code == 404:
+            msg = f"Ollama'da `{self.model}` indirilmemiş — `ollama pull {self.model}`"
+            raise LLMError(msg)
         if response.status_code >= 400:
             msg = f"Ollama {response.status_code}: {response.text[:300]}"
             raise LLMError(msg)
-        return str((response.json().get("message") or {}).get("content") or "")
+        content = str((response.json().get("message") or {}).get("content") or "")
+        return strip_thinking(content)
 
 
 def build_llm(settings: Settings) -> LLM | None:
-    """Yapılandırılmamışsa None: retrieval LLM'siz de çalışır."""
+    """Yapılandırılmamışsa None: retrieval LLM'siz de çalışır.
+
+    Sağlayıcı `auto` ise anahtara göre çözülür (bkz. Settings.resolved_llm_provider);
+    Ollama için istemci her zaman kurulur — sunucu kapalıysa /ask net bir hata verir.
+    """
+    provider = settings.resolved_llm_provider
     model = settings.resolved_llm_model
-    if settings.llm_provider == "anthropic":
+    if provider == "anthropic":
         try:
             return AnthropicLLM(model, settings.anthropic_api_key)
         except Exception as error:
             log.warning("Anthropic istemcisi kurulamadı; /ask kapalı", error=str(error))
             return None
-    if settings.llm_provider == "openai":
+    if provider == "openai":
         if not settings.openai_api_key:
             log.warning("OPENAI_API_KEY yok; /ask kapalı")
             return None
-        return OpenAILLM(model, settings.openai_api_key)
-    return OllamaLLM(model, settings.ollama_host)
+        return OpenAILLM(model, settings.openai_api_key, settings.openai_base_url)
+    return OllamaLLM(model, settings.ollama_host, settings.ollama_num_ctx)

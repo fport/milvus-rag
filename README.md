@@ -63,7 +63,7 @@ karar aşağıda "ölçüldü" diye işaretli ve rakamı [Ölçüm defteri](#öl
 | **Üç bant** (0.45 taban · 0.55 not) | Cevap yokken "yok" der; gri bölgeyi uyarıyla döner | kNN "yakın olan yok" demez; cosine gri bölgede ayırmıyor (bulunan min 0.526 / çöp max 0.587) → sert kapı değil, sinyal + hakem ajan (CRAG'ın üç bandı) | **Tek cosine eşiği**: gerçekleri de keser · **Reranker kapısı**: %29 yanlış alarm, +550 ms (ölçüldü) · **LLM hakem**: her sorguya bir LLM çağrısı |
 | **MCP** (aynı süreç, `/mcp`) | Claude Code / Cursor için `search_code` · `read_code` · `list_repos` | Aynı retriever, ek süreç yok; ajan adayları alır, gerisini okuyarak karar verir; `read_code` yalnız indexli dosyayı okur | **stdio ayrı süreç**: model iki kez yüklenir · **Yalnız HTTP**: her ajan aracı elle sarılır |
 | **Golden eval** (Recall@k · MRR · abstain) | Her retrieval kararını sayıyla verir | 42 soru + 13 negatif; "sanki iyi oldu" yok, bayrak varsayılanı JSON düşmeden değişmez | **Ragas / TruLens**: LLM hakemli, yavaş ve pahalı; retrieval'ı doğrudan ölçmek yetiyor |
-| **Claude** (`/ask`, enrichment; isteğe bağlı) | Atıflı cevap; istenirse chunk'lara Türkçe açıklama | Retrieval LLM'siz çalışır, LLM yalnız cevap katmanında; OpenAI / Ollama da bağlanır | **Ollama qwen2.5** açıklama için: Çince'ye kayıyor (ölçüldü) → alfabe kontrolü var |
+| **LLM katmanı** (`auto`: Claude › OpenAI › yerel Ollama) | Atıflı cevap (`/ask`); istenirse chunk'lara Türkçe açıklama | Retrieval LLM'siz çalışır, LLM yalnız cevap katmanında; anahtar yoksa yerel `qwen3.5:9b` ile sıfır kurulum (ölçüldü, Kurulum → Yerel LLM) | **Yalnız bulut**: anahtarsız denenemez · **Yalnız yerel**: kalite/hız tavanı; ikisi de bayrakla · qwen2.5 enrichment'ta Çince'ye kayıyor (ölçüldü) → alfabe kontrolü |
 
 Çevresi: Python 3.12 + uv, FastAPI + uvicorn, typer CLI, pydantic-settings; tek `docker compose`
 ile Milvus + etcd + MinIO. Dış dünyayla yalnızca HTTP konuşur, indexlediği repolara asla yazmaz.
@@ -77,10 +77,11 @@ uv sync                                              # Python 3.12 + bağımlıl
 docker compose -f infra/docker-compose.yml up -d     # Milvus 2.6 + etcd + MinIO
 curl -f http://localhost:9091/healthz                # "OK" (ilk açılış ~60-90 sn)
 docker compose -f infra/docker-compose.yml --profile ui up -d   # (isteğe bağlı) Attu, Milvus arayüzü → :8091
-cp .env.example .env                                 # aşağıdaki değerleri doldur
+ollama pull qwen3.5:9b                               # yerel LLM (6.6 GB) — /ask bununla çalışır, anahtar gerekmez
+cp .env.example .env                                 # aşağıdaki değerleri doldur (yerel deneme için hiçbiri şart değil)
 ```
 
-`.env`'de en az:
+`.env`'de gerekenler — yerel bir dizin + yerel LLM ile denemek için **hiçbiri gerekmez**:
 
 | Değişken | Ne |
 |---|---|
@@ -88,12 +89,52 @@ cp .env.example .env                                 # aşağıdaki değerleri d
 | `AZURE_DEVOPS_PAT` | Personal Access Token, kapsam **Code → Read** |
 | `GITHUB_TOKEN` | isteğe bağlı — public repolar tokensız çalışır; private için fine-grained PAT (Contents: Read) |
 | `RAG_WEBHOOK_SECRET` | Azure Service Hook'un göndereceği paylaşılan sır |
-| `ANTHROPIC_API_KEY` | yalnızca `/ask` ve enrichment için (retrieval LLM'siz çalışır) |
+| `ANTHROPIC_API_KEY` | isteğe bağlı — varsa `/ask` ve enrichment Claude'a geçer; yoksa yerel Ollama modeli (aşağıya bak) |
 
 Hepsi arayüzden de girilebilir ve girilen değer `.env`'i ezer (silinince env'e dönülür):
 GitHub token ve Azure org+PAT **Repolar › Repo bağla** panelinde, webhook sırrı ve Anthropic
 anahtarı **Bağlan › Anahtarlar** kartında. Doğrulanır, `data/rag.db`'de saklanır, yeniden
 başlatma gerekmez.
+
+### Yerel LLM ile deneme (varsayılan)
+
+Sağlayıcı `RAG_LLM_PROVIDER=auto`: Anthropic anahtarı varsa Claude, yoksa OpenAI anahtarı varsa
+OpenAI, o da yoksa **yerel Ollama** — yani sıfır anahtarla `/ask` çalışır. Retrieval (`/search`,
+MCP) LLM'e hiç bağımlı değil.
+
+```bash
+# 1. Ollama: https://ollama.com/download  (macOS: brew install ollama · Linux: curl -fsSL https://ollama.com/install.sh | sh)
+ollama pull qwen3.5:9b                 # 6.6 GB; zayıf makine için qwen3.5:4b (3.4 GB) → RAG_LLM_MODEL=qwen3.5:4b
+# 2. Ollama uygulaması açık olsun (ya da `ollama serve`), sonra:
+uv run rag add-local ~/code/my-api --name my-api
+uv run rag ask "webhook olayları nasıl kuyruğa alınıyor?" -r my-api
+```
+
+Arayüzde **Bağlan › Anahtarlar** kartı Ollama'nın ayakta olup olmadığını ve modelin indirilip
+indirilmediğini canlı gösterir; eksikse çalıştırılacak komutu yazar. Düşünen modellerde (qwen3.x)
+düşünme kapalı gönderilir — atıflı cevapta gerekmiyor, süre 2-3 kat kısalıyor. Bağlam penceresi
+`RAG_OLLAMA_NUM_CTX=16384`: Ollama'nın 4k varsayılanı 8 chunk'lık prompt'u sessizce kırpardı.
+
+Hugging Face'ten başka bir model, vLLM / LM Studio / llama.cpp gibi **OpenAI uyumlu** bir sunucuyla:
+
+```bash
+vllm serve Qwen/Qwen3.5-9B --port 8000          # ya da LM Studio → Local Server
+RAG_LLM_PROVIDER=openai RAG_OPENAI_BASE_URL=http://localhost:8000/v1 \
+RAG_LLM_MODEL=Qwen/Qwen3.5-9B OPENAI_API_KEY=local uv run rag serve
+```
+
+Ölçüldü (2026-09-01, Apple M-serisi, aynı 6 chunk'lık prompt, 3 soru — TR, EN ve cevabı olmayan):
+
+| Model | süre / cevap | Kalite | "Cevap yok" davranışı |
+|---|---|---|---|
+| **qwen3.5:9b, think kapalı** ✓ | 12-17 s | iyi: [1][2][4] atıflı, doğru kod parçası, düzgün Türkçe (EN soruya da Türkçe cevapladı) | doğru: "kod tabanında bu soruya cevap verebilecek bilgi yok", 2 s |
+| qwen3.5:9b, think açık | 48-51 s | 3 sorunun 2'sinde **boş cevap**: düşünce 1024 token'ın hepsini yedi → kapalı gönderilir | — |
+| qwen2.5:7b | 22-32 s | iyi: dosya + fonksiyon atıflı, dilini koruyor | doğru: "kod parçaları bulunmadığından cevaplayamam", 4 s |
+| qwen3:1.7b, think kapalı | 11-15 s | zayıf: "implemetasyonu", "konflikt deteksiyonu" | kararsız, konu dışına kayıyor |
+| claude-opus-5 | — | referans; anahtar girilince `auto` buna geçer | doğru |
+
+Enrichment (chunk açıklaması) için yerel model kullanacaksan alfabe kontrolü var: qwen2.5 yük
+altında Çince'ye kayıyor (ölçüldü), yanlış alfabe reddedilir.
 
 İlk çalıştırmada `BAAI/bge-m3` (~2.2 GB) ve `BAAI/bge-reranker-v2-m3` (~2.2 GB)
 Hugging Face'ten iner; sonrası `~/.cache/huggingface`'ten gelir. Apple M-serisinde

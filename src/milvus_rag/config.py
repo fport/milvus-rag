@@ -18,10 +18,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # yeniden indexler.
 CHUNKER_VERSION = "ast-v1"
 
+# Sağlayıcı başına varsayılan model. Ollama'daki seçim README → "Yerel LLM" bölümünde
+# ölçülerek yapıldı; değiştirmek için RAG_LLM_MODEL.
 _DEFAULT_LLM_MODEL: dict[str, str] = {
     "anthropic": "claude-opus-5",
     "openai": "gpt-4o",
-    "ollama": "qwen2.5:7b",
+    "ollama": "qwen3.5:9b",
 }
 
 
@@ -90,7 +92,9 @@ class Settings(BaseSettings):
     extra_extensions: str = ""
 
     # --- LLM -----------------------------------------------------------------
-    llm_provider: Literal["anthropic", "openai", "ollama"] = "anthropic"
+    # "auto": Anthropic anahtarı varsa Claude, yoksa OpenAI anahtarı varsa OpenAI, o da
+    # yoksa yerel Ollama — sıfır kurulumla `git clone` + `ollama pull` ile /ask çalışsın.
+    llm_provider: Literal["auto", "anthropic", "openai", "ollama"] = "auto"
     llm_model: str | None = None
     anthropic_api_key: str | None = Field(
         default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY")
@@ -98,7 +102,11 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(
         default=None, validation_alias=AliasChoices("OPENAI_API_KEY")
     )
+    # OpenAI uyumlu her sunucu: vLLM, LM Studio, llama.cpp server → base URL'i değiştir.
+    openai_base_url: str = "https://api.openai.com/v1"
     ollama_host: str = "http://localhost:11434"
+    # Ollama'nın varsayılan bağlamı 4k; 8 chunk'lık prompt ~6k token → sessizce kırpılırdı.
+    ollama_num_ctx: int = Field(default=16384, gt=0)
     enrich_enabled: bool = False
     enrich_batch_chunks: int = Field(default=6, gt=0)
 
@@ -149,8 +157,18 @@ class Settings(BaseSettings):
         return self.data_dir / "rag.db"
 
     @property
+    def resolved_llm_provider(self) -> Literal["anthropic", "openai", "ollama"]:
+        if self.llm_provider != "auto":
+            return self.llm_provider
+        if self.anthropic_api_key:
+            return "anthropic"
+        if self.openai_api_key:
+            return "openai"
+        return "ollama"
+
+    @property
     def resolved_llm_model(self) -> str:
-        return self.llm_model or _DEFAULT_LLM_MODEL[self.llm_provider]
+        return self.llm_model or _DEFAULT_LLM_MODEL[self.resolved_llm_provider]
 
     @property
     def index_version(self) -> str:

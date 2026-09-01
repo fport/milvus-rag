@@ -689,7 +689,7 @@ async function removeRepo(id) {
 // ── kimlikler + repo seçici ─────────────────────────────────────────────
 let credState = null;
 async function loadCredState() {
-  try { credState = await api("/settings/credentials"); } catch { credState = null; }
+  try { credState = await api("/settings/credentials?probe=1"); } catch { credState = null; }
   renderCredZone();
 }
 async function saveCreds(fields, btn) {
@@ -1001,14 +1001,23 @@ function keysCard() {
        <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet" onclick="saveCreds({ webhook_secret: $('kWebhook').value }, this)">Kaydet</button></div>
        ${w.source === "ui" ? `<div style="flex:0 0 auto"><button class="quiet" data-label="Sil" onclick="saveCreds({ webhook_secret: '' }, this)">Sil</button></div>` : ""}
      </div>` +
-    line(l.configured, `LLM: ${esc(l.provider || "")} · ${esc(l.model || "")}`, l.source,
-         `LLM yok — <i>AI'ya sor</i> ve enrichment kapalı. ${l.provider === "anthropic" ? "Anthropic anahtarı gir:" : `Sağlayıcı <code>${esc(l.provider || "")}</code>; anahtarı env'den ver.`}`) +
-    (l.provider === "anthropic" ? `<div class="minigrid">
-       <div><label>Anthropic API anahtarı (ANTHROPIC_API_KEY)</label><input id="kAnthropic" type="password" placeholder="sk-ant-…"></div>
+    llmLine(l) +
+    (l.provider === "ollama" ? copyRow(`ollama pull ${l.model || ""}`) : "") +
+    `<div class="minigrid">
+       <div><label>Anthropic API anahtarı (ANTHROPIC_API_KEY)${l.mode === "auto" ? " — girersen Claude'a geçer" : ""}</label><input id="kAnthropic" type="password" placeholder="sk-ant-…"></div>
        <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet & doğrula" onclick="saveCreds({ anthropic_api_key: $('kAnthropic').value }, this)">Kaydet & doğrula</button></div>
        ${l.source === "ui" ? `<div style="flex:0 0 auto"><button class="quiet" data-label="Sil" onclick="saveCreds({ anthropic_api_key: '' }, this)">Sil</button></div>` : ""}
-     </div>` : "") +
-    `<div class="mini">GitHub token ve Azure PAT: <b>Repolar › Repo bağla</b> panelinden.</div>`);
+     </div>` +
+    `<div class="mini">Model <code>RAG_LLM_MODEL</code>, sağlayıcı <code>RAG_LLM_PROVIDER</code> (auto · anthropic · openai · ollama).
+     GitHub token ve Azure PAT: <b>Repolar › Repo bağla</b> panelinden.</div>`);
+}
+// LLM durumu: sağlayıcı + model + canlı ping. Ollama kapalıysa ya da model inmemişse
+// hata metni tam komutu söyler; auto modda Anthropic anahtarı girmek Claude'a geçirir.
+function llmLine(l) {
+  const st = l.status || {};
+  const who = `LLM: <b>${esc(l.provider || "?")}</b> · ${esc(l.model || "")}${l.host ? ` · ${esc(l.host)}` : ""}${l.mode === "auto" ? ` <span class="dim2">(otomatik)</span>` : ""}`;
+  if (st.ok) return `<div class="credline"><span class="okmark">●</span> ${who}${l.source ? ` — anahtar ${l.source === "ui" ? "arayüzden" : "env"}` : ""} — çalışıyor</div>`;
+  return `<div class="credline">${who}</div><div class="warnbox">⚠ ${esc(st.detail || "yapılandırılmamış")}</div>`;
 }
 function renderConnect() {
   const h = window._health || {};

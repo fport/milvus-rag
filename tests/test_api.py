@@ -360,13 +360,20 @@ def test_credentials_flow(client: TestClient):
     # Anthropic anahtarı: arayüzden girilen anahtar LLM'i canlı kurar, /health görür.
     # (Başlangıç durumu makineye bağlı: SDK `ant auth login` profilini de çözebilir —
     # o yüzden yalnızca "arayüzden mi" sorulur.)
-    assert state["llm"]["provider"] == "anthropic" and state["llm"]["source"] != "ui"
+    # Sağlayıcı auto → anahtar yokken yerel Ollama: yukarıdaki PUT'lar istemciyi kurdu bile.
+    assert state["llm"]["mode"] == "auto" and state["llm"]["provider"] == "ollama"
+    assert state["llm"]["configured"] is True and state["llm"]["host"] == "http://localhost:11434"
+    assert state["llm"]["status"]["ok"] is True and "probe" in state["llm"]["status"]["detail"]
     client.put("/settings/credentials", json={"anthropic_api_key": "sk-ant-test", "verify": False})
     state = client.get("/settings/credentials").json()
-    assert state["llm"]["configured"] is True and state["llm"]["source"] == "ui"
+    assert state["llm"]["provider"] == "anthropic" and state["llm"]["source"] == "ui"
+    assert (
+        state["llm"]["configured"] is True and "status" in state["llm"]
+    )  # probe yok: ping atılmaz
     assert client.get("/health").json()["llm"] == "claude-opus-5"
     client.put("/settings/credentials", json={"anthropic_api_key": "", "verify": False})
-    assert client.get("/settings/credentials").json()["llm"]["source"] != "ui"
+    state = client.get("/settings/credentials").json()
+    assert state["llm"]["source"] != "ui" and state["llm"]["provider"] == "ollama"
 
 
 MCP_INIT = {

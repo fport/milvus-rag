@@ -208,8 +208,12 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
 
     # ------------------------------------------------------------- kimlikler
     @app.get("/settings/credentials")
-    def get_credentials(s: S) -> dict[str, Any]:
-        """Maskelenmiş durum: hangi kimlik nereden geliyor. Sırların kendisi dönmez."""
+    def get_credentials(s: S, probe: bool = Query(False)) -> dict[str, Any]:
+        """Maskelenmiş durum: hangi kimlik nereden geliyor. Sırların kendisi dönmez.
+
+        `probe=1`: LLM'e canlı ping (Ollama ayakta mı / model inmiş mi, anahtar geçerli mi).
+        Arayüz ister; testler ve betikler istemez — ağ yok.
+        """
         source = credential_sources(s.settings, s.db)
         return {
             "github": {
@@ -222,15 +226,7 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
                 "source": source["azure_pat"],
             },
             "webhook": {"secret_set": bool(s.webhook_secret), "source": source["webhook_secret"]},
-            "llm": {
-                "provider": s.settings.llm_provider,
-                "model": s.llm.model if s.llm else s.settings.resolved_llm_model,
-                "configured": s.llm is not None,
-                # Yalnızca Anthropic anahtarı arayüzden girilebiliyor; OpenAI/Ollama env'den.
-                "source": source["anthropic_api_key"]
-                if s.settings.llm_provider == "anthropic"
-                else None,
-            },
+            "llm": _llm_view(s, source["anthropic_api_key"], probe),
         }
 
     @app.put("/settings/credentials")
@@ -419,8 +415,8 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
         if s.llm is None:
             raise HTTPException(
                 503,
-                "LLM yapılandırılmamış — Bağlan › Anahtarlar'dan Anthropic anahtarı gir "
-                "ya da RAG_LLM_PROVIDER / API anahtarını env'de ayarla",
+                "LLM yapılandırılmamış — Bağlan › Anahtarlar'dan Anthropic anahtarı gir, "
+                "ya da yerel model için Ollama kur (RAG_LLM_PROVIDER=auto yerel modele düşer)",
             )
         try:
             return run_ask(s.retriever, s.llm, body.to_request()).to_dict()
@@ -473,6 +469,31 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
         return {"accepted": True, "results": _enqueue_push_events(s, events, "github")}
 
     return app
+
+
+def _llm_view(s: Services, key_source: str | None, probe: bool) -> dict[str, Any]:
+    """Hangi LLM, nereden, çalışıyor mu. `probe` ile canlı ping: Ollama için sunucu + model
+    indirilmiş mi, Anthropic için anahtar geçerli mi — hata metni ne yapılacağını söyler."""
+    provider = s.llm.provider if s.llm else s.settings.resolved_llm_provider
+    view: dict[str, Any] = {
+        "mode": s.settings.llm_provider,  # auto | anthropic | openai | ollama
+        "provider": provider,
+        "model": s.llm.model if s.llm else s.settings.resolved_llm_model,
+        "configured": s.llm is not None,
+        "host": s.settings.ollama_host if provider == "ollama" else None,
+        # Yalnızca Anthropic anahtarı arayüzden girilebiliyor; OpenAI/Ollama env'den.
+        "source": key_source if provider == "anthropic" else None,
+    }
+    if s.llm is None:
+        view["status"] = {"ok": False, "detail": "LLM yapılandırılmamış"}
+    elif not probe:
+        view["status"] = {"ok": True, "detail": "ping atılmadı (probe=1 ile sor)"}
+    else:
+        try:
+            view["status"] = {"ok": True, "detail": s.llm.ping()}
+        except LLMError as error:
+            view["status"] = {"ok": False, "detail": str(error)}
+    return view
 
 
 def _enqueue_push_events(

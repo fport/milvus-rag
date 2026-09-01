@@ -74,6 +74,9 @@ güncelle → retriever cache'ini boşalt`.
   kuyruk), 0.45-0.55 `weak_match` notuyla döner, üstü normal. Yanına DOKÜMAN etiketi,
   index tazeliği, manifest'e kilitli `read_code`; hakem ajan/LLM/insan. Golden'da negatif
   vakalar (`expect: []`) var; `abstain` ve `false_weak` birlikte okunur.
+- **LLM sağlayıcı `auto`.** Anthropic anahtarı varsa Claude, yoksa OpenAI, o da yoksa yerel
+  Ollama (`qwen3.5:9b`; ölçüldü, README → Yerel LLM). Düşünen modellere `think: false`,
+  `num_ctx` 16k. OpenAI istemcisi `base_url` alır: vLLM/LM Studio aynı yoldan bağlanır.
 - **PAT hiçbir yere yazılmaz.** git'e `-c http.extraheader=` ile geçer; hata mesajları
   redakte edilir. Index'e girmeden önce `scrub` çalışır.
 
