@@ -25,7 +25,13 @@ from milvus_rag.mcp_server import MCP_PATH, McpSlashMiddleware, build_mcp_server
 from milvus_rag.repos import RepoError
 from milvus_rag.search.answer import ask as run_ask
 from milvus_rag.search.retrieve import SearchRequest
-from milvus_rag.services import Services, apply_credentials, build_services
+from milvus_rag.services import (
+    CREDENTIAL_KEYS,
+    Services,
+    apply_credentials,
+    build_services,
+    credential_sources,
+)
 from milvus_rag.sources.azure import AzureError
 from milvus_rag.sources.files import FileReadError, read_indexed_slice
 from milvus_rag.sources.github import GitHubError
@@ -74,6 +80,8 @@ class CredentialsBody(BaseModel):
     github_token: str | None = None
     azure_org_url: str | None = None
     azure_pat: str | None = None
+    webhook_secret: str | None = None
+    anthropic_api_key: str | None = None
     verify: bool = True
 
 
@@ -194,7 +202,7 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
             "llm": s.llm.model if s.llm else None,
             "azure": s.azure is not None,
             "github_token": bool(s.github and s.github.token),
-            "webhook_secret_set": bool(s.settings.webhook_secret),
+            "webhook_secret_set": bool(s.webhook_secret),
             "poll_interval_seconds": s.settings.poll_interval_seconds,
         }
 
@@ -202,22 +210,26 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
     @app.get("/settings/credentials")
     def get_credentials(s: S) -> dict[str, Any]:
         """Maskelenmiş durum: hangi kimlik nereden geliyor. Sırların kendisi dönmez."""
-        saved = s.db.get_app_settings(["github_token", "azure_org_url", "azure_pat"])
-
-        def source(key: str, env_value: str | None) -> str | None:
-            if saved.get(key):
-                return "ui"
-            return "env" if env_value else None
-
+        source = credential_sources(s.settings, s.db)
         return {
             "github": {
                 "token_set": bool(s.github and s.github.token),
-                "source": source("github_token", s.settings.github_token),
+                "source": source["github_token"],
             },
             "azure": {
                 "configured": s.azure is not None,
                 "org_url": s.azure.org_url if s.azure else (s.settings.azure_org_url or ""),
-                "source": source("azure_pat", s.settings.azure_pat),
+                "source": source["azure_pat"],
+            },
+            "webhook": {"secret_set": bool(s.webhook_secret), "source": source["webhook_secret"]},
+            "llm": {
+                "provider": s.settings.llm_provider,
+                "model": s.llm.model if s.llm else s.settings.resolved_llm_model,
+                "configured": s.llm is not None,
+                # Yalnızca Anthropic anahtarı arayüzden girilebiliyor; OpenAI/Ollama env'den.
+                "source": source["anthropic_api_key"]
+                if s.settings.llm_provider == "anthropic"
+                else None,
             },
         }
 
@@ -228,25 +240,31 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
         Sırlar data/rag.db'de düz metin durur — servis zaten iç ağ içindir
         (bkz. DEPLOYMENT.md). Boş string gönderilen alan silinir.
         """
-        for key in ("github_token", "azure_org_url", "azure_pat"):
-            if key in body.model_fields_set:
-                value = getattr(body, key)
-                s.db.set_app_setting(key, (value or "").strip() or None)
+        touched = {key for key in CREDENTIAL_KEYS if key in body.model_fields_set}
+        for key in touched:
+            value = getattr(body, key)
+            s.db.set_app_setting(key, (value or "").strip() or None)
         apply_credentials(s)
 
-        result: dict[str, Any] = {"github": None, "azure": None}
+        # Yalnızca dokunulan kimlik doğrulanır: webhook sırrını değiştirmek GitHub'a gitmesin.
+        result: dict[str, Any] = {"github": None, "azure": None, "llm": None}
         if body.verify:
-            if s.github and s.github.token:
+            if "github_token" in touched and s.github and s.github.token:
                 try:
                     result["github"] = {"ok": True, "login": s.github.whoami()}
                 except GitHubError as error:
                     result["github"] = {"ok": False, "detail": str(error)}
-            if s.azure is not None:
+            if touched & {"azure_org_url", "azure_pat"} and s.azure is not None:
                 try:
                     projects = s.azure.list_projects()
                     result["azure"] = {"ok": True, "projects": len(projects)}
                 except AzureError as error:
                     result["azure"] = {"ok": False, "detail": str(error)}
+            if "anthropic_api_key" in touched and s.llm is not None:
+                try:
+                    result["llm"] = {"ok": True, "model": s.llm.ping()}
+                except LLMError as error:
+                    result["llm"] = {"ok": False, "detail": str(error)}
         return result
 
     # ----------------------------------------------------------------- azure
@@ -399,7 +417,11 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
     @app.post("/ask")
     def ask(body: SearchBody, s: S) -> dict[str, Any]:
         if s.llm is None:
-            raise HTTPException(503, "LLM yapılandırılmamış (RAG_LLM_PROVIDER / API anahtarı)")
+            raise HTTPException(
+                503,
+                "LLM yapılandırılmamış — Bağlan › Anahtarlar'dan Anthropic anahtarı gir "
+                "ya da RAG_LLM_PROVIDER / API anahtarını env'de ayarla",
+            )
         try:
             return run_ask(s.retriever, s.llm, body.to_request()).to_dict()
         except LLMError as error:
@@ -414,9 +436,7 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
         authorization: Annotated[str | None, Header()] = None,
         secret: str | None = None,
     ) -> dict[str, Any]:
-        if not verify_secret(
-            s.settings.webhook_secret, x_rag_webhook_secret, authorization, secret
-        ):
+        if not verify_secret(s.webhook_secret, x_rag_webhook_secret, authorization, secret):
             raise HTTPException(401, "webhook sırrı eşleşmiyor")
         payload = await request.json()
         events = parse_azure_push(payload if isinstance(payload, dict) else {})
@@ -436,7 +456,7 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
     ) -> dict[str, Any]:
         # İmza ham gövde üstünden hesaplanır; sır RAG_WEBHOOK_SECRET ile aynı.
         body = await request.body()
-        if not verify_github_signature(s.settings.webhook_secret, body, x_hub_signature_256):
+        if not verify_github_signature(s.webhook_secret, body, x_hub_signature_256):
             raise HTTPException(401, "X-Hub-Signature-256 doğrulanamadı (sır: RAG_WEBHOOK_SECRET)")
         event_name = (x_github_event or "push").lower()
         if event_name == "ping":

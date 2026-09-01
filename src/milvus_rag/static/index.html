@@ -701,8 +701,10 @@ async function saveCreds(fields, btn) {
     });
     if (r.github) toast(r.github.ok ? `GitHub bağlandı: ${r.github.login} ✓` : "GitHub: " + r.github.detail, r.github.ok);
     if (r.azure) toast(r.azure.ok ? `Azure bağlandı: ${r.azure.projects} proje ✓` : "Azure: " + r.azure.detail, r.azure.ok);
-    if (!r.github && !r.azure) toast("Kaydedildi", true);
-    await loadCredState(); loadHealth();
+    if (r.llm) toast(r.llm.ok ? `LLM bağlandı: ${r.llm.model} ✓` : "LLM: " + r.llm.detail, r.llm.ok);
+    if (!r.github && !r.azure && !r.llm) toast("Kaydedildi", true);
+    await loadCredState(); await loadHealth();
+    if (!$("tab-baglan").hidden) renderConnect();
   } catch (e) { toast(e.message); }
   finally { btn.disabled = false; btn.textContent = btn.dataset.label; }
 }
@@ -906,7 +908,7 @@ function showTab(name) {
   cancelAnimationFrame(viz.raf);
   if (name === "ara") { requestAnimationFrame(() => { vizSize(); vizStart(); }); }
   if (name === "isler") { loadJobs(); window._jobsTimer = setInterval(loadJobs, 4000); }
-  if (name === "baglan") renderConnect();
+  if (name === "baglan") { renderConnect(); loadCredState().then(renderConnect); }
   if (name === "repolar") loadRepos();
 }
 
@@ -980,6 +982,34 @@ function ccard(title, popHtml, bodyHtml) {
     <button class="info" onclick="togglePop(this)" aria-label="Ayrıntı" title="Ayrıntı">i</button></h3>
     <div class="pop" hidden>${popHtml}</div>${bodyHtml}</div>`;
 }
+// Sırlar arayüzden: girilen değer .env'i ezer, silinince .env'e dönülür. Değerin kendisi
+// asla geri gelmez (GET yalnızca "kayıtlı mı, nereden" der).
+function keysCard() {
+  const c = credState || {};
+  const w = c.webhook || {}, l = c.llm || {};
+  // Kaynak yoksa ama kuruluysa: Anthropic SDK kimliği `ant auth login` profilinden çözmüş.
+  const src = (x) => x === "ui" ? "arayüzden" : x === "env" ? "env" : "SDK profili";
+  const line = (ok, what, from, missing) => ok
+    ? `<div class="credline"><span class="okmark">●</span> ${what} kayıtlı (${src(from)})</div>`
+    : `<div class="credline">${missing}</div>`;
+  return ccard("Anahtarlar",
+    `Arayüzden girilen değer <code>.env</code>'i ezer; <i>Sil</i> deyince env'e dönülür.
+     Sırlar <code>data/rag.db</code>'de durur — servis iç ağ içindir.`,
+    line(w.secret_set, "Webhook sırrı", w.source, "Webhook sırrı yok — GitHub/Azure hook'larına yazacağın paylaşılan sır.") +
+    `<div class="minigrid">
+       <div><label>Webhook sırrı (RAG_WEBHOOK_SECRET)</label><input id="kWebhook" type="password" placeholder="uzun, rastgele bir sır"></div>
+       <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet" onclick="saveCreds({ webhook_secret: $('kWebhook').value }, this)">Kaydet</button></div>
+       ${w.source === "ui" ? `<div style="flex:0 0 auto"><button class="quiet" data-label="Sil" onclick="saveCreds({ webhook_secret: '' }, this)">Sil</button></div>` : ""}
+     </div>` +
+    line(l.configured, `LLM: ${esc(l.provider || "")} · ${esc(l.model || "")}`, l.source,
+         `LLM yok — <i>AI'ya sor</i> ve enrichment kapalı. ${l.provider === "anthropic" ? "Anthropic anahtarı gir:" : `Sağlayıcı <code>${esc(l.provider || "")}</code>; anahtarı env'den ver.`}`) +
+    (l.provider === "anthropic" ? `<div class="minigrid">
+       <div><label>Anthropic API anahtarı (ANTHROPIC_API_KEY)</label><input id="kAnthropic" type="password" placeholder="sk-ant-…"></div>
+       <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet & doğrula" onclick="saveCreds({ anthropic_api_key: $('kAnthropic').value }, this)">Kaydet & doğrula</button></div>
+       ${l.source === "ui" ? `<div style="flex:0 0 auto"><button class="quiet" data-label="Sil" onclick="saveCreds({ anthropic_api_key: '' }, this)">Sil</button></div>` : ""}
+     </div>` : "") +
+    `<div class="mini">GitHub token ve Azure PAT: <b>Repolar › Repo bağla</b> panelinden.</div>`);
+}
 function renderConnect() {
   const h = window._health || {};
   const origin = location.origin;
@@ -987,9 +1017,10 @@ function renderConnect() {
   const az = repos.filter(r => r.provider === "azure" && r.web_url);
   const parts = [];
   if (h.webhook_secret_set === false) {
-    parts.push(`<div class="warnbox">⚠ <b>RAG_WEBHOOK_SECRET ayarlanmamış</b> — webhook'lar reddedilir. <code>.env</code>'e sır yazıp yeniden başlat.</div>`);
+    parts.push(`<div class="warnbox">⚠ <b>Webhook sırrı yok</b> — push webhook'ları reddedilir. Aşağıdaki <i>Anahtarlar</i> kartından gir (ya da <code>.env</code>'e <code>RAG_WEBHOOK_SECRET</code>).</div>`);
   }
   parts.push(`<div class="cgrid">`);
+  parts.push(keysCard());
   parts.push(ccard("GitHub webhook",
     `repo → Settings → Webhooks → <i>Add webhook</i>. Content type <code>application/json</code>,
      Secret = <code>RAG_WEBHOOK_SECRET</code> (HMAC-SHA256 doğrulanır), olay: yalnızca <i>push</i>.

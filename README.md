@@ -90,6 +90,11 @@ cp .env.example .env                                 # aşağıdaki değerleri d
 | `RAG_WEBHOOK_SECRET` | Azure Service Hook'un göndereceği paylaşılan sır |
 | `ANTHROPIC_API_KEY` | yalnızca `/ask` ve enrichment için (retrieval LLM'siz çalışır) |
 
+Hepsi arayüzden de girilebilir ve girilen değer `.env`'i ezer (silinince env'e dönülür):
+GitHub token ve Azure org+PAT **Repolar › Repo bağla** panelinde, webhook sırrı ve Anthropic
+anahtarı **Bağlan › Anahtarlar** kartında. Doğrulanır, `data/rag.db`'de saklanır, yeniden
+başlatma gerekmez.
+
 İlk çalıştırmada `BAAI/bge-m3` (~2.2 GB) ve `BAAI/bge-reranker-v2-m3` (~2.2 GB)
 Hugging Face'ten iner; sonrası `~/.cache/huggingface`'ten gelir. Apple M-serisinde
 otomatik `mps` kullanılır.

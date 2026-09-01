@@ -22,7 +22,14 @@ from milvus_rag.sources.github import GitHub
 
 log = get_logger("services")
 
-CREDENTIAL_KEYS = ("github_token", "azure_org_url", "azure_pat")
+# Arayüzden girilebilen sırlar. Hepsi env'deki karşılığını ezer; boş kayıt env'e döner.
+CREDENTIAL_KEYS = (
+    "github_token",
+    "azure_org_url",
+    "azure_pat",
+    "webhook_secret",
+    "anthropic_api_key",
+)
 
 
 def resolve_credentials(settings: Settings, db: Database) -> dict[str, str | None]:
@@ -32,7 +39,37 @@ def resolve_credentials(settings: Settings, db: Database) -> dict[str, str | Non
         "github_token": saved.get("github_token") or settings.github_token,
         "azure_org_url": saved.get("azure_org_url") or settings.azure_org_url,
         "azure_pat": saved.get("azure_pat") or settings.azure_pat,
+        "webhook_secret": saved.get("webhook_secret") or settings.webhook_secret,
+        "anthropic_api_key": saved.get("anthropic_api_key") or settings.anthropic_api_key,
     }
+
+
+def credential_sources(settings: Settings, db: Database) -> dict[str, str | None]:
+    """Her sır nereden geliyor: "ui", "env" ya da None. Değerin kendisi dönmez."""
+    saved = db.get_app_settings(CREDENTIAL_KEYS)
+    env = {
+        "github_token": settings.github_token,
+        "azure_org_url": settings.azure_org_url,
+        "azure_pat": settings.azure_pat,
+        "webhook_secret": settings.webhook_secret,
+        "anthropic_api_key": settings.anthropic_api_key,
+    }
+    return {
+        key: "ui" if saved.get(key) else ("env" if env[key] else None) for key in CREDENTIAL_KEYS
+    }
+
+
+def _build_llm_and_enricher(
+    settings: Settings, db: Database, anthropic_api_key: str | None
+) -> tuple[LLM | None, Enricher | None]:
+    # Settings donuk; anahtarı ezmek için kopya. LLM yalnız cevap katmanında.
+    llm = build_llm(settings.model_copy(update={"anthropic_api_key": anthropic_api_key}))
+    enricher = (
+        Enricher(llm, db, settings.enrich_batch_chunks) if settings.enrich_enabled and llm else None
+    )
+    if settings.enrich_enabled and llm is None:
+        log.warning("RAG_ENRICH_ENABLED açık ama LLM yok; enrichment atlanacak")
+    return llm, enricher
 
 
 def apply_credentials(services: Services) -> None:
@@ -48,10 +85,15 @@ def apply_credentials(services: Services) -> None:
         if creds["azure_org_url"] and creds["azure_pat"]
         else None
     )
+    services.webhook_secret = creds["webhook_secret"]
+    services.llm, services.enricher = _build_llm_and_enricher(
+        services.settings, services.db, creds["anthropic_api_key"]
+    )
     # Aynı istemci nesnesini tutan herkes yenisini görsün.
     for holder in (services.indexer, services.repos, services.jobs):
         holder.github = services.github
         holder.azure = services.azure
+    services.indexer.enricher = services.enricher
 
 
 @dataclass(slots=True)
@@ -69,6 +111,8 @@ class Services:
     indexer: Indexer
     repos: RepoService
     jobs: JobRunner
+    # Çözülmüş webhook sırrı (UI > env); webhook uçları settings'e değil buna bakar.
+    webhook_secret: str | None = None
 
     def warm_up(self) -> None:
         """Modelleri açılışta yükle; ilk isteğe 20 saniye bindirme."""
@@ -98,13 +142,8 @@ def build_services(settings: Settings | None = None) -> Services:
         else None
     )
     retriever = Retriever(settings, store, embedder, reranker)
-    llm = build_llm(settings)
-    enricher = (
-        Enricher(llm, db, settings.enrich_batch_chunks) if settings.enrich_enabled and llm else None
-    )
-    if settings.enrich_enabled and llm is None:
-        log.warning("RAG_ENRICH_ENABLED açık ama LLM yok; enrichment atlanacak")
     creds = resolve_credentials(settings, db)
+    llm, enricher = _build_llm_and_enricher(settings, db, creds["anthropic_api_key"])
     azure = (
         AzureDevOps(creds["azure_org_url"] or "", creds["azure_pat"] or "")
         if creds["azure_org_url"] and creds["azure_pat"]
@@ -128,4 +167,5 @@ def build_services(settings: Settings | None = None) -> Services:
         indexer=indexer,
         repos=repos,
         jobs=jobs,
+        webhook_secret=creds["webhook_secret"],
     )

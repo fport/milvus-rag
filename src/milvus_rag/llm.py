@@ -32,6 +32,10 @@ class LLM(ABC):
         self, system: str, user: str, max_tokens: int = 4096, effort: Effort | None = None
     ) -> str: ...
 
+    def ping(self) -> str:
+        """Anahtarı ucuz bir istekle doğrular; hata → LLMError. Varsayılan: doğrulama yok."""
+        return self.model
+
 
 class AnthropicLLM(LLM):
     provider = "anthropic"
@@ -42,6 +46,20 @@ class AnthropicLLM(LLM):
         self.model = model
         # api_key None → SDK ortamdan çözer (ANTHROPIC_API_KEY ya da `ant auth login` profili).
         self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+
+    def ping(self) -> str:
+        import anthropic
+
+        try:
+            # Model listesi: token harcamaz, yanlış anahtarı 401 ile söyler.
+            self.client.models.list(limit=1)
+        except anthropic.APIStatusError as error:
+            msg = f"Anthropic {error.status_code}: {error.message}"
+            raise LLMError(msg) from error
+        except anthropic.AnthropicError as error:
+            msg = f"Anthropic'e ulaşılamadı: {error}"
+            raise LLMError(msg) from error
+        return self.model
 
     def complete(
         self, system: str, user: str, max_tokens: int = 4096, effort: Effort | None = None

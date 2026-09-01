@@ -119,6 +119,7 @@ def client(tmp_settings, tmp_path: Path):
         indexer=indexer,
         repos=RepoService(tmp_settings, db, store, None),  # type: ignore[arg-type]
         jobs=JobRunner(tmp_settings, db, indexer, retriever, None),
+        webhook_secret=tmp_settings.webhook_secret,
     )
     repo_dir = tmp_path / "demo"
     (repo_dir / "src").mkdir(parents=True)
@@ -327,6 +328,45 @@ def test_credentials_flow(client: TestClient):
     state = client.get("/settings/credentials").json()
     assert state["github"]["token_set"] is False
     assert state["azure"]["configured"] is True  # dokunulmadı
+
+    # Webhook sırrı: env'den geliyor ("s3cret"); arayüzden girilen onu ezer, silinince döner.
+    assert state["webhook"] == {"secret_set": True, "source": "env"}
+    push = {
+        "eventType": "git.push",
+        "resource": {"refUpdates": [], "repository": {"id": "x", "name": "x"}},
+    }
+    hook = "/webhooks/azure/push"
+    assert (
+        client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "s3cret"}).status_code
+        == 200
+    )
+    client.put("/settings/credentials", json={"webhook_secret": "ui-secret", "verify": False})
+    assert client.get("/settings/credentials").json()["webhook"]["source"] == "ui"
+    assert (
+        client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "s3cret"}).status_code
+        == 401
+    )
+    assert (
+        client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "ui-secret"}).status_code
+        == 200
+    )
+    client.put("/settings/credentials", json={"webhook_secret": "", "verify": False})
+    assert (
+        client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "s3cret"}).status_code
+        == 200
+    )
+    assert client.get("/health").json()["webhook_secret_set"] is True
+
+    # Anthropic anahtarı: arayüzden girilen anahtar LLM'i canlı kurar, /health görür.
+    # (Başlangıç durumu makineye bağlı: SDK `ant auth login` profilini de çözebilir —
+    # o yüzden yalnızca "arayüzden mi" sorulur.)
+    assert state["llm"]["provider"] == "anthropic" and state["llm"]["source"] != "ui"
+    client.put("/settings/credentials", json={"anthropic_api_key": "sk-ant-test", "verify": False})
+    state = client.get("/settings/credentials").json()
+    assert state["llm"]["configured"] is True and state["llm"]["source"] == "ui"
+    assert client.get("/health").json()["llm"] == "claude-opus-5"
+    client.put("/settings/credentials", json={"anthropic_api_key": "", "verify": False})
+    assert client.get("/settings/credentials").json()["llm"]["source"] != "ui"
 
 
 MCP_INIT = {
