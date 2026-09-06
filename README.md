@@ -184,7 +184,15 @@ uv run rag poll                                   # Azure head'lerini bir kez ko
 Aynı işlemler HTTP'den. `/` altında basit bir web arayüzü de var — üç sekme:
 **Ara** (kanal skorlarıyla arama, LLM'e soru), **İşler** (her index çalışmasının
 pipeline akışı: kaynak → fark → chunk → embed → Milvus, canlı ilerleme),
-**Bağlan** (kopyalanabilir webhook URL'leri, poller, curl örnekleri, MCP ayarı).
+**Bağlan** (kopyalanabilir webhook URL'leri, poller, curl örnekleri, MCP ayarı):
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="Milvus RAG arayüzü — Türkçe soruyla kod araması, vektör uzayı görünümü, kanal skorları ve bağlı repolar" width="920">
+</p>
+
+Görseldeki arama bu reponun kendisine karşı çalışıyor: Türkçe düz cümle → dense kanal →
+`jobs.py`'deki `JobRunner`, 80 ms. **DOKÜMAN** rozeti plan/tasarım metninden gelen
+sonuçları koddan ayırır.
 
 | Uç | İş |
 |---|---|
