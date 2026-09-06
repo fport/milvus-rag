@@ -202,7 +202,7 @@ index run: source → diff → chunk → embed → Milvus, with live progress), 
 </p>
 
 The search in that image runs against this repo itself: a plain Turkish sentence → the dense
-channel → `JobRunner` in `jobs.py`, 80 ms. The **DOKÜMAN** (document) badge separates hits
+channel → `JobRunner` in `jobs.py`, 80 ms. The **DOCUMENT** badge separates hits
 that come from design notes from hits that come from code.
 
 | Endpoint | Job |
@@ -262,7 +262,8 @@ sync does a full re-index.
 | `RAG_PROSE_MODE` | `dense` | `dense` or `hybrid` (dense + BM25 → RRF, `RAG_RRF_K=60`) — measured, see below |
 | `RAG_RERANK_ENABLED` | `false` | `RAG_CANDIDATES=40` candidates → `bge-reranker-v2-m3` → `RAG_TOP_K=8` — measured, it hurt |
 | `RAG_CHUNK_MAX_BYTES` / `MIN` | 2000 / 200 | chunk bounds (≈500 tokens at the ceiling) |
-| `RAG_ENRICH_ENABLED` | `false` | a Turkish description from the LLM for every chunk, added to `indexed_text` (cached) |
+| `RAG_ENRICH_ENABLED` | `false` | an LLM description for every chunk, added to `indexed_text` (cached) |
+| `RAG_ENRICH_LANGUAGE` | `English` | the language those descriptions are written in — the measured gain comes from prose in the language people ask in |
 | `RAG_MIN_DENSE_SCORE` | `0.45` | hard floor: a chunk scoring below it is never returned (counted as `dropped`); not applied to BM25; 0 = off — measured, see below |
 | `RAG_WEAK_DENSE_SCORE` | `0.55` | if the best dense score is below it, the response carries `weak_match: true` — **a signal, not a filter**; the results still come back — measured, see below |
 
@@ -330,7 +331,7 @@ that stayed. The 0.45 floor dropped nothing from the golden set, and took the "r
 and "Kafka rebalance" (0.418) questions down to zero results. The two that got through
 ("CSV export stream", "puppeteer") are questions where genuinely *similar* code exists in the
 repo (0.598 / 0.544); there, the decision is the agent's. How the signal is presented: see the
-MCP section and the UI (the weak-match note, the DOKÜMAN badge, "N dropped").
+MCP section and the UI (the weak-match note, the DOCUMENT badge, "N dropped").
 
 **Chunk ablation (2026-09-01).** The question: what does tree-sitter (AST) chunking buy over
 a plain window? The same corpus was indexed twice: `ast` (the current chunker) and `plain`
@@ -356,7 +357,8 @@ that scale when extending language support.
 (`RAG_ENRICH_ENABLED`, language-independent — Anthropic's "contextual retrieval") buy? Since
 it takes ~3.5 hours on the full corpus with a local model, the setup was small and fair: the
 21 files the golden set expects + 25 random code files (46 files / 423 chunks), **the same
-corpus indexed twice** — enrichment off and on (Ollama `qwen3.5:9b`, descriptions in Turkish,
+corpus indexed twice** — enrichment off and on (Ollama `qwen3.5:9b`, descriptions in Turkish — this measurement
+predates `RAG_ENRICH_LANGUAGE`, whose default is now English,
 21 min, 0 rejections). Same golden set, auto+dense, k=8. The absolute numbers are higher than
 on the full corpus because a small corpus has fewer distractors; what to read is the gap
 between the two arms.
@@ -435,7 +437,7 @@ RAG_LIVE=1 uv run pytest -q tests/test_milvus_live.py   # store tests against a 
 uv run ruff check src tests && uv run ruff format --check src tests
 ```
 
-For the project layout and the binding decisions, see `CLAUDE.md` (Turkish).
+For the project layout and the binding decisions, see `CLAUDE.md`.
 
 ## Connecting an agent — MCP
 
@@ -459,7 +461,7 @@ The retriever returns something for every query, including an irrelevant one. In
 putting up a gate (cosine does not separate — see the measurement ledger) we make the agent
 the adjudicator and give it an honest signal — which is what professional systems do too
 (a calibrated score, or an LLM judge + citation + verification). In the `search_code` header:
-how many results are **DOKÜMAN** (so code inside a design document is not mistaken for real
+how many results are **DOCUMENT** (so code inside a design document is not mistaken for real
 code), the **weak match** note (`RAG_WEAK_DENSE_SCORE`), and the repo's last index time and
 status. `read_code` only opens files in the manifest — an invented path, `node_modules`, `.env`
 all come back as "not indexed or does not exist"; if the file changed after the last index it
@@ -478,4 +480,4 @@ An application that does not speak MCP does the same job over plain HTTP: `POST 
 has its own MCP server to this RAG, one setting on that service's side is enough:
 `RAG_SERVICE_URL=http://<host>:8090`.
 
-For deploying to a server, see `DEPLOYMENT.md` (Turkish). License: MIT.
+For deploying to a server, see `DEPLOYMENT.md`. License: MIT.

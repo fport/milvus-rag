@@ -1,1 +1,1 @@
-"""Arama katmanı: yönlendirme → kanallar → RRF → rerank."""
+"""The search layer: routing → channels → RRF → rerank."""

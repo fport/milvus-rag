@@ -44,7 +44,8 @@ def test_verify_secret_paths():
     assert verify_secret("s3cret", None, basic, None)
     assert verify_secret("s3cret", None, None, "s3cret")
     assert not verify_secret("s3cret", "wrong", None, None)
-    assert not verify_secret(None, "s3cret", None, None)  # sır yoksa hep kapalı
+    # With no secret configured it is always closed.
+    assert not verify_secret(None, "s3cret", None, None)
 
 
 def test_repo_manifest_and_jobs(db):
@@ -78,10 +79,10 @@ def test_repo_manifest_and_jobs(db):
 
 
 def test_enrichment_cache(db):
-    db.set_enrichments([("h1", "Oturumu okur."), ("h2", "Cache'e yazar.")], model="m")
+    db.set_enrichments([("h1", "Reads the session."), ("h2", "Writes to the cache.")], model="m")
     assert db.get_enrichments(["h1", "h2", "h3"], "m") == {
-        "h1": "Oturumu okur.",
-        "h2": "Cache'e yazar.",
+        "h1": "Reads the session.",
+        "h2": "Writes to the cache.",
     }
     assert db.get_enrichments(["h1"], "other") == {}
 
@@ -146,5 +147,5 @@ def test_app_settings_roundtrip(db):
         "github_token": "ghp_abc",
         "azure_org_url": "https://dev.azure.com/acme",
     }
-    db.set_app_setting("github_token", "")  # boş = sil
+    db.set_app_setting("github_token", "")  # empty = delete
     assert db.get_app_settings(["github_token"]) == {}

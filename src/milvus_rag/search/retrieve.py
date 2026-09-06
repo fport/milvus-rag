@@ -1,11 +1,11 @@
-"""Retrieval zinciri: yönlendir → kanal(lar) → RRF → rerank → top-k.
+"""The retrieval chain: route → channel(s) → RRF → rerank → top-k.
 
-Her parça bir ayarla kapanabilir (ablation için). Her sonuç kanal bazında
-skorlarını taşır: `dense`, `bm25`, `rrf`, `rerank`. Hangi kanalın neyi bulduğu
-veri yapısında görünür; eval ve hata ayıklama buna dayanır.
+Every stage can be switched off with a setting (for ablation). Every result carries its
+per-channel scores: `dense`, `bm25`, `rrf`, `rerank`. Which channel found what is
+visible in the data structure; eval and debugging rest on that.
 
-RRF iki listenin skorlarını atar, sıralarını kullanır: Σ 1/(k + rank). Cosine
-(0-1) ve BM25 (0-30) farklı ölçekte olduğundan toplanamaz.
+RRF discards the scores of the two lists and uses their ranks: Σ 1/(k + rank). Cosine
+(0-1) and BM25 (0-30) are on different scales and cannot be summed.
 """
 
 from __future__ import annotations
@@ -63,11 +63,11 @@ class SearchResponse:
     candidates: int
     timings_ms: dict[str, float] = field(default_factory=dict)
     cached: bool = False
-    # En iyi dense skoru `weak_dense_score`'un altında: sonuçlar döner ama tüketici
-    # "bulamadım" demeyi düşünmeli. Filtre değil sinyal — bkz. config.
+    # The best dense score is below `weak_dense_score`: results still come back, but the
+    # consumer should consider saying "I could not find it". A signal, not a filter — see config.
     weak_match: bool = False
-    # `min_dense_score` tabanının altında kaldığı için atılan parça sayısı: "8 aday
-    # vardı, hepsi saçmaydı" ile "hiç aday yoktu" tüketici için farklı cümleler.
+    # How many chunks were dropped for falling below the `min_dense_score` floor: "there
+    # were 8 candidates and all were nonsense" and "there were none" are different sentences.
     dropped: int = 0
 
     def to_dict(self) -> dict[str, Any]:
@@ -129,7 +129,7 @@ class Retriever:
         self._cache = _TTLCache(settings.cache_size, float(settings.cache_ttl_seconds))
 
     def invalidate(self) -> None:
-        """Bir repo yeniden indexlenince eski cevaplar eski satırları gösterir; hepsini at."""
+        """When a repo is re-indexed, old answers point at old lines; drop them all."""
         self._cache.clear()
 
     def search(self, request: SearchRequest) -> SearchResponse:
@@ -211,9 +211,9 @@ class Retriever:
 
 
 def apply_floor(mode: str, hits: Sequence[Hit], floor: float) -> tuple[list[Hit], int]:
-    """Sert taban: dense skoru tabanın altındaki parça atılır. BM25 skoru sınırsız
-    olduğundan sembol aramasına dokunulmaz; hybrid'de yalnız BM25'ten gelen (dense skoru
-    olmayan) parça tam kelime eşleşmesidir, kalır."""
+    """A hard floor: a chunk whose dense score is below it is dropped. BM25 scores are
+    unbounded, so symbol search is untouched; in hybrid, a chunk that came only from BM25
+    (with no dense score) is an exact word match and stays."""
     if mode == "bm25" or floor <= 0:
         return list(hits), 0
     kept = [hit for hit in hits if hit.scores.get("dense", 1.0) >= floor]
@@ -221,8 +221,9 @@ def apply_floor(mode: str, hits: Sequence[Hit], floor: float) -> tuple[list[Hit]
 
 
 def is_weak_match(mode: str, hits: Sequence[Hit], floor: float) -> bool:
-    """Boş sonuç zayıf değil, "yok"tur; BM25 skoru sınırsız olduğundan sembol
-    aramasında karar verilmez. Dense/hybrid'de en iyi dense skoru eşiğin altındaysa zayıf."""
+    """An empty result is not weak, it is "nothing"; BM25 scores are unbounded, so no
+    verdict is made on symbol search. On dense/hybrid, the best dense score below the
+    threshold means weak."""
     if not hits or mode == "bm25":
         return False
     best = max((hit.scores.get("dense", 0.0) for hit in hits), default=0.0)
@@ -236,7 +237,7 @@ def _resolve_mode(mode: str, prose_mode: str, query: str) -> str:
 
 
 def fuse_rrf(dense: Sequence[Hit], bm25: Sequence[Hit], k: int = 60) -> list[Hit]:
-    """Reciprocal rank fusion; kanal skorları korunur, `rrf` eklenir."""
+    """Reciprocal rank fusion; the channel scores survive and `rrf` is added."""
     merged: dict[str, Hit] = {}
     for channel_hits in (dense, bm25):
         for rank, hit in enumerate(channel_hits):

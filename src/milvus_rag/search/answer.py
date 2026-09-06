@@ -1,8 +1,8 @@
-"""Retriever sonuçlarını atıflı bir cevaba çevirir.
+"""Turns retriever results into a cited answer.
 
-Satır numaraları prompt'a girer ve her iddia için [n] atıf istenir: atıfsız
-cümle şüphelidir, halüsinasyon görünür olur. Parçalarda cevap yoksa model
-"bulamadım" der; uydurmaz.
+Line numbers go into the prompt and every claim is required to carry an [n]
+citation: a sentence without one is suspect, and hallucination becomes visible.
+If the chunks do not answer the question the model says so; it does not invent.
 """
 
 from __future__ import annotations
@@ -15,22 +15,25 @@ from milvus_rag.llm import LLM
 from milvus_rag.models import Hit
 from milvus_rag.search.retrieve import Retriever, SearchRequest, SearchResponse
 
-SYSTEM_PROMPT = """Sen bir yazılım ekibinin kod tabanını bilen teknik asistansın.
-Sana bir soru ve o kod tabanından alınmış numaralı kod parçaları verilecek.
+SYSTEM_PROMPT = """You are a technical assistant who knows a software team's codebase.
+You will be given a question and numbered code chunks taken from that codebase.
 
-Kurallar:
-1. YALNIZCA verilen parçalara dayanarak cevapla. Parçalarda olmayan bir şeyi bilmiyorsun.
-2. Her iddianı dayandığı parçanın numarasıyla işaretle: [1], [2] gibi. Atıfsız iddia yazma.
-3. Parçalar soruyu cevaplamıyorsa bunu açıkça söyle ve hangi dosyaya bakılabileceğini
-   parçalardan çıkarabiliyorsan öner. Uydurma.
-4. DOKÜMAN işaretli parçalar plan/tasarım metnidir: içinde geçen dosya, fonksiyon ve kod
-   kodda var olmayabilir. Onları "kodda böyle" diye sunma; "dokümana göre" de.
-5. Dosya yolu, fonksiyon, tip ve değişken adlarını aynen yaz, çevirme.
-6. Soru hangi dildeyse o dilde cevapla. Kısa ve doğrudan ol; gerekirse kod alıntıla."""
+Rules:
+1. Answer ONLY from the chunks given. Anything not in them, you do not know.
+2. Mark every claim with the number of the chunk it rests on: [1], [2]. Never write an
+   uncited claim.
+3. If the chunks do not answer the question, say so plainly, and suggest which file to
+   look at if the chunks let you infer it. Do not invent.
+4. Chunks marked DOCUMENT are plan/design text: the files, functions and code named in
+   them may not exist in the code. Do not present those as "the code says"; say
+   "according to the document".
+5. Write file paths, function, type and variable names verbatim; never translate them.
+6. Answer in the language the question was asked in. Be short and direct; quote code
+   where it helps."""
 
 WEAK_NOTE = (
-    "Not: en iyi eşleşme zayıf; bu seviyedeki parçalar sık sık alakasız çıkıyor. "
-    "Soruyu cevaplamıyorlarsa bunu söyle, zorlama."
+    "Note: the best match is weak; chunks at this level are often irrelevant. "
+    "If they do not answer the question, say so — do not force it."
 )
 
 
@@ -65,17 +68,17 @@ class AnswerResult:
 
 
 def build_prompt(question: str, hits: list[Hit], weak_match: bool = False) -> str:
-    """Tek istekte cevap üreten yol: ajan döngüsü yok, sinyaller prompt'a girer.
+    """The single-request path: no agent loop, the signals go into the prompt.
 
-    Doküman parçası etiketlenir (plan metnindeki kod gerçek sanılmasın), zayıf
-    eşleşme not düşülür ("bulamadım" demek serbest olsun).
+    Document chunks are labelled (so code inside a plan is not mistaken for real code)
+    and a weak match gets a note, leaving "I could not find it" available.
     """
     if not hits:
-        return f"(hiç kod parçası bulunamadı)\n\nSoru: {question}"
+        return f"(no code chunks were found)\n\nQuestion: {question}"
     blocks = []
     for index, hit in enumerate(hits, start=1):
         where = f"{hit.path}:{hit.start_line}-{hit.end_line}"
-        label = " — DOKÜMAN" if hit.category == "doc" else ""
+        label = " — DOCUMENT" if hit.category == "doc" else ""
         title = f" — {hit.kind} {hit.symbol}" if hit.symbol else ""
         context = f"\n{hit.context}" if hit.context else ""
         blocks.append(
@@ -84,10 +87,10 @@ def build_prompt(question: str, hits: list[Hit], weak_match: bool = False) -> st
         )
     note = f"\n\n{WEAK_NOTE}" if weak_match else ""
     return (
-        "KOD PARÇALARI (en alakalı önce):\n\n"
+        "CODE CHUNKS (most relevant first):\n\n"
         + "\n\n".join(blocks)
         + note
-        + f"\n\nSoru: {question}"
+        + f"\n\nQuestion: {question}"
     )
 
 

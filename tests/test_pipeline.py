@@ -1,7 +1,7 @@
-"""Artımlı index akışı, sahte embedder ve sahte Milvus ile.
+"""The incremental index flow, with a fake embedder and a fake Milvus.
 
-Milvus'a gerek yok: depo bir dict. Ölçülen şey akışın kendisi — değişen dosya
-yeniden yazılıyor mu, silinen siliniyor mu, aynı kalan embed ediliyor mu.
+No Milvus needed: the store is a dict. What is measured is the flow itself — is a
+changed file rewritten, is a deleted one deleted, is an unchanged one left alone.
 """
 
 from pathlib import Path
@@ -87,13 +87,13 @@ def test_incremental_sync(tmp_settings, db, tmp_path: Path):
     assert db.get_repo("demo").status == "ready"
     assert db.get_repo("demo").index_version == tmp_settings.index_version
 
-    # Değişiklik yok → hiçbir şey embed edilmez.
+    # Nothing changed → nothing is embedded.
     embedder.calls.clear()
     second = indexer.sync(db.get_repo("demo"))
     assert second.unchanged == 3 and second.added == second.modified == second.deleted == 0
     assert embedder.calls == []
 
-    # Bir dosya değişti, biri silindi, biri eklendi.
+    # One file changed, one was deleted, one was added.
     _write(root, "src/a.ts", "export function a() { return 42 }\n" * 3)
     (root / "src/b.ts").unlink()
     _write(root, "src/c.ts", "export const c = 3\n")
@@ -105,7 +105,7 @@ def test_incremental_sync(tmp_settings, db, tmp_path: Path):
     assert ("demo", ("src/b.ts",)) in store.deleted
     assert set(db.manifest("demo")) == paths
 
-    # Index sürümü değişti → zorla tam yeniden index.
+    # The index version changed → force a full re-index.
     db.update_repo("demo", index_version="eski")
     forced = indexer.sync(db.get_repo("demo"))
     assert forced.forced and forced.reason and forced.added == 3

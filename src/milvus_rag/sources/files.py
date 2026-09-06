@@ -1,20 +1,20 @@
-"""Bir çalışma kopyasını indexlenebilir dosyalara çevirir.
+"""Turns a working copy into indexable files.
 
-Git deposuysa dosya listesi `git ls-files` ile alınır: .gitignore'a saygı
-duyulur ve çalışma ağacındaki (henüz commit edilmemiş) dosyalar da görünür.
-Değilse dizin gezilir. Her iki yolda da aynı uzantı/boyut/ikili filtreleri
-uygulanır — node_modules'ü indexlemek hem 10x yavaş hem sonuçlar kütüphane
-koduyla dolar.
+For a git repo the file list comes from `git ls-files`: .gitignore is respected and
+files in the working tree (not committed yet) show up too. Otherwise the directory is
+walked. Both paths apply the same extension/size/binary filters — indexing node_modules
+is 10x slower and fills the results with library code.
 
-Dil kapsamı elle tablo değil, tree-sitter-language-pack'in grammar listesidir:
-uzantı adı pack'te bir grammar adıysa (`.lua`, `.vue`, `.zig`, `.php` …) o grammar
-kullanılır; adı farklı olanlar (`.ts` → typescript, `.cs` → csharp) küçük bir
-takma ad tablosundan geçer ve tablo içe aktarmada pack'e karşı doğrulanır —
-paket sürümü değişince çökmek yerine o uzantı düz pencereye iner. Grammar'ı
-olmayan ya da bilerek verilmeyen her şey yine indexlenir (paragraf/satır
-pencereleri). Üretim sistemlerinin yaptığı da bu; AST'nin ölçülen katkısı
-sınırlı (README.tr.md → Ölçüm defteri, "Chunk ablasyonu"), o yüzden dil başına kural
-yazılmaz.
+
+Language coverage is not a hand-written table, it is tree-sitter-language-pack's grammar
+list: if the extension name is a grammar name in the pack (`.lua`, `.vue`, `.zig`, `.php`
+…) that grammar is used; the ones whose names differ (`.ts` → typescript, `.cs` →
+csharp) go through a small alias table, and that table is validated against the pack at
+import time — when the package version changes, the extension falls back to plain
+windows instead of crashing. Anything without a grammar, or deliberately withheld from
+one, is still indexed (paragraph/line windows). Production systems do the same; the
+measured contribution of the AST is limited (README → Measurement ledger, "Chunk
+ablation"), which is why no rule is written per language.
 """
 
 import hashlib
@@ -31,11 +31,11 @@ from milvus_rag.index.scrub import scrub
 from milvus_rag.models import Category, SourceFile
 from milvus_rag.sources import git
 
-# Pack'in tanıdığı grammar adları (1.15.8'de 371). Literal tipten okunur; ağ yok.
+# The grammar names the pack knows (371 in 1.15.8). Read from the literal type; no network.
 PACK_GRAMMARS: frozenset[str] = frozenset(typing.get_args(SupportedLanguage))
 
-# Uzantı → grammar, yalnızca adları FARKLI olanlar. Aynı adlılar (".go" → go,
-# ".vue" → vue) tabloya girmez, `language_for`'daki kuralla eşleşir.
+# Extension → grammar, only for the ones whose names DIFFER. Matching names (".go" → go,
+# ".vue" → vue) never enter the table; they are matched by the rule in `language_for`.
 _ALIASES: dict[str, str] = {
     ".ts": "typescript",
     ".mts": "typescript",
@@ -60,7 +60,7 @@ _ALIASES: dict[str, str] = {
     ".hpp": "cpp",
     ".hh": "cpp",
     ".hxx": "cpp",
-    ".m": "objc",  # MATLAB da .m kullanır; şirket kodunda Obj-C daha olası
+    ".m": "objc",  # MATLAB uses .m too; in company code Obj-C is more likely
     ".mm": "objc",
     ".sh": "bash",
     ".bash": "bash",
@@ -108,8 +108,8 @@ _ALIASES: dict[str, str] = {
     ".ads": "ada",
     ".cls": "apex",
     ".trigger": "apex",
-    # ".cob"/".cbl" burada değil: cobol grammar'ı dengesiz parantezli girdide takılıyor
-    # (duman testi: > 300 s) → CODE_WITHOUT_GRAMMAR.
+    # ".cob"/".cbl" are not here: the cobol grammar hangs on unbalanced-paren input
+    # (smoke test: > 300 s) → CODE_WITHOUT_GRAMMAR.
     ".j2": "jinja2",
     ".jinja": "jinja2",
     ".jinja2": "jinja2",
@@ -120,7 +120,7 @@ GRAMMAR_ALIASES: dict[str, str] = {
     ext: grammar for ext, grammar in _ALIASES.items() if grammar in PACK_GRAMMARS
 }
 
-# Uzantısız ya da özel adlı dosyalar → grammar.
+# Files with no extension, or with a special name → grammar.
 GRAMMAR_BY_FILENAME: dict[str, str] = {
     name: grammar
     for name, grammar in {
@@ -134,20 +134,21 @@ GRAMMAR_BY_FILENAME: dict[str, str] = {
     if grammar in PACK_GRAMMARS
 }
 
-# Grammar'ı olsa da parser'a VERİLMEYEN kod uzantıları → lang etiketi. tree-sitter-sql
-# üretilmiş dev bir grammar ve drizzle migration dosyalarında segfault veriyor
-# (ölçüldü: drizzle/0000_*.sql); cobol dengesiz parantezde 300 s'yi aşıyor (duman
-# testi, 2026-09-01). py-tree-sitter 0.26'da parse'a süre sınırı konamıyor
-# (progress_callback yolu segfault) → tek koruma bu liste + tests/test_grammars_live.py.
-# Bunlar satır/paragraf pencereleriyle chunk'lanır, yine de indexlenir: SQL Server
-# prosedürleri bir .NET şirketinde iş mantığının kendisi.
+# Code extensions that have a grammar but are NOT handed to the parser → a lang label.
+# tree-sitter-sql is a huge generated grammar and segfaults on drizzle migration files
+# (measured: drizzle/0000_*.sql); cobol exceeds 300 s on unbalanced parens (smoke test,
+# 2026-09-01). py-tree-sitter 0.26 offers no time limit on a parse (the progress_callback
+# path segfaults) → this list plus tests/test_grammars_live.py is the only guard.
+# These are still indexed, chunked with line/paragraph windows: SQL Server procedures
+# are the business logic itself in a .NET shop.
 CODE_WITHOUT_GRAMMAR: dict[str, str] = {".sql": "sql", ".cob": "cobol", ".cbl": "cobol"}
 
 DOC_EXTENSIONS = frozenset({".md", ".mdx", ".markdown", ".rst", ".txt", ".adoc"})
 
-# Bilerek düz okunan metinler: config, şema, stil, şablon. Pack'te grammar'ı olsa
-# bile (json, yaml, css, html) parser'a gitmezler: ölçüldü, düz pencere retrieval'da
-# eşit; parser yalnız çökme yüzeyi ekler. `language_for` bunlara None döner.
+# Text we deliberately read flat: config, schema, style, template. Even when the pack has
+# a grammar (json, yaml, css, html) they never reach the parser: measured, plain windows
+# are equal on retrieval and the parser only adds crash surface. `language_for` returns
+# None for these.
 OTHER_EXTENSIONS = frozenset(
     {
         ".json",
@@ -192,8 +193,9 @@ OTHER_EXTENSIONS = frozenset(
     }
 )
 
-# Grammar'ı olsa da indexlenmeyen veri/çıktı/sır uzantıları (pack'te csv, diff, po
-# grammar'ı var; içerik kod değil, hacim büyük ya da sır taşır).
+# Data/output/secret extensions that are never indexed even when a grammar exists (the
+# pack has csv, diff and po grammars; the content is not code, the volume is large, or it
+# carries secrets).
 NEVER_INDEX_EXTENSIONS = frozenset(
     {
         ".csv",
@@ -213,7 +215,7 @@ NEVER_INDEX_EXTENSIONS = frozenset(
     }
 )
 
-# Uzantısı olmayan ama bilinen dosyalar.
+# Files with no extension but a known name.
 KNOWN_FILENAMES = frozenset(
     {
         "Dockerfile",
@@ -227,9 +229,10 @@ KNOWN_FILENAMES = frozenset(
     }
 )
 
-# Docker imajına gömülen ve duman testinden geçen grammar'lar (tests/test_grammars_live.py).
-# Pack ≥ 1.15 grammar'ı ilk kullanımda indirir; kapalı ağda ilk .kt dosyasında indirme
-# denemesi istemiyoruz. Liste dışı bir grammar ağ varsa yine iner, yoksa düz pencere.
+# Grammars baked into the Docker image that pass the smoke test (tests/test_grammars_live.py).
+# Pack ≥ 1.15 downloads a grammar on first use; on an offline host we do not want that
+# attempt on the first .kt file. A grammar outside the list still downloads if there is a
+# network, and falls back to plain windows if there is not.
 PREFETCH_GRAMMARS: frozenset[str] = (
     frozenset({*GRAMMAR_ALIASES.values(), *GRAMMAR_BY_FILENAME.values()})
     | frozenset(
@@ -295,15 +298,15 @@ IGNORED_DIRS = frozenset(
         ".dart_tool",
         "Pods",
         "DerivedData",
-        "packages",  # NuGet paket klasörü
+        "packages",  # the NuGet package folder
         "__snapshots__",
-        # WCF/SOAP araç üretimi proxy'ler (Reference.cs): binlerce satır, cevap yok.
+        # WCF/SOAP tool-generated proxies (Reference.cs): thousands of lines, no answers.
         "Connected Services",
         "Service References",
     }
 )
 
-# Üretilmiş / kilit / minified: hacim çok, cevap yok.
+# Generated / lock / minified: a lot of volume, no answers.
 IGNORED_SUFFIXES = (
     ".min.js",
     ".min.css",
@@ -341,12 +344,12 @@ IGNORED_FILENAMES = frozenset(
     }
 )
 
-# JSON dosyaları çoğu zaman veri dökümü; kodun onda birinden büyüğünü alma.
+# JSON files are usually data dumps; do not take one bigger than a tenth of the code limit.
 MAX_JSON_BYTES = 64_000
 
 
 def language_for(path: str) -> str | None:
-    """Dosyanın tree-sitter grammar adı; None ise düz pencereyle chunk'lanır."""
+    """The file's tree-sitter grammar name; None means it is chunked with plain windows."""
     name = PurePosixPath(path).name
     if name in GRAMMAR_BY_FILENAME:
         return GRAMMAR_BY_FILENAME[name]
@@ -382,7 +385,7 @@ def _suffix(path: str) -> str:
 
 
 def is_indexable_path(path: str, extra_extensions: frozenset[str] = frozenset()) -> bool:
-    """Sadece isme bakarak karar: uzantı, klasör ve üretilmiş dosya kuralları."""
+    """Decided from the name alone: extension, folder and generated-file rules."""
     posix = PurePosixPath(path)
     if IGNORED_DIRS & set(posix.parts[:-1]):
         return False
@@ -411,7 +414,7 @@ def sha256_of(data: bytes) -> str:
 
 
 def list_candidate_paths(root: Path) -> list[str]:
-    """Repo kökünden göreli, POSIX ayraçlı, sıralı yol listesi."""
+    """Paths relative to the repo root, POSIX separators, sorted."""
     root = root.resolve()
     if git.is_work_tree(root):
         paths = git.ls_files(root)
@@ -426,7 +429,7 @@ def list_candidate_paths(root: Path) -> list[str]:
 
 
 def read_source_file(root: Path, path: str, max_bytes: int) -> SourceFile | None:
-    """Dosyayı okur; ikili, çok büyük ya da UTF-8 olmayanı atlar."""
+    """Reads the file; skips binary, oversized and non-UTF-8 ones."""
     full = root / path
     try:
         if full.is_symlink() or not full.is_file():
@@ -492,13 +495,13 @@ class FileSlice:
     end: int
     total_lines: int
     text: str
-    # Diskteki içerik manifest'teki sha ile uyuşmuyor: dosya son indexten sonra
-    # değişmiş, aramanın verdiği satır numaraları kaymış olabilir.
+    # The content on disk does not match the sha in the manifest: the file changed after
+    # the last index, so the line numbers search returned may have shifted.
     stale: bool
 
 
 def normalize_path(path: str) -> str:
-    """ "./src/a.ts", "/src/a.ts" → "src/a.ts": manifest'in tuttuğu biçim."""
+    """ "./src/a.ts", "/src/a.ts" → "src/a.ts": the form the manifest keeps."""
     return str(PurePosixPath(path.strip().lstrip("/")))
 
 
@@ -511,26 +514,27 @@ def read_indexed_slice(
     default_lines: int = 200,
     max_lines: int = 400,
 ) -> FileSlice:
-    """Yalnızca manifest'teki (indexlenmiş) bir dosyadan satır aralığı okur.
+    """Reads a line range only from a file that is in the manifest (i.e. indexed).
 
-    Neden manifest: ajan bu aracı aramanın verdiği yolla çağırır. Uydurduğu ya da
-    index dışı bir yolu (node_modules, .env) okuyabilmesi hem sır sızdırır hem
-    "o dosya var" yanılgısı üretir. Manifest dışı = "indexli değil ya da yok";
-    ajanın duyması gereken cevap budur. Çıktı, index'e giren metin gibi scrub'lanır.
+    Why the manifest: an agent calls this tool with a path search gave it. Letting it read
+    an invented path, or one outside the index (node_modules, .env), both leaks secrets and
+    creates the illusion that "the file exists". Outside the manifest = "not indexed or does
+    not exist"; that is the answer the agent needs to hear. The output is scrubbed like the
+    text that goes into the index.
     """
     clean = normalize_path(path)
     expected_sha = manifest.get(clean)
     if expected_sha is None:
-        msg = f"{clean} indexli değil ya da yok"
+        msg = f"{clean} is not indexed or does not exist"
         raise FileReadError("not_indexed", msg)
     target = (root / clean).resolve()
     if root.resolve() not in target.parents or not target.is_file():
-        msg = f"{clean} indexlenmiş ama artık diskte yok"
+        msg = f"{clean} was indexed but is no longer on disk"
         raise FileReadError("missing", msg)
     data = target.read_bytes()
     lines = scrub(data.decode("utf-8", errors="replace")).text.splitlines()
     stop = min(end or start + default_lines - 1, len(lines), start + max_lines - 1)
-    stop = max(stop, start - 1)  # aralık dosyanın sonundan sonra başlıyorsa boş dilim
+    stop = max(stop, start - 1)  # an empty slice when the range starts past the end of the file
     return FileSlice(
         path=clean,
         start=start,

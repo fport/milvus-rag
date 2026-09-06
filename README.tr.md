@@ -67,7 +67,7 @@ karar aşağıda "ölçüldü" diye işaretli ve rakamı [Ölçüm defteri](#öl
 | **Üç bant** (0.45 taban · 0.55 not) | Cevap yokken "yok" der; gri bölgeyi uyarıyla döner | kNN "yakın olan yok" demez; cosine gri bölgede ayırmıyor (bulunan min 0.526 / çöp max 0.587) → sert kapı değil, sinyal + hakem ajan (CRAG'ın üç bandı) | **Tek cosine eşiği**: gerçekleri de keser · **Reranker kapısı**: %29 yanlış alarm, +550 ms (ölçüldü) · **LLM hakem**: her sorguya bir LLM çağrısı |
 | **MCP** (aynı süreç, `/mcp`) | Claude Code / Cursor için `search_code` · `read_code` · `list_repos` | Aynı retriever, ek süreç yok; ajan adayları alır, gerisini okuyarak karar verir; `read_code` yalnız indexli dosyayı okur | **stdio ayrı süreç**: model iki kez yüklenir · **Yalnız HTTP**: her ajan aracı elle sarılır |
 | **Golden eval** (Recall@k · MRR · abstain) | Her retrieval kararını sayıyla verir | 42 soru + 13 negatif; "sanki iyi oldu" yok, bayrak varsayılanı JSON düşmeden değişmez | **Ragas / TruLens**: LLM hakemli, yavaş ve pahalı; retrieval'ı doğrudan ölçmek yetiyor |
-| **LLM katmanı** (`auto`: Claude › OpenAI › yerel Ollama) | Atıflı cevap (`/ask`); istenirse chunk'lara Türkçe açıklama | Retrieval LLM'siz çalışır, LLM yalnız cevap katmanında; anahtar yoksa yerel `qwen3.5:9b` ile sıfır kurulum (ölçüldü, Kurulum → Yerel LLM) | **Yalnız bulut**: anahtarsız denenemez · **Yalnız yerel**: kalite/hız tavanı; ikisi de bayrakla · qwen2.5 enrichment'ta Çince'ye kayıyor (ölçüldü) → alfabe kontrolü |
+| **LLM katmanı** (`auto`: Claude › OpenAI › yerel Ollama) | Atıflı cevap (`/ask`); istenirse chunk'lara açıklama (`RAG_ENRICH_LANGUAGE`) | Retrieval LLM'siz çalışır, LLM yalnız cevap katmanında; anahtar yoksa yerel `qwen3.5:9b` ile sıfır kurulum (ölçüldü, Kurulum → Yerel LLM) | **Yalnız bulut**: anahtarsız denenemez · **Yalnız yerel**: kalite/hız tavanı; ikisi de bayrakla · qwen2.5 enrichment'ta Çince'ye kayıyor (ölçüldü) → alfabe kontrolü |
 
 Çevresi: Python 3.12 + uv, FastAPI + uvicorn, typer CLI, pydantic-settings; tek `docker compose`
 ile Milvus + etcd + MinIO. Dış dünyayla yalnızca HTTP konuşur, indexlediği repolara asla yazmaz.
@@ -195,7 +195,7 @@ pipeline akışı: kaynak → fark → chunk → embed → Milvus, canlı ilerle
 </p>
 
 Görseldeki arama bu reponun kendisine karşı çalışıyor: Türkçe düz cümle → dense kanal →
-`jobs.py`'deki `JobRunner`, 80 ms. **DOKÜMAN** rozeti plan/tasarım metninden gelen
+`jobs.py`'deki `JobRunner`, 80 ms. **DOCUMENT** rozeti plan/tasarım metninden gelen
 sonuçları koddan ayırır.
 
 | Uç | İş |
@@ -252,7 +252,8 @@ yeniden index yapar.
 | `RAG_PROSE_MODE` | `dense` | `dense` ya da `hybrid` (dense + BM25 → RRF, `RAG_RRF_K=60`) — ölçüldü, aşağıya bak |
 | `RAG_RERANK_ENABLED` | `false` | `RAG_CANDIDATES=40` aday → `bge-reranker-v2-m3` → `RAG_TOP_K=8` — ölçüldü, zarar etti |
 | `RAG_CHUNK_MAX_BYTES` / `MIN` | 2000 / 200 | chunk sınırları (≈500 token tavan) |
-| `RAG_ENRICH_ENABLED` | `false` | her chunk için LLM'den Türkçe açıklama, `indexed_text`'e girer (cache'li) |
+| `RAG_ENRICH_ENABLED` | `false` | her chunk için LLM'den açıklama, `indexed_text`'e girer (cache'li) |
+| `RAG_ENRICH_LANGUAGE` | `English` | açıklamaların dili — ölçülen kazanç, soruların sorulduğu dilde metin eklemekten geliyor; soru trafiğine göre ayarla |
 | `RAG_MIN_DENSE_SCORE` | `0.45` | sert taban: dense skoru bunun altındaki parça hiç dönmez (`dropped` sayar); BM25'e uygulanmaz; 0 = kapalı — ölçüldü, aşağıya bak |
 | `RAG_WEAK_DENSE_SCORE` | `0.55` | en iyi dense skoru bunun altındaysa yanıt `weak_match: true` taşır — **sinyal, filtre değil**; sonuçlar yine döner — ölçüldü, aşağıya bak |
 
@@ -315,7 +316,7 @@ yeterli; cosine notu %5 yanlış alarmla yakalıyor → o kaldı. Taban 0.45 gol
 şey düşürmedi, "tatil köyü" (0.366) ve "Kafka rebalance" (0.418) sorularını sıfır sonuca
 indirdi. Kaçan ikisi ("CSV export stream", "puppeteer") repoda gerçekten *benzer* kod olan
 sorular (0.598 / 0.544); orada karar ajanın. Sinyalin nasıl sunulduğu: MCP bölümü ve
-arayüz (zayıf eşleşme notu, DOKÜMAN rozeti, "N elendi").
+arayüz (zayıf eşleşme notu, DOCUMENT rozeti, "N elendi").
 
 **Chunk ablasyonu (2026-09-01).** Soru: tree-sitter (AST) chunk'ı düz pencereye göre ne
 kazandırıyor? Aynı korpus iki kez indexlendi: `ast` (mevcut chunker) ve `plain` (kod dosyaları
@@ -339,7 +340,8 @@ genişletirken beklenti bu ölçekte tutulmalı.
 dil bağımsız — Anthropic "contextual retrieval") ne kazandırıyor? Tam korpusta yerel modelle
 ~3,5 saat sürdüğü için küçük ve adil bir düzenek: golden'ın beklediği 21 dosya + rastgele 25 kod
 dosyası (46 dosya / 423 chunk) **aynı korpus iki kez** indexlendi — enrichment kapalı ve açık
-(Ollama `qwen3.5:9b`, açıklamalar Türkçe, 21 dk, 0 ret). Aynı golden, auto+dense, k=8. Mutlak
+(Ollama `qwen3.5:9b`, açıklamalar Türkçe — bu ölçüm `RAG_ENRICH_LANGUAGE` ayarından
+önce yapıldı, ayarın varsayılanı artık `English`, 21 dk, 0 ret). Aynı golden, auto+dense, k=8. Mutlak
 sayılar küçük korpusta (az dikkat dağıtıcı) tam korpustan yüksek; okunacak şey iki kol arasındaki fark.
 
 | Etiket | Recall@8 | MRR | EN-prose R@8 / MRR | TR-prose R@8 / MRR | sembol | abstain / false_weak |
@@ -432,7 +434,7 @@ gelir, hepsi salt okuma:
 Retriever her sorguya bir şey döndürür, alakasız sorguya da; kapı koymak yerine
 (cosine ayırmıyor, ölçüm defterine bak) ajanı hakem yapıyoruz ve ona dürüst sinyal
 veriyoruz — profesyonel sistemlerin de yaptığı bu (kalibre skor ya da LLM hakem + atıf +
-doğrulama). `search_code` başlığında: kaç sonucun **DOKÜMAN** olduğu (plan metnindeki
+doğrulama). `search_code` başlığında: kaç sonucun **DOCUMENT** olduğu (plan metnindeki
 kod gerçek sanılmasın), **zayıf eşleşme** notu (`RAG_WEAK_DENSE_SCORE`), reponun son index
 zamanı ve durumu. `read_code` yalnızca manifest'teki dosyayı okur — uydurma yol,
 `node_modules`, `.env` hepsi "indexli değil ya da yok" döner, dosya son indexten sonra

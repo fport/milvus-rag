@@ -1,15 +1,15 @@
-"""İş kuyruğu: index işleri sırayla, tek worker thread'inde.
+"""The job queue: index jobs run in order, on a single worker thread.
 
-Neden tek worker: indexleme CPU'ya bağlı (embedding) ve Milvus'a yazıyor; iki
-repoyu aynı anda indexlemek ikisini de yavaşlatır, hiçbirini hızlandırmaz.
-Repo başına tek bekleyen iş garantisi var (BullMQ'daki jobId dedupe gibi): aynı
-repoya beş push gelirse bir iş çalışır, bir iş bekler.
+Why a single worker: indexing is CPU-bound (embedding) and writes to Milvus; indexing
+two repos at once slows both down and speeds up neither. There is a one-pending-job-
+per-repo guarantee (like jobId dedupe in BullMQ): if five pushes hit the same repo,
+one job runs and one waits.
 
-İş kaydı SQLite'ta; süreç yeniden başlarsa "running" kalanlar failed olur,
-"queued" olanlar yeniden kuyruğa girer.
+Job records live in SQLite; after a restart the ones left "running" become failed and
+the "queued" ones are re-queued.
 
-Poller: webhook kurulmamışsa ya da kaçtıysa, Azure'daki branch head'i ile son
-indexlenen commit'i karşılaştırır.
+The poller: if a webhook was never set up, or one was missed, it compares the branch
+head upstream against the last indexed commit.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ class JobRunner:
 
     # ---------------------------------------------------------------- queue
     def enqueue(self, repo_id: str, trigger: JobTrigger, force: bool = False) -> tuple[Job, bool]:
-        """(iş, yeni mi). Zaten bekleyen bir iş varsa o döner."""
+        """(job, is_new). If a job is already pending, that one comes back."""
         active = [
             job
             for job in self.db.list_jobs(repo_id, limit=20)
@@ -69,7 +69,7 @@ class JobRunner:
             return queued, False
         job = self.db.create_job(repo_id, trigger, force)
         self._submit(job.id)
-        log.info("iş kuyruğa alındı", job=job.id, repo=repo_id, trigger=trigger, force=force)
+        log.info("job queued", job=job.id, repo=repo_id, trigger=trigger, force=force)
         return job, True
 
     def _submit(self, job_id: str) -> None:
@@ -80,9 +80,9 @@ class JobRunner:
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._queue = asyncio.Queue()
-        interrupted = self.db.fail_running_jobs("süreç yeniden başladı; iş yarıda kaldı")
+        interrupted = self.db.fail_running_jobs("the process restarted; the job was cut short")
         if interrupted:
-            log.warning("yarım kalmış işler failed yapıldı", count=interrupted)
+            log.warning("interrupted jobs marked failed", count=interrupted)
         for job in self.db.queued_jobs():
             self._queue.put_nowait(job.id)
         self._tasks.append(asyncio.create_task(self._worker(), name="rag-job-worker"))
@@ -106,20 +106,20 @@ class JobRunner:
             try:
                 await loop.run_in_executor(self._executor, self.run_job, job_id)
             except Exception as error:
-                log.error("iş beklenmedik biçimde düştü", job=job_id, error=str(error))
+                log.error("job crashed unexpectedly", job=job_id, error=str(error))
             finally:
                 self._queue.task_done()
 
     # ------------------------------------------------------------------ run
     def run_job(self, job_id: str) -> IndexStats | None:
-        """Bir işi bu thread'de çalıştırır. Worker da CLI de bunu kullanır."""
+        """Runs one job on this thread. Both the worker and the CLI use it."""
         job = self.db.get_job(job_id)
         if job is None or job.status != "queued":
             return None
         repo = self.db.get_repo(job.repo_id)
         if repo is None:
             self.db.update_job(
-                job_id, status="skipped", error="repo silinmiş", finished_at=now_iso()
+                job_id, status="skipped", error="repo was deleted", finished_at=now_iso()
             )
             return None
 
@@ -136,7 +136,7 @@ class JobRunner:
             stats = self.indexer.sync(repo, force=job.force, on_progress=report)
         except Exception as error:
             message = f"{type(error).__name__}: {error}"
-            log.error("sync başarısız", job=job_id, repo=repo.id, error=message)
+            log.error("sync failed", job=job_id, repo=repo.id, error=message)
             self.db.update_job(job_id, status="failed", error=message[:2000], finished_at=now_iso())
             self.db.update_repo(repo.id, status="error", error=message[:2000])
             return None
@@ -150,7 +150,7 @@ class JobRunner:
         )
         self.retriever.invalidate()
         log.info(
-            "iş bitti",
+            "job finished",
             job=job_id,
             repo=repo.id,
             seconds=round(time.perf_counter() - started, 1),
@@ -159,7 +159,7 @@ class JobRunner:
         return stats
 
     def run_now(self, repo_id: str, trigger: JobTrigger = "manual", force: bool = False) -> Job:
-        """CLI için: kuyruğa koymadan, bu thread'de çalıştır ve iş kaydını döndür."""
+        """For the CLI: run it on this thread without queueing and return the job record."""
         job = self.db.create_job(repo_id, trigger, force)
         self.run_job(job.id)
         return self.db.get_job(job.id) or job
@@ -172,11 +172,11 @@ class JobRunner:
             try:
                 await asyncio.get_running_loop().run_in_executor(None, self.poll_once)
             except Exception as error:
-                log.warning("poll turu başarısız", error=str(error))
+                log.warning("poll round failed", error=str(error))
             await asyncio.sleep(interval)
 
     def poll_once(self) -> list[dict[str, Any]]:
-        """Uzak repoların head'ini karşılaştır; değişeni kuyruğa al."""
+        """Compare the heads of the remote repos; queue the ones that moved."""
         triggered: list[dict[str, Any]] = []
         for repo in self.db.list_repos():
             if not repo.auto_sync or repo.status == "indexing":
@@ -189,12 +189,12 @@ class JobRunner:
                 else:
                     continue
             except (AzureError, GitHubError) as error:
-                log.warning("poll: head okunamadı", repo=repo.id, error=str(error))
+                log.warning("poll: could not read head", repo=repo.id, error=str(error))
                 continue
             if head and head != repo.last_commit:
                 job, created = self.enqueue(repo.id, "poll")
                 triggered.append(
                     {"repo_id": repo.id, "head": head, "job_id": job.id, "new": created}
                 )
-                log.info("poll: değişiklik bulundu", repo=repo.id, head=head[:12], job=job.id)
+                log.info("poll: change found", repo=repo.id, head=head[:12], job=job.id)
         return triggered

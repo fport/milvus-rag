@@ -1,8 +1,8 @@
-"""Repo kaydı: Azure DevOps'tan, yerel bir dizinden ya da düz bir git URL'sinden.
+"""Registering a repo: from Azure DevOps, a local directory or a plain git URL.
 
-Repo id'si Milvus partition key'i ve dosya yollarının öneki; kısa, güvenli ve
-kararlı olmalı (`azure-proje-repo`). Aynı id ikinci kez kaydedilirse mevcut
-kayıt döner — kayıt idempotent.
+The repo id is the Milvus partition key and the prefix of file paths; it has to be
+short, safe and stable (`azure-project-repo`). Registering the same id twice returns
+the existing record — registration is idempotent.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from milvus_rag.sources.github import GitHub, split_full_name
 log = get_logger("repos")
 
 _SLUG_CHARS = re.compile(r"[^a-z0-9]+")
+# Repo names can carry diacritics; fold the common Turkish ones into ASCII for the slug.
 _TR_MAP = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosucgiosu")
 
 
@@ -55,11 +56,14 @@ class RepoService:
         self, project: str, repo: str, branch: str | None = None, auto_sync: bool = True
     ) -> Repo:
         if self.azure is None:
-            msg = "Azure DevOps yapılandırılmamış: AZURE_DEVOPS_ORG_URL ve AZURE_DEVOPS_PAT gerekli"
+            msg = (
+                "Azure DevOps is not configured: "
+                "AZURE_DEVOPS_ORG_URL and AZURE_DEVOPS_PAT are required"
+            )
             raise RepoError(msg)
         info = self.azure.get_repo(project, repo)
         if info.is_disabled:
-            msg = f"{info.name} Azure'da devre dışı"
+            msg = f"{info.name} is disabled on Azure"
             raise RepoError(msg)
         chosen = branch or info.default_branch
         repo_id = slugify(f"{info.project or project}-{info.name}")
@@ -87,14 +91,14 @@ class RepoService:
     def register_github(
         self, full_name: str, branch: str | None = None, auto_sync: bool = True
     ) -> Repo:
-        """`owner/repo` kaydeder. Token yoksa public repolar çalışır."""
+        """Registers `owner/repo`. Public repos work without a token."""
         if self.github is None:
-            msg = "GitHub istemcisi kurulmamış"
+            msg = "the GitHub client is not configured"
             raise RepoError(msg)
         owner, name = split_full_name(full_name)
         info = self.github.get_repo(owner, name)
         if info.archived:
-            msg = f"{info.full_name} arşivlenmiş"
+            msg = f"{info.full_name} is archived"
             raise RepoError(msg)
         if info.private and not self.github.token:
             msg = f"{info.full_name} private; GITHUB_TOKEN gerekli"
@@ -125,7 +129,7 @@ class RepoService:
     def register_local(self, path: str, name: str | None = None, auto_sync: bool = False) -> Repo:
         root = Path(path).expanduser().resolve()
         if not root.is_dir():
-            msg = f"dizin yok: {root}"
+            msg = f"no such directory: {root}"
             raise RepoError(msg)
         label = name or root.name
         repo_id = slugify(label)
@@ -172,11 +176,11 @@ class RepoService:
     def remove(self, repo_id: str) -> None:
         repo = self.db.get_repo(repo_id)
         if repo is None:
-            msg = f"repo yok: {repo_id}"
+            msg = f"no such repo: {repo_id}"
             raise RepoError(msg)
         self.store.delete_repo(repo_id)
         self.db.delete_repo(repo_id)
-        # Yalnızca bizim klonladığımızı sil; kullanıcının yerel dizinine dokunma.
+        # Only delete what we cloned ourselves; never touch the user's own directory.
         clone = Path(repo.local_path)
         repos_dir = self.settings.repos_dir.resolve()
         if repo.provider != "local" and clone.exists() and repos_dir in clone.resolve().parents:

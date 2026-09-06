@@ -1,19 +1,21 @@
-"""Kaynak dosyayı retrieval birimlerine böler.
+"""Splits a source file into retrieval units.
 
-Kod için chunk = kod birimi: fonksiyon, sınıf, metod, interface, type, export
-edilmiş const. Sınırlar gerçek bir parser'dan (tree-sitter) gelir; süslü parantez
-saymak string içindeki `}` ile bozulur. Dört kural:
+For code a chunk is a code unit: a function, class, method, interface, type, exported
+const. The boundaries come from a real parser (tree-sitter); counting braces breaks on
+a `}` inside a string. Four rules:
 
-1. Büyük sınıf/namespace → üyelerine bölünür; başlık + alanlar ayrı chunk olur.
-2. Küçük şeyler (tek satır type, kısa const, import bloğu, JSDoc) komşusuyla
-   birleşir; ~MIN byte altına inilmez.
-3. Hiçbir chunk ~MAX byte'ı geçmez (≈500 token). Model 8192 token alsa da uzun
-   chunk'ın embedding'i "ortalama"ya döner, hiçbir şeyi iyi temsil etmez. Tek
-   başına MAX'ı aşan bir fonksiyon satır pencerelerine bölünür, sembolünü korur.
-4. `text` temiz kalır (LLM'e ve atıfa giden); "ben neyim, nerede yaşıyorum"
-   başlığı yalnızca embed/BM25 metnine eklenir.
+1. A large class/namespace → split into its members; the header + fields become their
+   own chunk.
+2. Small things (a one-line type, a short const, an import block, a JSDoc comment) are
+   merged with a neighbour; nothing goes below ~MIN bytes.
+3. No chunk exceeds ~MAX bytes (≈500 tokens). Even though the model takes 8192 tokens,
+   the embedding of a long chunk turns into an "average" and represents nothing well. A
+   function that exceeds MAX on its own is split into line windows, keeping its symbol.
+4. `text` stays clean (it is what reaches the LLM and the citation); the "what am I,
+   where do I live" header is added only to the embed/BM25 text.
 
-Markdown başlık yoluna göre, grammar'sız metin paragraf pencerelerine bölünür.
+Markdown is split along its heading path, and text without a grammar into paragraph
+windows.
 """
 
 from __future__ import annotations
@@ -34,8 +36,8 @@ log = get_logger("chunk")
 if TYPE_CHECKING:
     from tree_sitter import Node
 
-# Grammar'lar arası birleşik "kod birimi" düğüm türleri. Bir düğüm burada
-# yoksa dolgudur (import, yorum, top-level ifade) ve komşusuna yapışır.
+# "Code unit" node types unified across grammars. A node that is not listed here is
+# filler (an import, a comment, a top-level statement) and sticks to its neighbour.
 UNIT_TYPES = frozenset(
     {
         # JS / TS
@@ -95,12 +97,12 @@ UNIT_TYPES = frozenset(
         "declaration",
         # PHP
         "trait_declaration",
-        # Razor (.razor / .cshtml): @code / @functions blokları; üyeleri C# düğümleri
+        # Razor (.razor / .cshtml): @code / @functions blocks; their members are C# nodes
         "razor_block",
     }
 )
 
-# Sığmazsa üyelerine inilen kapsayıcılar.
+# Containers we descend into, member by member, when they do not fit.
 CONTAINER_TYPES = frozenset(
     {
         "class_declaration",
@@ -125,7 +127,7 @@ CONTAINER_TYPES = frozenset(
     }
 )
 
-# Dış sarmalayıcı → içindeki asıl bildirimin alanı.
+# The outer wrapper → the span of the real declaration inside it.
 WRAPPER_FIELDS: dict[str, str] = {
     "export_statement": "declaration",
     "decorated_definition": "definition",
@@ -159,7 +161,7 @@ IMPORT_TYPES = frozenset(
     }
 )
 
-# Düğüm türü → normalize edilmiş tür adı (başlıkta ve `kind` alanında görünür).
+# Node type → normalized type name (shown in the header and in the `kind` field).
 KIND_BY_TYPE: dict[str, str] = {
     "function_declaration": "function",
     "generator_function_declaration": "function",
@@ -225,11 +227,11 @@ _BLANK_LINES = re.compile(r"\n\s*\n")
 
 
 class _Lines:
-    """Byte ofseti → 0 tabanlı satır; tree-sitter'ın start_point/end_point'i yerine.
+    """Byte offset → 0-based line; a stand-in for tree-sitter's start_point/end_point.
 
-    Point erişimi py-tree-sitter 0.26 + language-pack 1.15 ile uzun süreçte
-    segfault verdi (ölçüldü: 39. dosyada, tek başına aynı dosya geçiyor). Satır
-    numarasını kaynaktan kendimiz hesaplıyoruz; bisect ile O(log n).
+    Touching Point segfaulted in a long-running process with py-tree-sitter 0.26 +
+    language-pack 1.15 (measured: on the 39th file, while the same file passes on its
+    own). We compute the line from the source ourselves; O(log n) with a bisect.
     """
 
     def __init__(self, data: bytes) -> None:
@@ -246,7 +248,7 @@ class _Lines:
 
 @dataclass(frozen=True, slots=True)
 class Piece:
-    """Parser'dan çıkan, henüz paketlenmemiş aralık."""
+    """A span coming out of the parser, not packed into a chunk yet."""
 
     start: int
     end: int
@@ -268,7 +270,7 @@ class ChunkerConfig:
 
 
 def chunk_file(path: str, text: str, config: ChunkerConfig | None = None) -> list[ChunkRecord]:
-    """Dosyayı chunk'lara böler. Her dosya için en az bir chunk döner (boş değilse)."""
+    """Splits a file into chunks. Every file gets at least one chunk (unless it is empty)."""
     config = config or ChunkerConfig()
     if not text.strip():
         return []
@@ -284,10 +286,10 @@ def chunk_file(path: str, text: str, config: ChunkerConfig | None = None) -> lis
 
 
 def split_identifiers(text: str, limit: int = MAX_TOKENS) -> str:
-    """camelCase / snake_case / PascalCase adları BM25 için alt kelimelere böler.
+    """Splits camelCase / snake_case / PascalCase names into sub-words for BM25.
 
-    `handleAuthCallback` standart analyzer'da tek token kalır; "auth callback
-    nerede" sorusu ona değmez. Alt kelimeler küçük harfle, sıralı, tekil.
+    `handleAuthCallback` stays a single token in the standard analyzer, so "where is the
+    auth callback" never touches it. Sub-words are lowercased, ordered and unique.
     """
     parts: set[str] = set()
     for word in _IDENTIFIER.findall(text):
@@ -301,7 +303,7 @@ def split_identifiers(text: str, limit: int = MAX_TOKENS) -> str:
 
 
 def build_indexed_text(record: ChunkRecord, context: str = "") -> str:
-    """Embed ve BM25'e giden metin: başlık → (LLM açıklaması) → semboller → kod → alt kelimeler."""
+    """Text for embed and BM25: header → (LLM description) → symbols → code → sub-words."""
     sections = [record.header]
     if context:
         sections.append(context)
@@ -318,10 +320,10 @@ def build_indexed_text(record: ChunkRecord, context: str = "") -> str:
 
 
 _PARSE_LOCK = threading.Lock()
-# Language nesneleri süreç boyunca burada yaşar. tree-sitter-language-pack'in
-# get_parser()'ı Language'ı parser'a zayıf bağlıyor; Language erken serbest
-# kalınca ağaç üstündeki child_by_field_name() sarkan işaretçiyle segfault
-# veriyor (ölçüldü: aynı dosya tek başına geçiyor, 40. dosyada çöküyordu).
+# Language objects live here for the life of the process. tree-sitter-language-pack's
+# get_parser() binds the Language to the parser weakly; if the Language is freed early,
+# child_by_field_name() on the tree segfaults through a dangling pointer (measured: the
+# same file passes on its own, and it crashed on the 40th file).
 _LANGUAGES: dict[str, Any] = {}
 _PARSERS: dict[str, Any] = {}
 
@@ -335,10 +337,12 @@ def _parser_for(language: str) -> Any | None:
 
         grammar = get_language(language)
         parser = Parser(grammar)
-    except Exception as error:  # pack'te yok / indirilemedi (kapalı ağ) / yüklenemedi
-        # Bir kez logla ve başarısızlığı da önbelleğe al: yoksa o dilin her dosyası
-        # yeniden indirme denemesiyle bekler. Dosyalar düz pencereye iner.
-        log.warning("grammar yüklenemedi, düz pencere", language=language, error=str(error))
+    except Exception as error:  # not in the pack / could not download (offline) / failed to load
+        # Log once and cache the failure too: otherwise every file in that language waits
+        # on another download attempt. Those files fall back to plain windows.
+        log.warning(
+            "grammar could not be loaded, plain windows", language=language, error=str(error)
+        )
         _PARSERS[language] = None
         return None
     _LANGUAGES[language] = grammar
@@ -434,8 +438,8 @@ def _body_of(node: Node) -> Node | None:
     for child in node.children:
         if child.type in BODY_TYPES or child.type.endswith("_body"):
             return child
-    # C# file-scoped namespace ve Razor @code bloğu: üyeler doğrudan çocuk. Adı /
-    # süslü parantezi atlayıp gövde olarak düğümün kendisini kullan.
+    # A C# file-scoped namespace and a Razor @code block: the members are direct children.
+    # Skip the name / brace and use the node itself as the body.
     if node.type in ("file_scoped_namespace_declaration", "razor_block"):
         return node
     return None
@@ -497,7 +501,7 @@ def _imports(root: Node, data: bytes) -> list[str]:
     for node in root.children:
         candidates = [node]
         if node.type == "import_declaration" and node.children:
-            # Go: import ( "a" "b" ) — spec'ler alt düğümde.
+            # Go: import ( "a" "b" ) — the specs live in a child node.
             candidates = [child for child in node.children if child.is_named] or [node]
         for candidate in candidates:
             if candidate.type not in IMPORT_TYPES and candidate.type != "import_spec":
@@ -606,7 +610,7 @@ def _pack(
 
 
 def _line_windows(piece: Piece, data: bytes, max_bytes: int) -> list[Piece]:
-    """MAX'ı aşan tek birimi satır pencerelerine böler; sembol ve tür korunur."""
+    """Splits a single unit that exceeds MAX into line windows; symbol and type survive."""
     segment = data[piece.start : piece.end]
     lines = segment.split(b"\n")
     windows: list[Piece] = []
@@ -628,7 +632,7 @@ def _line_windows(piece: Piece, data: bytes, max_bytes: int) -> list[Piece]:
             replace(piece, start=start_offset, end=end_offset, start_row=start_row, end_row=row - 1)
         )
         if index < len(lines) and count > LINE_WINDOW_OVERLAP:
-            # Küçük bir örtüşme: pencere sınırındaki bir ifade iki parçada da okunabilsin.
+            # A small overlap: a statement on a window boundary stays readable in both.
             back = LINE_WINDOW_OVERLAP
             for _ in range(back):
                 index -= 1
@@ -753,7 +757,7 @@ def _chunk_plain(path: str, text: str, config: ChunkerConfig) -> list[ChunkRecor
 
 
 def _paragraph_windows(text: str, start: int, end: int, max_bytes: int) -> list[tuple[int, int]]:
-    """Boş satırlarda böl, MAX'a kadar paketle; tek paragraf MAX'ı aşarsa satırlara in."""
+    """Split on blank lines, pack up to MAX; if one paragraph exceeds MAX, go down to lines."""
     boundaries = [start, *(m.end() for m in _BLANK_LINES.finditer(text, start, end)), end]
     windows: list[tuple[int, int]] = []
     window_start = start
@@ -771,7 +775,7 @@ def _paragraph_windows(text: str, start: int, end: int, max_bytes: int) -> list[
             if cursor > window_start:
                 windows.append((window_start, cursor))
         else:
-            # Pencereyi açık tut; bir sonraki paragraf da sığabilir.
+            # Keep the window open; the next paragraph may still fit.
             if windows and windows[-1][1] == window_start:
                 continue
             windows.append((window_start, cursor))

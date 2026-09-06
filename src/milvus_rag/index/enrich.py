@@ -1,18 +1,24 @@
-"""İsteğe bağlı: her chunk için LLM'den 2-3 cümlelik Türkçe açıklama.
+"""Optional: a 2-3 sentence description of every chunk, from the LLM.
 
-Bir kod parçasında doğal dil yok denecek kadar az; olanı da yazarının yorum
-dilinde. Önceki bir denemede ölçüldü: Türkçe düz sorular, İngilizce
-kod üstünde recall@5 = 0.04. Çare daha iyi eşleştirici değil, eksik metni yazmak
-(Anthropic "contextual retrieval": retrieval hatasında %35 düşüş).
+A piece of code contains almost no natural language, and what it does contain is in
+whatever language its author wrote comments in. Measured in an earlier experiment:
+plain-language questions in one language, over code in another, scored recall@5 = 0.04.
+The cure is not a better matcher, it is writing the missing prose (Anthropic's
+"contextual retrieval": a 35% drop in retrieval failures).
 
-BGE-M3 çok dilli olduğu için bu katman varsayılan olarak kapalı; açmadan önce
-`rag eval` ile ölç. Açıksa açıklamalar chunk hash'iyle cache'lenir: yeniden
-index aynı parayı ikinci kez ödemez.
+Because BGE-M3 is multilingual this layer is off by default; measure with `rag eval`
+before turning it on. When it is on, descriptions are cached by chunk hash, so
+re-indexing does not pay the same bill twice.
 
-Dosya başına tek çağrı (dosyanın tamamı + numaralı parçalar). Yanıt kapsama
-kontrolünden geçer: 7B bir model tek nesne döndürüp gerisini sessizce atabilir.
-Türkçe olmayan alfabe (CJK, Hangul, Kiril) reddedilir — qwen2.5:7b yük altında
-cümle ortasında Çince'ye kayıyor ve bunu söylemiyor.
+The output language is `RAG_ENRICH_LANGUAGE`: the gain comes from adding prose in the
+language questions are asked in, so it should match your question traffic. It is part of
+the cache key — changing it regenerates descriptions rather than serving stale ones.
+
+One call per file (the whole file + numbered chunks). The answer goes through a coverage
+check: a 7B model will happily return one object and drop the rest in silence. Drifting
+into CJK, Hangul or Cyrillic is rejected — qwen2.5:7b slides into Chinese mid-sentence
+under load and does not mention it. (If you set a language written in one of those
+scripts, that guard is the thing to adjust.)
 """
 
 from __future__ import annotations
@@ -31,22 +37,22 @@ log = get_logger("enrich")
 
 FILE_CONTEXT_CHARS = 8_000
 
-SYSTEM_PROMPT = """Sen bir kod tabanını Türkçe belgeleyen teknik yazarsın.
-Sana bir dosyanın tamamı ve o dosyadan numaralandırılmış parçalar verilecek.
-HER PARÇA için, o parçadaki kodun ne yaptığını 2-3 cümleyle Türkçe anlat.
+SYSTEM_PROMPT_TEMPLATE = """You are a technical writer documenting a codebase in {language}.
+You will be given a whole file and numbered chunks taken from that file.
+For EVERY CHUNK, say in 2-3 sentences, in {language}, what the code in that chunk does.
 
-Şu JSON şemasında yanıt ver, başka hiçbir şey yazma:
-{"parcalar": [{"n": <parça numarası>, "aciklama": "<2-3 cümle Türkçe>"}]}
+Answer with this JSON schema and nothing else:
+{{"chunks": [{{"n": <chunk number>, "description": "<2-3 sentences in {language}>"}}]}}
 
-Zorunlu kurallar:
-- VERİLEN HER parça için bir girdi yaz. Hiçbirini atlama.
-- Yalnızca ilgili parçadaki kodu anlat, dosyanın geri kalanını değil.
-- Fonksiyon, değişken, tip ve tablo isimlerini ÇEVİRME, İngilizce aynen yaz.
-- "Bu parça", "bu dosya" diye başlama; doğrudan kodun ne yaptığını yaz.
-- Parçada geçmeyen bir fonksiyondan bahsetme. Emin değilsen kısa yaz, uydurma."""
+Hard rules:
+- Write one entry for EVERY chunk you are given. Skip none.
+- Describe only the code in that chunk, not the rest of the file.
+- Do NOT translate function, variable, type or table names; keep them verbatim.
+- Do not open with "This chunk" or "This file"; say directly what the code does.
+- Never mention a function that is not in the chunk. If unsure, write less; invent nothing."""
 
 _JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
-_WRONG_SCRIPT = re.compile(r"[぀-ヿ一-鿿가-힯Ѐ-ӿ]")
+_DRIFT_SCRIPT = re.compile(r"[぀-ヿ一-鿿가-힯Ѐ-ӿ]")
 
 
 def chunk_hash(record: ChunkRecord) -> str:
@@ -55,29 +61,34 @@ def chunk_hash(record: ChunkRecord) -> str:
 
 def is_usable(description: str) -> bool:
     text = description.strip()
-    return len(text) >= 20 and not _WRONG_SCRIPT.search(text)
+    return len(text) >= 20 and not _DRIFT_SCRIPT.search(text)
 
 
 class Enricher:
-    def __init__(self, llm: LLM, db: Database, batch_chunks: int = 6) -> None:
+    def __init__(
+        self, llm: LLM, db: Database, batch_chunks: int = 6, language: str = "English"
+    ) -> None:
         self.llm = llm
         self.db = db
         self.batch_chunks = batch_chunks
+        self.language = language
+        self.system_prompt = SYSTEM_PROMPT_TEMPLATE.format(language=language)
         self.generated = 0
         self.cached = 0
         self.rejected = 0
         self.failures = 0
 
     @property
-    def model(self) -> str:
-        return self.llm.model
+    def cache_key(self) -> str:
+        # The language is part of the key: switching it must regenerate, not serve stale text.
+        return f"{self.llm.model}:{self.language}"
 
     def describe(self, path: str, text: str, records: Sequence[ChunkRecord]) -> list[str]:
-        """Kayıt başına bir açıklama; üretilemeyen için boş string."""
+        """One description per record; an empty string where none could be produced."""
         if not records:
             return []
         hashes = [chunk_hash(record) for record in records]
-        known = self.db.get_enrichments(hashes, self.model)
+        known = self.db.get_enrichments(hashes, self.cache_key)
         self.cached += len(known)
         descriptions = [known.get(digest, "") for digest in hashes]
         missing = [index for index, digest in enumerate(hashes) if digest not in known]
@@ -93,24 +104,23 @@ class Enricher:
                     descriptions[index] = description
                     fresh.append((hashes[index], description))
         if fresh:
-            self.db.set_enrichments(fresh, self.model)
+            self.db.set_enrichments(fresh, self.cache_key)
         return descriptions
 
     def _describe_batch(
         self, path: str, text: str, records: Sequence[ChunkRecord], indices: list[int]
     ) -> list[str]:
         parts = "\n\n".join(
-            f"### Parça {number}\n{records[index].text}" for number, index in enumerate(indices, 1)
+            f"### Chunk {number}\n{records[index].text}" for number, index in enumerate(indices, 1)
         )
         user = (
-            f"Dosya: {path}\n\n```\n{text[:FILE_CONTEXT_CHARS]}\n```\n\n"
-            f"Numaralandırılmış parçalar:\n\n{parts}"
+            f"File: {path}\n\n```\n{text[:FILE_CONTEXT_CHARS]}\n```\n\nNumbered chunks:\n\n{parts}"
         )
         try:
-            raw = self.llm.complete(SYSTEM_PROMPT, user, max_tokens=2048)
+            raw = self.llm.complete(self.system_prompt, user, max_tokens=2048)
         except LLMError as error:
             self.failures += len(indices)
-            log.warning("enrichment çağrısı başarısız", path=path, error=str(error))
+            log.warning("enrichment call failed", path=path, error=str(error))
             return [""] * len(indices)
 
         parsed = _parse(raw)
@@ -137,7 +147,7 @@ def _parse(raw: str) -> dict[int, str]:
         payload = json.loads(match.group(0))
     except json.JSONDecodeError:
         return {}
-    items = payload.get("parcalar") if isinstance(payload, dict) else None
+    items = payload.get("chunks") if isinstance(payload, dict) else None
     if not isinstance(items, list):
         return {}
     found: dict[int, str] = {}
@@ -151,5 +161,5 @@ def _parse(raw: str) -> dict[int, str]:
             number = int(raw_number)
         except (TypeError, ValueError):
             continue
-        found[number] = str(item.get("aciklama") or "")
+        found[number] = str(item.get("description") or "")
     return found

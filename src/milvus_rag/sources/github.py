@@ -1,12 +1,12 @@
-"""GitHub REST istemcisi (api sürümü 2022-11-28).
+"""The GitHub REST client (api version 2022-11-28).
 
-Azure istemcisiyle aynı sözleşme: repo bilgisi, repo listesi, branch head'i.
-Dosya içeriği yine `git clone` ile gelir. Token isteğe bağlı — public repolar
-tokensız klonlanır ve okunur (API limiti saatte 60 istek; get_repo/branch_head
-için fazlasıyla yeter). Private repo için `GITHUB_TOKEN` (repo → contents read).
+The same contract as the Azure client: repo info, the repo list, the branch head. File
+content again comes from `git clone`. The token is optional — public repos clone and
+read without one (the API limit is 60 requests an hour; more than enough for
+get_repo/branch_head). A private repo needs `GITHUB_TOKEN` (repo → contents read).
 
-git kimliği actions/checkout ile aynı yol: `Basic base64("x-access-token:TOKEN")`
-extraheader olarak geçer, remote config'e yazılmaz.
+The git credential takes the same route as actions/checkout: `Basic base64("x-access-token:TOKEN")`
+is passed as an extraheader, never written to the remote config.
 """
 
 import base64
@@ -27,7 +27,7 @@ class GitHubError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class GitHubRepo:
-    id: str  # sayısal id, string olarak — webhook payload'ı ile eşleşir
+    id: str  # the numeric id, as a string — matches the webhook payload
     name: str
     full_name: str
     owner: str
@@ -54,10 +54,10 @@ class GitHubRepo:
 
 
 def split_full_name(full_name: str) -> tuple[str, str]:
-    """`owner/repo` → (owner, repo). URL yapıştırılmışsa da çalışsın."""
+    """`owner/repo` → (owner, repo). Works when a URL has been pasted in too."""
     cleaned = full_name.strip().removeprefix("https://github.com/").removesuffix(".git").strip("/")
     if cleaned.count("/") != 1:
-        msg = f"GitHub reposu 'owner/repo' biçiminde olmalı: {full_name!r}"
+        msg = f"a GitHub repo has to be in 'owner/repo' form: {full_name!r}"
         raise GitHubError(msg)
     owner, repo = cleaned.split("/")
     return owner, repo
@@ -92,19 +92,19 @@ class GitHub:
         try:
             response = self._client.get(path, params=params)
         except httpx.HTTPError as error:
-            msg = f"GitHub'a ulaşılamadı: {error}"
+            msg = f"could not reach GitHub: {error}"
             raise GitHubError(msg) from error
         if response.status_code == 401:
-            msg = "GitHub 401: GITHUB_TOKEN geçersiz ya da süresi dolmuş"
+            msg = "GitHub 401: GITHUB_TOKEN is invalid or expired"
             raise GitHubError(msg, 401)
         if response.status_code == 403 and response.headers.get("x-ratelimit-remaining") == "0":
             msg = (
-                "GitHub API oran sınırı doldu (tokensız saatte 60 istek); "
-                "GITHUB_TOKEN ekleyerek 5000'e çıkar"
+                "the GitHub API rate limit is exhausted (60 requests an hour without a token); "
+                "add GITHUB_TOKEN to raise it to 5000"
             )
             raise GitHubError(msg, 403)
         if response.status_code == 404:
-            msg = f"GitHub 404: {path} (private repo ise GITHUB_TOKEN gerekir)"
+            msg = f"GitHub 404: {path} (a private repo needs GITHUB_TOKEN)"
             raise GitHubError(msg, 404)
         if response.status_code >= 400:
             msg = f"GitHub {response.status_code}: {response.text[:300]}"
@@ -126,7 +126,7 @@ class GitHub:
         return str(sha) if sha else None
 
     def list_repos(self, owner: str) -> list[GitHubRepo]:
-        """Bir org'un ya da kullanıcının repoları. Önce org denenir, 404'te kullanıcı."""
+        """The repos of an org or a user. An org is tried first, a user on 404."""
         try:
             rows = self._list(f"/orgs/{owner}/repos")
         except GitHubError as error:
@@ -150,13 +150,13 @@ class GitHub:
             page += 1
 
     def whoami(self) -> str | None:
-        """Token'ın kime ait olduğu; token yoksa None. Doğrulama için kullanılır."""
+        """Who the token belongs to; None when there is no token. Used for verification."""
         if not self.token:
             return None
         return str(self._get("/user").json().get("login") or "")
 
     def git_auth_header(self) -> str | None:
-        """Token yoksa None: public repo kimliksiz klonlanır."""
+        """None when there is no token: a public repo clones anonymously."""
         return git_auth_header(self.token) if self.token else None
 
 

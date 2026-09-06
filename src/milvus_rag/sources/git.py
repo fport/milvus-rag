@@ -1,8 +1,8 @@
-"""git komut sarmalayıcıları.
+"""Thin wrappers around the git command.
 
-Kimlik bilgisi URL'ye gömülmez, remote config'e yazılmaz: her komuta
-`-c http.extraheader=AUTHORIZATION: Basic ...` olarak geçer. Böylece `.git/config`
-ve hata mesajları PAT içermez.
+The credential is never embedded in the URL and never written to the remote config: it
+is passed to every command as `-c http.extraheader=AUTHORIZATION: Basic ...`. That way
+neither `.git/config` nor an error message ever contains the PAT.
 """
 
 import re
@@ -36,14 +36,14 @@ def _run(args: list[str], cwd: Path | None = None, timeout: int = _TIMEOUT_QUICK
             env={"GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C", "PATH": _path()},
         )
     except FileNotFoundError as error:
-        msg = "git bulunamadı; PATH'te olmalı"
+        msg = "git not found; it has to be on PATH"
         raise GitError(msg) from error
     except subprocess.TimeoutExpired as error:
-        msg = f"git {args[0]} {timeout} sn içinde bitmedi"
+        msg = f"git {args[0]} did not finish within {timeout} s"
         raise GitError(msg) from error
     if completed.returncode != 0:
         detail = _redact(completed.stderr.strip() or completed.stdout.strip())
-        msg = f"git {args[0]} başarısız (kod {completed.returncode}): {detail}"
+        msg = f"git {args[0]} failed (code {completed.returncode}): {detail}"
         raise GitError(msg)
     return completed.stdout
 
@@ -74,7 +74,7 @@ def current_branch(path: Path) -> str:
 
 
 def ls_files(path: Path) -> list[str]:
-    """İzlenen + izlenmeyen-ama-ignore-edilmemiş dosyalar; çalışma ağacının hali."""
+    """Tracked + untracked-but-not-ignored files; the state of the working tree."""
     output = _run(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=path)
     return [entry for entry in output.split("\0") if entry]
 
@@ -97,10 +97,10 @@ def clone(url: str, dest: Path, branch: str, auth_header: str | None = None) -> 
 
 
 def fetch_and_reset(path: Path, branch: str, auth_header: str | None = None) -> str:
-    """Uzaktaki branch'i çeker, çalışma ağacını ona eşitler; yeni HEAD'i döner.
+    """Fetches the remote branch, resets the working tree onto it; returns the new HEAD.
 
-    `reset --hard`: klon salt-okunur bir türev, yerel değişiklik olmamalı.
-    Olursa da kaynak Azure'dakidir.
+    `reset --hard`: the clone is a read-only derivative, there should be no local
+    changes. If there are, the source of truth is the remote.
     """
     _run(
         [*_auth_args(auth_header), "fetch", "--quiet", "--prune", "origin", branch],

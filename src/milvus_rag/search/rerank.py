@@ -1,9 +1,9 @@
 """Cross-encoder reranker.
 
-Bi-encoder soruyu ve chunk'ı ayrı ayrı vektöre çevirir: ucuz, kaba. Cross-encoder
-ikisini yan yana okur ve "bu chunk bu soruya cevap mı" diye puanlar: isabetli
-ama her çift için ayrı forward pass. O yüzden zincir: 40-100 aday → reranker → 8.
-Reranker'a 8 aday vermek sadece sıralar, recall'a dokunamaz.
+A bi-encoder turns the question and the chunk into vectors separately: cheap and
+coarse. A cross-encoder reads them side by side and scores "does this chunk answer
+this question": accurate, but one forward pass per pair. Hence the chain:
+40-100 candidates → reranker → 8. Handing the reranker 8 only re-orders them.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ class CrossEncoderReranker:
             from sentence_transformers import CrossEncoder
 
             started = time.perf_counter()
-            # fp16, MPS/CUDA'da 2.2x hız (ölçüldü: 40 çift 5.5s → 2.5s), sıralama aynı.
+            # fp16 is 2.2x on MPS/CUDA (measured: 40 pairs 5.5s → 2.5s), same ordering.
             kwargs = (
                 {"model_kwargs": {"torch_dtype": torch.float16}}
                 if (torch.backends.mps.is_available() or torch.cuda.is_available())
@@ -43,7 +43,7 @@ class CrossEncoderReranker:
             )
             self._model = CrossEncoder(self.model_name, max_length=self.max_tokens, **kwargs)
             log.info(
-                "reranker yüklendi",
+                "reranker loaded",
                 model=self.model_name,
                 seconds=round(time.perf_counter() - started, 1),
             )
@@ -58,8 +58,8 @@ class CrossEncoderReranker:
         if len(hits) == 1:
             hits[0].scores["rerank"] = 1.0
             return list(hits[:top_k])
-        # Yol adı da çifte girer: "auth.service.ts içinde createSession" gibi
-        # bir soruda dosya adı sinyalin yarısıdır.
+        # The path goes into the pair too: in a question like "createSession in
+        # auth.service.ts" the file name is half the signal.
         pairs = [(query, f"{hit.path}\n{hit.content}") for hit in hits]
         scores = self.model.predict(pairs, batch_size=self.batch_size, show_progress_bar=False)
         for hit, score in zip(hits, scores, strict=True):

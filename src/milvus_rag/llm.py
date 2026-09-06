@@ -1,9 +1,9 @@
-"""LLM sağlayıcıları: /ask cevabı ve isteğe bağlı chunk açıklamaları için.
+"""LLM providers: for the /ask answer and the optional chunk descriptions.
 
-Tek arayüz: `complete(system, user) -> str`. Anthropic resmi SDK ile
-(claude-opus-5, sunucu tarafı refusal fallback açık), OpenAI ve Ollama ince
-httpx istemcisiyle. Retrieval bu katmana bağımlı değil; LLM yoksa /search yine
-çalışır, /ask 503 döner.
+One interface: `complete(system, user) -> str`. Anthropic through the official SDK
+(claude-opus-5, server-side refusal fallback on), OpenAI and Ollama through a thin
+httpx client. Retrieval does not depend on this layer; with no LLM, /search still
+works and /ask returns 503.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ class LLMError(RuntimeError):
     pass
 
 
-# Düşünen modeller (qwen3, deepseek-r1, gpt-oss) düşünceyi ayrı alanda ya da <think>
-# bloğunda döndürür; cevaba karışmasın.
+# Thinking models (qwen3, deepseek-r1, gpt-oss) return their reasoning in a separate
+# field or in a <think> block; keep it out of the answer.
 _THINK_BLOCK = re.compile(r"<think>.*?</think>\s*", re.S)
 
 
@@ -43,7 +43,7 @@ class LLM(ABC):
     ) -> str: ...
 
     def ping(self) -> str:
-        """Anahtarı ucuz bir istekle doğrular; hata → LLMError. Varsayılan: doğrulama yok."""
+        """Verifies the key with a cheap request; an error → LLMError. Default: no check."""
         return self.model
 
 
@@ -54,20 +54,20 @@ class AnthropicLLM(LLM):
         import anthropic
 
         self.model = model
-        # api_key None → SDK ortamdan çözer (ANTHROPIC_API_KEY ya da `ant auth login` profili).
+        # api_key None → the SDK resolves it from the environment (ANTHROPIC_API_KEY or a profile).
         self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
     def ping(self) -> str:
         import anthropic
 
         try:
-            # Model listesi: token harcamaz, yanlış anahtarı 401 ile söyler.
+            # Listing models: spends no tokens and reports a wrong key with a 401.
             self.client.models.list(limit=1)
         except anthropic.APIStatusError as error:
             msg = f"Anthropic {error.status_code}: {error.message}"
             raise LLMError(msg) from error
         except anthropic.AnthropicError as error:
-            msg = f"Anthropic'e ulaşılamadı: {error}"
+            msg = f"could not reach Anthropic: {error}"
             raise LLMError(msg) from error
         return self.model
 
@@ -80,9 +80,9 @@ class AnthropicLLM(LLM):
         if effort:
             kwargs["output_config"] = {"effort": effort}
         try:
-            # Streaming + get_final_message: uzun cevaplarda HTTP zaman aşımına takılmaz.
-            # fallbacks="default": bir güvenlik sınıflandırıcısı isteği reddederse
-            # sunucu aynı isteği uygun bir yedek modelde tekrar dener.
+            # Streaming + get_final_message: a long answer never trips the HTTP timeout.
+            # fallbacks="default": if a safety classifier refuses the request, the server
+            # retries the same request on a suitable fallback model.
             with self.client.beta.messages.stream(
                 model=self.model,
                 max_tokens=max_tokens,
@@ -100,23 +100,23 @@ class AnthropicLLM(LLM):
             msg = f"Anthropic {error.status_code}: {error.message}"
             raise LLMError(msg) from error
         except anthropic.APIConnectionError as error:
-            msg = f"Anthropic'e ulaşılamadı: {error}"
+            msg = f"could not reach Anthropic: {error}"
             raise LLMError(msg) from error
         except anthropic.AnthropicError as error:
-            # Kimlik bilgisi yok / çözülemedi gibi istek öncesi hatalar buraya düşer.
-            msg = f"Anthropic istemcisi: {error}"
+            # Pre-request failures land here: no credential, or one that could not resolve.
+            msg = f"Anthropic client: {error}"
             raise LLMError(msg) from error
 
         if message.stop_reason == "refusal":
             details = getattr(message, "stop_details", None)
             category = getattr(details, "category", None) if details else None
-            msg = f"model isteği reddetti (kategori: {category})"
+            msg = f"the model refused the request (category: {category})"
             raise LLMError(msg)
         return "".join(block.text for block in message.content if block.type == "text")
 
 
 class OpenAILLM(LLM):
-    """OpenAI ve OpenAI uyumlu sunucular (vLLM, LM Studio, llama.cpp): base_url değişir."""
+    """OpenAI and OpenAI-compatible servers (vLLM, LM Studio, llama.cpp): base_url changes."""
 
     provider = "openai"
 
@@ -137,7 +137,7 @@ class OpenAILLM(LLM):
             with httpx.Client(timeout=5.0) as client:
                 response = client.get(f"{self.base_url}/models", headers=self._headers())
         except httpx.HTTPError as error:
-            msg = f"{self.base_url} ulaşılamıyor: {error}"
+            msg = f"{self.base_url} is unreachable: {error}"
             raise LLMError(msg) from error
         if response.status_code >= 400:
             msg = f"OpenAI {response.status_code}: {response.text[:200]}"
@@ -163,14 +163,14 @@ class OpenAILLM(LLM):
                     f"{self.base_url}/chat/completions", headers=self._headers(), json=payload
                 )
         except httpx.HTTPError as error:
-            msg = f"{self.base_url} ulaşılamıyor: {error}"
+            msg = f"{self.base_url} is unreachable: {error}"
             raise LLMError(msg) from error
         if response.status_code >= 400:
             msg = f"OpenAI {response.status_code}: {response.text[:300]}"
             raise LLMError(msg)
         choices = response.json().get("choices") or []
         if not choices:
-            msg = "OpenAI boş yanıt döndü"
+            msg = "OpenAI returned an empty response"
             raise LLMError(msg)
         return strip_thinking(str(choices[0]["message"].get("content") or ""))
 
@@ -187,12 +187,12 @@ class OllamaLLM(LLM):
 
     def _unreachable(self, error: Exception) -> LLMError:
         return LLMError(
-            f"Ollama çalışmıyor ({self.host}): {error}. Uygulamayı aç ya da `ollama serve`; "
-            "kurulum: https://ollama.com/download"
+            f"Ollama is not running ({self.host}): {error}. Open the app or run `ollama serve`; "
+            "install: https://ollama.com/download"
         )
 
     def ping(self) -> str:
-        """Sunucu ayakta mı, model indirilmiş mi — yoksa tam komutu söyle."""
+        """Is the server up, is the model pulled — and if not, print the exact command."""
         import httpx
 
         try:
@@ -206,7 +206,7 @@ class OllamaLLM(LLM):
         names = {str(item.get("name", "")) for item in response.json().get("models") or []}
         wanted = self.model if ":" in self.model else f"{self.model}:latest"
         if wanted not in names:
-            msg = f"Ollama'da `{self.model}` indirilmemiş — `ollama pull {self.model}`"
+            msg = f"`{self.model}` is not pulled in Ollama — `ollama pull {self.model}`"
             raise LLMError(msg)
         return self.model
 
@@ -222,7 +222,7 @@ class OllamaLLM(LLM):
                 {"role": "user", "content": user},
             ],
             "stream": False,
-            # Düşünme kapalı: cevap 10x daha hızlı, atıflı cevapta düşünce zinciri gerekmiyor.
+            # Thinking off: 10x faster, and a cited answer does not need a chain of thought.
             "think": False,
             "options": {
                 "num_predict": max_tokens,
@@ -234,13 +234,13 @@ class OllamaLLM(LLM):
             with httpx.Client(timeout=600.0) as client:
                 response = client.post(f"{self.host}/api/chat", json=payload)
                 if response.status_code == 400 and "think" in response.text.lower():
-                    # Düşünmeyen model `think` alanını tanımıyor: alan olmadan tekrar.
+                    # A non-thinking model does not know the `think` field: retry without it.
                     retry = {key: value for key, value in payload.items() if key != "think"}
                     response = client.post(f"{self.host}/api/chat", json=retry)
         except httpx.HTTPError as error:
             raise self._unreachable(error) from error
         if response.status_code == 404:
-            msg = f"Ollama'da `{self.model}` indirilmemiş — `ollama pull {self.model}`"
+            msg = f"`{self.model}` is not pulled in Ollama — `ollama pull {self.model}`"
             raise LLMError(msg)
         if response.status_code >= 400:
             msg = f"Ollama {response.status_code}: {response.text[:300]}"
@@ -250,10 +250,10 @@ class OllamaLLM(LLM):
 
 
 def build_llm(settings: Settings) -> LLM | None:
-    """Yapılandırılmamışsa None: retrieval LLM'siz de çalışır.
+    """None when nothing is configured: retrieval works without an LLM.
 
-    Sağlayıcı `auto` ise anahtara göre çözülür (bkz. Settings.resolved_llm_provider);
-    Ollama için istemci her zaman kurulur — sunucu kapalıysa /ask net bir hata verir.
+    With provider `auto` it is resolved from the keys (see Settings.resolved_llm_provider);
+    the Ollama client is always built — if the server is down, /ask gives a clear error.
     """
     provider = settings.resolved_llm_provider
     model = settings.resolved_llm_model
@@ -261,11 +261,11 @@ def build_llm(settings: Settings) -> LLM | None:
         try:
             return AnthropicLLM(model, settings.anthropic_api_key)
         except Exception as error:
-            log.warning("Anthropic istemcisi kurulamadı; /ask kapalı", error=str(error))
+            log.warning("could not build the Anthropic client; /ask is off", error=str(error))
             return None
     if provider == "openai":
         if not settings.openai_api_key:
-            log.warning("OPENAI_API_KEY yok; /ask kapalı")
+            log.warning("no OPENAI_API_KEY; /ask is off")
             return None
         return OpenAILLM(model, settings.openai_api_key, settings.openai_base_url)
     return OllamaLLM(model, settings.ollama_host, settings.ollama_num_ctx)

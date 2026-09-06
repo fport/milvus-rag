@@ -1,9 +1,9 @@
-"""SQLite: repolar, dosya manifesti, işler, webhook tekrarı ve enrichment cache.
+"""SQLite: repos, the file manifest, jobs, webhook dedupe and the enrichment cache.
 
-Milvus'taki veri türev; "hangi repo hangi commit'te, hangi dosya hangi hash'le
-indexli" bilgisi burada. Bir dosyanın manifest satırı YOKSA bir sonraki sync onu
-yeni sayar — bu yüzden chunk'ları silmeden önce manifest satırı silinir, yeni
-chunk'lar yazıldıktan sonra geri yazılır: yarıda kesilen bir iş eksik bırakmaz.
+The data in Milvus is derived; "which repo at which commit, which file with which
+hash is indexed" lives here. If a file has NO manifest row, the next sync counts it
+as new — which is why the manifest row is deleted before the chunks are and written
+back after the new chunks land: an interrupted job never leaves a gap.
 """
 
 import json
@@ -114,7 +114,7 @@ _REPO_COLUMNS = (
 
 
 def _migrate(connection: sqlite3.Connection) -> None:
-    """Şema evrimi. GitHub desteğiyle azure_* kolonları sağlayıcı-bağımsız oldu."""
+    """Schema evolution. With GitHub support the azure_* columns became provider-agnostic."""
     table = connection.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'repos'"
     ).fetchone()
@@ -147,8 +147,8 @@ class Database:
             connection.executescript(_SCHEMA)
 
     def _connect(self) -> sqlite3.Connection:
-        # Bağlantı çağrı başına: worker thread'i ve API aynı dosyayı paylaşır,
-        # SQLite bağlantısı ise thread'e bağlıdır.
+        # One connection per call: the worker thread and the API share the same file,
+        # and a SQLite connection is bound to a thread.
         connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
         return connection
@@ -192,7 +192,7 @@ class Database:
     def find_repo_by_external(
         self, external_id: str, branch: str | None = None, provider: str | None = None
     ) -> Repo | None:
-        """Webhook'tan gelen kimlikle kayıtlı repoyu bulur (Azure GUID / GitHub id)."""
+        """Finds the registered repo from the id in the webhook (Azure GUID / GitHub id)."""
         query = "SELECT * FROM repos WHERE external_id = ?"
         params: list[Any] = [external_id]
         if provider:
@@ -218,7 +218,7 @@ class Database:
 
     # ------------------------------------------------------------------ files
     def manifest(self, repo_id: str) -> dict[str, str]:
-        """path → içerik sha256. Artımlı sync'in karşılaştırdığı şey."""
+        """path → content sha256. What incremental sync compares."""
         with closing(self._connect()) as connection:
             rows = connection.execute(
                 "SELECT path, sha FROM files WHERE repo_id = ?", (repo_id,)
@@ -308,7 +308,7 @@ class Database:
         return [_to_job(row) for row in rows]
 
     def active_job(self, repo_id: str) -> Job | None:
-        """Kuyrukta bekleyen ya da çalışan iş. Repo başına tek iş garantisi buradan."""
+        """A queued or running job. The one-job-per-repo guarantee comes from here."""
         with closing(self._connect()) as connection:
             row = connection.execute(
                 "SELECT * FROM jobs WHERE repo_id = ? AND status IN ('queued', 'running')"
@@ -325,7 +325,7 @@ class Database:
         return [_to_job(row) for row in rows]
 
     def fail_running_jobs(self, reason: str) -> int:
-        """Süreç yeniden başladığında 'running' kalmış işler yarım kalmıştır."""
+        """Jobs still marked 'running' after a restart were interrupted."""
         with self._connect() as connection:
             cursor = connection.execute(
                 "UPDATE jobs SET status = 'failed', error = ?, finished_at = ?"
@@ -336,7 +336,8 @@ class Database:
 
     # ---------------------------------------------------------------- webhook
     def record_webhook(self, repo_id: str, commit_sha: str) -> bool:
-        """Aynı (repo, commit) ikinci kez gelirse False: Azure yeniden dener, biz iki iş açmayız."""
+        """False when the same (repo, commit) arrives twice: Azure retries, we do not
+        open two jobs."""
         with self._connect() as connection:
             cursor = connection.execute(
                 "INSERT OR IGNORE INTO webhook_events (repo_id, commit_sha, received_at)"
@@ -358,7 +359,7 @@ class Database:
         return {str(row["key"]): str(row["value"]) for row in rows}
 
     def set_app_setting(self, key: str, value: str | None) -> None:
-        """None ya da boş değer kaydı siler → env'deki değere geri düşülür."""
+        """None or an empty value deletes the record → it falls back to the env value."""
         with self._connect() as connection:
             if value:
                 connection.execute(

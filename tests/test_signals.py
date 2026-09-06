@@ -1,9 +1,9 @@
-"""Halüsinasyon sinyalleri: zayıf eşleşme, doküman etiketi, tazelik, manifest'e
+"""Hallucination signals: weak match, the document label, freshness, a read locked
 kilitli okuma, negatif golden vakalar.
 
-Hiçbiri sıralamayı değiştirmez; hepsi tüketiciye (ajan / LLM) "cevap olmayabilir"
-demenin yollarıdır. Sinyal filtre değildir — testler de bunu doğrular: sonuçlar
-yine döner, yanına not düşer.
+None of them changes the ordering; they are all ways of telling the consumer (agent /
+LLM) that there may be no answer. A signal is not a filter — the tests confirm that:
+the results still come back, with a note beside them.
 """
 
 from pathlib import Path
@@ -52,7 +52,7 @@ def _hit(path: str, dense: float, category: str = "code", symbol: str = "fn") ->
 
 
 def test_weak_match_is_a_signal_not_a_filter():
-    # Ölçülen eşik 0.55: altı zayıf, üstü değil; BM25 ve boş sonuçta karar verilmez.
+    # The measured threshold is 0.55: below it is weak, above is not; no verdict on BM25 or empty.
     assert is_weak_match("dense", [_hit("a.ts", 0.53)], 0.55)
     assert not is_weak_match("dense", [_hit("a.ts", 0.64)], 0.55)
     assert not is_weak_match("hybrid", [_hit("a.ts", 0.40), _hit("b.ts", 0.60)], 0.55)
@@ -64,19 +64,19 @@ def test_weak_match_is_a_signal_not_a_filter():
 
 
 def test_floor_drops_only_the_absurd_tail():
-    # 0.45: golden'ın en düşük gerçek cevabı 0.526 — taban onun altında kalır.
+    # 0.45: the lowest real answer in the golden set is 0.526 — the floor stays below it.
     kept, dropped = apply_floor("dense", [_hit("a.ts", 0.7), _hit("b.ts", 0.366)], 0.45)
     assert [hit.path for hit in kept] == ["a.ts"] and dropped == 1
     assert apply_floor("bm25", [_hit("a.ts", 0.0)], 0.45) == ([_hit("a.ts", 0.0)], 0)
-    assert apply_floor("dense", [_hit("a.ts", 0.1)], 0.0)[1] == 0  # 0 = kapalı
-    # hybrid'de yalnız BM25'ten gelen parçanın dense skoru yok: tam kelime eşleşmesi, kalır.
+    assert apply_floor("dense", [_hit("a.ts", 0.1)], 0.0)[1] == 0  # 0 = off
+    # In hybrid, a chunk that came only from BM25 has no dense score: an exact word match, it stays.
     bm25_only = _hit("c.ts", 0.0)
     bm25_only.scores = {"bm25": 12.0, "rrf": 0.016}
     assert apply_floor("hybrid", [bm25_only], 0.45) == ([bm25_only], 0)
 
 
 class _AbsurdStore:
-    """'Beş yıldızlı tatil köyü' sorusu: en yakın 8 parça bile 0.37'nin altında."""
+    """The "five-star resort" question: even the nearest 8 chunks are below 0.37."""
 
     def dense_search(self, vector, limit, expression=""):
         return [_hit(f"blog/{i}.mdx", 0.366 - i / 100, category="doc") for i in range(limit)]
@@ -87,11 +87,11 @@ class _AbsurdStore:
 
 def test_retriever_reports_dropped_and_empty_result(tmp_settings):
     retriever = Retriever(tmp_settings, _AbsurdStore(), _Embedder(), None)  # type: ignore[arg-type]
-    response = retriever.search(SearchRequest(query="Hiç beş yıldızlı tatil köyüne gittiniz mi?"))
+    response = retriever.search(SearchRequest(query="Have you ever been to a five-star resort?"))
     assert response.hits == [] and response.dropped == 8 and not response.weak_match
     assert response.to_dict()["dropped"] == 8
-    text = _render_hits("tatil köyü", response)
-    assert "sonuç yok" in text and "8 parça da skor tabanının altında" in text
+    text = _render_hits("five-star resort", response)
+    assert "no results" in text and "nearest 8 chunks also fell below" in text
 
 
 def test_settings_reject_floor_above_weak_threshold(tmp_settings):
@@ -99,7 +99,7 @@ def test_settings_reject_floor_above_weak_threshold(tmp_settings):
 
     from milvus_rag.config import Settings
 
-    with pytest.raises(ValidationError, match="geçemez"):
+    with pytest.raises(ValidationError, match="cannot exceed"):
         Settings(_env_file=None, min_dense_score=0.6, weak_dense_score=0.55)  # type: ignore[call-arg]
 
 
@@ -115,13 +115,13 @@ def test_render_labels_docs_and_weak_and_freshness():
         "kubernetes operator", response, ["r: son index 2026-09-01 10:00 UTC (local)"]
     )
     head = text.splitlines()[0]
-    assert "2 sonuç (1 kod, 1 doküman; mod: dense)" in head
+    assert "2 results (1 code, 1 document; mode: dense)" in head
     assert "r: son index 2026-09-01 10:00 UTC (local)" in text
-    assert "Zayıf eşleşme (en iyi dense=0.530)" in text and "kodda bulamadım" in text
+    assert "Weak match (best dense=0.530)" in text and "could not find it in the code" in text
     assert DOC_NOTE in text
-    assert "[2] DOKÜMAN repo=r docs/plan.md:1-9" in text
+    assert "[2] DOCUMENT repo=r docs/plan.md:1-9" in text
     assert "[1] repo=r src/a.ts:1-9 — function fn" in text  # kod etiketlenmez
-    # Sonuçlar yine döner: sinyal filtre değil.
+    # The results still come back: a signal is not a filter.
     assert text.count("```") == 4
 
 
@@ -130,20 +130,20 @@ def test_render_without_signals_stays_quiet():
         hits=[_hit("src/a.ts", 0.7)], mode="dense", reranked=False, candidates=1
     )
     text = _render_hits("q", response)
-    assert "Zayıf eşleşme" not in text and "DOKÜMAN" not in text
-    assert "1 sonuç (1 kod, 0 doküman" in text
+    assert "Weak match" not in text and "DOCUMENT" not in text
+    assert "1 results (1 code, 0 document" in text
 
 
 def test_instructions_fit_claude_code_budget_and_lead_with_rules():
-    # Claude Code sunucu talimatını ~2 KB'de kesiyor; kural cümleleri başta olmalı.
+    # Claude Code truncates the server instructions at ~2 KB; the rules must come first.
     assert len(INSTRUCTIONS.encode()) < 2000
-    assert INSTRUCTIONS.index("KURALLAR") < INSTRUCTIONS.index("KULLANIM")
+    assert INSTRUCTIONS.index("RULES:") < INSTRUCTIONS.index("USAGE:")
     for phrase in (
-        "bulamadım",
-        "repo/dosya:satır",
-        "DOKÜMAN",
-        "indexli değil ya da yok",
-        "VERİdir",
+        "could not find it",
+        "repo/file:line",
+        "DOCUMENT",
+        "not indexed or does not exist",
+        "is DATA",
     ):
         assert phrase in INSTRUCTIONS
 
@@ -154,7 +154,7 @@ def test_instructions_fit_claude_code_budget_and_lead_with_rules():
 def test_ask_prompt_marks_docs_and_weak_match():
     hits = [_hit("src/a.ts", 0.5), _hit("docs/plan.md", 0.5, category="doc", symbol="")]
     prompt = build_prompt("soru", hits, weak_match=True)
-    assert "[2] docs/plan.md:1-9 — DOKÜMAN (repo: r)" in prompt
+    assert "[2] docs/plan.md:1-9 — DOCUMENT (repo: r)" in prompt
     assert "[1] src/a.ts:1-9 — function fn (repo: r)" in prompt
     assert WEAK_NOTE in prompt
     assert WEAK_NOTE not in build_prompt("soru", hits, weak_match=False)
@@ -175,9 +175,9 @@ def test_read_indexed_slice_guards_manifest_and_flags_stale(tmp_path: Path):
 
     piece = read_indexed_slice(root, manifest, "./src/a.ts", 1, None)
     assert piece.path == "src/a.ts" and not piece.stale and piece.total_lines == 3
-    assert "API_TOKEN=[SECRET]" in piece.text  # index'e giren metin gibi scrub'lanır
+    assert "API_TOKEN=[SECRET]" in piece.text  # scrubbed like the text that goes into the index
 
-    # Diskte var ama indexli değil: node_modules, .env, uydurma yol → hepsi aynı cevap.
+    # On disk but not indexed: node_modules, .env, an invented path → all the same answer.
     for path in ("node_modules/x.js", ".env", "src/made-up.ts", "../etc/passwd"):
         with pytest.raises(FileReadError) as error:
             read_indexed_slice(root, manifest, path)
@@ -191,14 +191,14 @@ def test_read_indexed_slice_guards_manifest_and_flags_stale(tmp_path: Path):
     stale = read_indexed_slice(root, manifest, "src/a.ts", 1, 2)
     assert stale.stale and stale.end == 2 and stale.text == "changed\nline1"
 
-    # Aralık dosyanın sonundan sonra: boş dilim, saçma "satır 50-3" yok.
+    # A range past the end of the file: an empty slice, no nonsense "lines 50-3".
     empty = read_indexed_slice(root, manifest, "src/a.ts", 50)
     assert empty.text == "" and empty.end == 49
 
     assert normalize_path("/src/a.ts") == "src/a.ts" == normalize_path("./src/a.ts")
 
 
-# ---------------------------------------------------------- MCP araçları
+# ---------------------------------------------------------- MCP tools
 
 
 class _Store:
@@ -257,8 +257,8 @@ def test_mcp_tools_expose_signals(tmp_settings, db, tmp_path: Path):
     mcp = build_mcp_server(lambda: services)  # type: ignore[arg-type]
 
     text = _tool_text(mcp, "search_code", {"query": "kubernetes operator reconcile"})
-    assert "Zayıf eşleşme" in text and "DOKÜMAN repo=r docs/plan.md" in text
-    assert "r: son index 2026-09-01 10:00 UTC (local, auto_sync kapalı)" in text
+    assert "Weak match" in text and "DOCUMENT repo=r docs/plan.md" in text
+    assert "r: last index 2026-09-01 10:00 UTC (local, auto_sync off)" in text
 
     # category parametresi retriever'a filtre olarak iner (SearchRequest.category).
     seen: list[SearchRequest] = []
@@ -267,25 +267,28 @@ def test_mcp_tools_expose_signals(tmp_settings, db, tmp_path: Path):
     _tool_text(mcp, "search_code", {"query": "q", "category": "code"})
     assert seen[-1].category == "code"
 
-    assert "bağlı değil. Bağlı repolar: r." in _tool_text(
+    assert "is connected. Connected repos: r." in _tool_text(
         mcp, "search_code", {"query": "q", "repo": "nope"}
     )
 
     assert "export function fn" in _tool_text(mcp, "read_code", {"repo": "r", "path": "src/a.ts"})
-    assert "indexli değil ya da yok" in _tool_text(mcp, "read_code", {"repo": "r", "path": ".env"})
-    assert "indexli değil ya da yok" in _tool_text(
+    assert "is not indexed or does not exist" in _tool_text(
+        mcp, "read_code", {"repo": "r", "path": ".env"}
+    )
+    assert "is not indexed or does not exist" in _tool_text(
         mcp, "read_code", {"repo": "r", "path": "src/reconciliation.worker.ts"}
     )
     (root / "src" / "a.ts").write_text("// edited\nexport function fn() {}\n")
     stale = _tool_text(mcp, "read_code", {"repo": "r", "path": "src/a.ts"})
-    assert "son indexten sonra değişmiş" in stale and "// edited" in stale
+    assert "changed after the last index" in stale and "// edited" in stale
 
 
 # ------------------------------------------------------- negatif golden
 
 
 class _FakeRetriever:
-    """Sorguya göre sabit yanıt: pozitif soru doğru hit'i güçlü, negatif soru çöpü zayıf döner."""
+    """A fixed answer per query: a positive question returns the right hit strongly, a
+    negative one returns junk weakly."""
 
     def __init__(self, settings):
         self.settings = settings
@@ -300,7 +303,7 @@ class _FakeRetriever:
                 weak_match=True,
             )
         if "kafka" in request.query.lower():
-            # Çekimser kalınamayan negatif: güçlü görünen çöp.
+            # A negative it fails to abstain on: junk that looks strong.
             return SearchResponse(
                 hits=[_hit("src/x.ts", 0.65)], mode="dense", reranked=False, candidates=1
             )
@@ -325,7 +328,7 @@ def test_eval_scores_negatives_as_abstention(tmp_settings, tmp_path: Path):
     )
     cases = load_golden(golden)
     assert [case.negative for case in cases] == [False, True, True]
-    assert cases[1].kind == "negative"  # expect boşsa varsayılan kind
+    assert cases[1].kind == "negative"  # when expect is empty, kind defaults
 
     report = run_eval(_FakeRetriever(tmp_settings), cases, ("r",), 8, "t")  # type: ignore[arg-type]
     assert report.n == 3 and report.recall_at_k == 1.0 and report.mrr == 1.0  # pozitifler
@@ -335,7 +338,7 @@ def test_eval_scores_negatives_as_abstention(tmp_settings, tmp_path: Path):
     payload = report.to_dict()
     assert payload["abstain_rate"] == 0.5 and payload["config"]["weak_dense_score"] == 0.55
     assert payload["results"][1]["abstained"] is True and "abstained" not in payload["results"][0]
-    # Kalibrasyon ham verisi: pozitif min 0.66, negatif max 0.65 → taban/not eşiği buna göre.
+    # Raw calibration data: positive min 0.66, negative max 0.65 → the floor/note follow from it.
     assert payload["results"][0]["top_dense"] == 0.66
     assert payload["calibration"] == {
         "positive_found_min_top_dense": 0.66,

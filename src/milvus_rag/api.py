@@ -1,9 +1,9 @@
-"""HTTP arayüzü.
+"""The HTTP interface.
 
-    uv run rag serve            # ya da: uv run uvicorn milvus_rag.api:app --port 8090
+    uv run rag serve            # or: uv run uvicorn milvus_rag.api:app --port 8090
 
-Modeller lifespan'da bir kez yüklenir. Index işleri kuyruğa alınır ve arka
-planda tek worker'da çalışır; /repos/{id} ve /jobs/{id} ilerlemeyi gösterir.
+The models are loaded once in the lifespan. Index jobs are queued and run on a single
+background worker; /repos/{id} and /jobs/{id} show the progress.
 """
 
 import json
@@ -45,12 +45,12 @@ from milvus_rag.webhooks import (
 
 log = get_logger("api")
 
-# MCP transport'unun DNS rebinding koruması: varsayılan localhost kümesi.
+# The MCP transport's DNS-rebinding guard: the default localhost set.
 _LOCAL_HOSTS = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
 _LOCAL_ORIGINS = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
 
 
-# ------------------------------------------------------------------- şemalar
+# ------------------------------------------------------------------- schemas
 
 
 class AddRepoBody(BaseModel):
@@ -58,7 +58,7 @@ class AddRepoBody(BaseModel):
     # azure / github
     project: str | None = None
     repo: str | None = Field(
-        default=None, description="Azure: repo adı ya da GUID · GitHub: owner/repo"
+        default=None, description="Azure: repo name or GUID · GitHub: owner/repo"
     )
     branch: str | None = None
     # local
@@ -75,7 +75,7 @@ class SyncBody(BaseModel):
 
 
 class CredentialsBody(BaseModel):
-    """Gönderilmeyen alana dokunulmaz; boş string kaydı siler (env'e dönülür)."""
+    """A field that is not sent is left alone; an empty string deletes the record (back to env)."""
 
     github_token: str | None = None
     azure_org_url: str | None = None
@@ -114,8 +114,8 @@ class SearchBody(BaseModel):
 
 
 def create_app(services: Services | None = None, warm_up: bool = True) -> FastAPI:
-    # MCP sunucusu uygulamayla aynı süreçte, aynı retriever'ın üstünde çalışır.
-    # Servisler lifespan'da doğduğu için araçlar onları tembel çözer.
+    # The MCP server runs in the same process as the app, over the same retriever.
+    # Because the services are born in the lifespan, the tools resolve them lazily.
     mcp = build_mcp_server(lambda: app.state.services)
     mcp_settings = (services.settings if services else get_settings()).mcp_allowed_hosts
     extra_hosts = [host.strip() for host in mcp_settings.split(",") if host.strip()]
@@ -140,20 +140,23 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
         if warm_up:
             built.warm_up()
         if not built.store.healthy():
-            log.warning("Milvus'a ulaşılamıyor; /search boş dönecek", uri=built.settings.milvus_uri)
+            log.warning(
+                "Milvus is unreachable; /search will come back empty",
+                uri=built.settings.milvus_uri,
+            )
         await built.jobs.start()
         log.info(
-            "hazır",
+            "ready",
             port=built.settings.port,
             collection=built.settings.milvus_collection,
             embedding=built.embedder.name,
-            rerank=built.reranker.model_name if built.reranker else "kapalı",
-            azure="açık" if built.azure else "kapalı",
-            llm=built.llm.model if built.llm else "kapalı",
+            rerank=built.reranker.model_name if built.reranker else "off",
+            azure="on" if built.azure else "off",
+            llm=built.llm.model if built.llm else "off",
             mcp="/mcp",
         )
-        # Oturum yöneticisi mount edilen alt uygulamanın kendi lifespan'ıyla değil,
-        # buradan çalışır (FastAPI mount'ta alt lifespan'ı çağırmaz).
+        # The session manager runs from here, not from the mounted sub-app's own lifespan
+        # (FastAPI does not call a mounted app's lifespan).
         async with mcp.session_manager.run():
             try:
                 yield
@@ -189,7 +192,7 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
     def home() -> FileResponse:
         return FileResponse(static_dir / "index.html")
 
-    # ---------------------------------------------------------------- sağlık
+    # ---------------------------------------------------------------- health
     @app.get("/health")
     def health(s: S) -> dict[str, Any]:
         return {
@@ -209,10 +212,10 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
     # ------------------------------------------------------------- kimlikler
     @app.get("/settings/credentials")
     def get_credentials(s: S, probe: bool = Query(False)) -> dict[str, Any]:
-        """Maskelenmiş durum: hangi kimlik nereden geliyor. Sırların kendisi dönmez.
+        """Masked status: where each credential comes from. The secrets never come back.
 
-        `probe=1`: LLM'e canlı ping (Ollama ayakta mı / model inmiş mi, anahtar geçerli mi).
-        Arayüz ister; testler ve betikler istemez — ağ yok.
+        `probe=1`: a live ping to the LLM (is Ollama up / is the model pulled / is the key
+        valid). The UI asks for it; tests and scripts do not — no network.
         """
         source = credential_sources(s.settings, s.db)
         return {
@@ -231,10 +234,10 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
 
     @app.put("/settings/credentials")
     def put_credentials(body: CredentialsBody, s: S) -> dict[str, Any]:
-        """Kimlikleri kaydet, istemcileri canlı yeniden kur, istenirse doğrula.
+        """Save the credentials, rebuild the clients live, verify them if asked.
 
-        Sırlar data/rag.db'de düz metin durur — servis zaten iç ağ içindir
-        (bkz. DEPLOYMENT.md). Boş string gönderilen alan silinir.
+        The secrets sit in data/rag.db in plain text — the service is meant to live on an
+        internal network anyway (see DEPLOYMENT.md). A field sent as an empty string is deleted.
         """
         touched = {key for key in CREDENTIAL_KEYS if key in body.model_fields_set}
         for key in touched:
@@ -242,7 +245,7 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
             s.db.set_app_setting(key, (value or "").strip() or None)
         apply_credentials(s)
 
-        # Yalnızca dokunulan kimlik doğrulanır: webhook sırrını değiştirmek GitHub'a gitmesin.
+        # Only touched credentials are verified: changing the webhook secret should not call GitHub.
         result: dict[str, Any] = {"github": None, "azure": None, "llm": None}
         if body.verify:
             if "github_token" in touched and s.github and s.github.token:
@@ -267,13 +270,13 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
     @app.get("/azure/projects")
     def azure_projects(s: S) -> list[dict[str, Any]]:
         if s.azure is None:
-            raise HTTPException(503, "Azure DevOps yapılandırılmamış")
+            raise HTTPException(503, "Azure DevOps is not configured")
         return [project.to_dict() for project in s.azure.list_projects()]
 
     @app.get("/azure/projects/{project}/repos")
     def azure_repos(project: str, s: S) -> list[dict[str, Any]]:
         if s.azure is None:
-            raise HTTPException(503, "Azure DevOps yapılandırılmamış")
+            raise HTTPException(503, "Azure DevOps is not configured")
         registered = {
             repo.external_id: repo.id
             for repo in s.db.list_repos()
@@ -287,7 +290,7 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
     @app.get("/github/{owner}/repos")
     def github_repos(owner: str, s: S) -> list[dict[str, Any]]:
         if s.github is None:
-            raise HTTPException(503, "GitHub istemcisi kurulmamış")
+            raise HTTPException(503, "the GitHub client is not configured")
         registered = {
             repo.external_id: repo.id
             for repo in s.db.list_repos()
@@ -307,19 +310,19 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
     def add_repo(body: AddRepoBody, s: S) -> dict[str, Any]:
         if body.provider == "azure":
             if not body.project or not body.repo:
-                raise HTTPException(422, "azure için project ve repo gerekli")
+                raise HTTPException(422, "azure needs project and repo")
             repo = s.repos.register_azure(body.project, body.repo, body.branch, body.auto_sync)
         elif body.provider == "github":
             if not body.repo:
-                raise HTTPException(422, "github için repo ('owner/repo') gerekli")
+                raise HTTPException(422, "github needs repo ('owner/repo')")
             repo = s.repos.register_github(body.repo, body.branch, body.auto_sync)
         elif body.provider == "local":
             if not body.path:
-                raise HTTPException(422, "local için path gerekli")
+                raise HTTPException(422, "local needs path")
             repo = s.repos.register_local(body.path, body.name, body.auto_sync)
         else:
             if not body.url:
-                raise HTTPException(422, "git için url gerekli")
+                raise HTTPException(422, "git needs url")
             repo = s.repos.register_git(body.url, body.branch or "main", body.name, body.auto_sync)
         job = None
         if body.index_now:
@@ -363,10 +366,10 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
         start: int = Query(1, ge=1),
         end: int | None = Query(None, ge=1),
     ) -> dict[str, Any]:
-        """Bir dosyanın satır aralığı — agent'ın `read_code` aracı için.
+        """A line range from a file — for an agent's `read_code` tool.
 
-        Yalnızca indexlenmiş dosya okunur (manifest); `stale` diskteki içeriğin
-        son indexten sonra değiştiğini söyler. Gerekçe: sources/files.py.
+        Only indexed files are readable (the manifest); `stale` says the content on disk
+        changed after the last index. The reasoning lives in sources/files.py.
         """
         repo = s.db.get_repo(repo_id)
         if repo is None:
@@ -402,7 +405,7 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
     def get_job(job_id: str, s: S) -> dict[str, Any]:
         job = s.db.get_job(job_id)
         if job is None:
-            raise HTTPException(404, "iş yok")
+            raise HTTPException(404, "no such job")
         return job.to_dict()
 
     # ---------------------------------------------------------------- arama
@@ -415,8 +418,8 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
         if s.llm is None:
             raise HTTPException(
                 503,
-                "LLM yapılandırılmamış — Bağlan › Anahtarlar'dan Anthropic anahtarı gir, "
-                "ya da yerel model için Ollama kur (RAG_LLM_PROVIDER=auto yerel modele düşer)",
+                "no LLM is configured — enter an Anthropic key under Connect › Keys, or "
+                "install Ollama for a local model (RAG_LLM_PROVIDER=auto falls back to it)",
             )
         try:
             return run_ask(s.retriever, s.llm, body.to_request()).to_dict()
@@ -433,13 +436,13 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
         secret: str | None = None,
     ) -> dict[str, Any]:
         if not verify_secret(s.webhook_secret, x_rag_webhook_secret, authorization, secret):
-            raise HTTPException(401, "webhook sırrı eşleşmiyor")
+            raise HTTPException(401, "the webhook secret does not match")
         payload = await request.json()
         events = parse_azure_push(payload if isinstance(payload, dict) else {})
         if not events:
             return {
                 "accepted": False,
-                "reason": "git.push olayı değil ya da branch güncellemesi yok",
+                "reason": "not a git.push event, or no branch update",
             }
         return {"accepted": True, "results": _enqueue_push_events(s, events, "azure")}
 
@@ -450,30 +453,33 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
         x_hub_signature_256: Annotated[str | None, Header()] = None,
         x_github_event: Annotated[str | None, Header()] = None,
     ) -> dict[str, Any]:
-        # İmza ham gövde üstünden hesaplanır; sır RAG_WEBHOOK_SECRET ile aynı.
+        # The signature is computed over the raw body; the secret is the same RAG_WEBHOOK_SECRET.
         body = await request.body()
         if not verify_github_signature(s.webhook_secret, body, x_hub_signature_256):
-            raise HTTPException(401, "X-Hub-Signature-256 doğrulanamadı (sır: RAG_WEBHOOK_SECRET)")
+            raise HTTPException(
+                401, "X-Hub-Signature-256 did not verify (secret: RAG_WEBHOOK_SECRET)"
+            )
         event_name = (x_github_event or "push").lower()
         if event_name == "ping":
             return {"accepted": True, "pong": True}
         if event_name != "push":
-            return {"accepted": False, "reason": f"{event_name} olayı işlenmez"}
+            return {"accepted": False, "reason": f"the {event_name} event is not handled"}
         try:
             payload = json.loads(body or b"{}")
         except ValueError:
-            raise HTTPException(422, "geçersiz JSON") from None
+            raise HTTPException(422, "invalid JSON") from None
         events = parse_github_push(payload if isinstance(payload, dict) else {})
         if not events:
-            return {"accepted": False, "reason": "branch push'u değil (tag ya da silme)"}
+            return {"accepted": False, "reason": "not a branch push (a tag or a delete)"}
         return {"accepted": True, "results": _enqueue_push_events(s, events, "github")}
 
     return app
 
 
 def _llm_view(s: Services, key_source: str | None, probe: bool) -> dict[str, Any]:
-    """Hangi LLM, nereden, çalışıyor mu. `probe` ile canlı ping: Ollama için sunucu + model
-    indirilmiş mi, Anthropic için anahtar geçerli mi — hata metni ne yapılacağını söyler."""
+    """Which LLM, from where, and is it working. With `probe`, a live ping: for Ollama the
+    server + whether the model is pulled, for Anthropic whether the key is valid — the error
+    text says what to do."""
     provider = s.llm.provider if s.llm else s.settings.resolved_llm_provider
     view: dict[str, Any] = {
         "mode": s.settings.llm_provider,  # auto | anthropic | openai | ollama
@@ -481,13 +487,13 @@ def _llm_view(s: Services, key_source: str | None, probe: bool) -> dict[str, Any
         "model": s.llm.model if s.llm else s.settings.resolved_llm_model,
         "configured": s.llm is not None,
         "host": s.settings.ollama_host if provider == "ollama" else None,
-        # Yalnızca Anthropic anahtarı arayüzden girilebiliyor; OpenAI/Ollama env'den.
+        # Only the Anthropic key can be entered from the UI; OpenAI/Ollama come from the env.
         "source": key_source if provider == "anthropic" else None,
     }
     if s.llm is None:
-        view["status"] = {"ok": False, "detail": "LLM yapılandırılmamış"}
+        view["status"] = {"ok": False, "detail": "no LLM is configured"}
     elif not probe:
-        view["status"] = {"ok": True, "detail": "ping atılmadı (probe=1 ile sor)"}
+        view["status"] = {"ok": True, "detail": "not pinged (ask with probe=1)"}
     else:
         try:
             view["status"] = {"ok": True, "detail": s.llm.ping()}
@@ -503,10 +509,10 @@ def _enqueue_push_events(
     for event in events:
         repo = s.db.find_repo_by_external(event.external_id, event.branch, provider=provider)
         if repo is None:
-            results.append({"branch": event.branch, "ignored": "izlenen repo/branch değil"})
+            results.append({"branch": event.branch, "ignored": "not a tracked repo/branch"})
             continue
         if event.new_commit and not s.db.record_webhook(repo.id, event.new_commit):
-            results.append({"repo_id": repo.id, "ignored": "bu commit zaten işlendi"})
+            results.append({"repo_id": repo.id, "ignored": "this commit was already handled"})
             continue
         job, created = s.jobs.enqueue(repo.id, "webhook")
         results.append({"repo_id": repo.id, "job_id": job.id, "new": created})

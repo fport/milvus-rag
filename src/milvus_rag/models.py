@@ -1,5 +1,5 @@
-"""Modüller arası taşınan tipler. Bir şey bir sınırı geçiyorsa burada tanımlı;
-çıplak dict dolaşmaz."""
+"""Types that travel between modules. If something crosses a boundary it is
+defined here; no bare dicts travel."""
 
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -19,7 +19,7 @@ class Repo:
     branch: str
     local_path: str
     status: RepoStatus = "pending"
-    # owner: Azure projesi ya da GitHub owner'ı; external_id/name: sağlayıcıdaki kimlik.
+    # owner: the Azure project or the GitHub owner; external_id/name: the provider's id.
     owner: str = ""
     external_id: str = ""
     external_name: str = ""
@@ -94,7 +94,7 @@ class Job:
 
 @dataclass(frozen=True, slots=True)
 class SourceFile:
-    """Bir repodan okunmuş tek dosya."""
+    """A single file read from a repo."""
 
     path: str
     text: str
@@ -105,11 +105,11 @@ class SourceFile:
 
 @dataclass(frozen=True, slots=True)
 class ChunkRecord:
-    """Chunker'ın ürettiği, henüz embed edilmemiş parça.
+    """A piece produced by the chunker, not embedded yet.
 
-    `text` LLM'e giden temiz içerik; `header` embed ve BM25 için başa eklenen
-    "ben neyim, nerede yaşıyorum" satırları. İkisi ayrı tutulur ki atıf gerçek
-    dosya metnini göstersin.
+    `text` is the clean content that goes to the LLM; `header` is the
+    "what am I, where do I live" lines prepended for embedding and BM25. They are
+    kept apart so that a citation shows the real file text.
     """
 
     ordinal: int
@@ -125,8 +125,8 @@ class ChunkRecord:
 
 @dataclass(slots=True)
 class Hit:
-    """Bir arama sonucu. Skorlar kanal bazında taşınır (dense / bm25 / rrf /
-    rerank) — hangi kanalın neyi bulduğu veri yapısında görünür, UI'da değil."""
+    """A search result. Scores are carried per channel (dense / bm25 / rrf /
+    rerank) — which channel found what is visible in the data, not only in the UI."""
 
     id: str
     repo_id: str
@@ -145,7 +145,7 @@ class Hit:
 
     @property
     def ref(self) -> str:
-        """Golden set'lerin beklediği biçim: path::symbol."""
+        """The form golden sets expect: path::symbol."""
         return f"{self.path}::{self.symbol}" if self.symbol else self.path
 
     def to_dict(self) -> dict[str, Any]:

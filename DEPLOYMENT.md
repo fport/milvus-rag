@@ -1,51 +1,51 @@
-# Kendi sunucunda çalıştırma
+# Running it on your own server
 
-İki yol var: **Docker Compose** (önerilen — Milvus zaten konteyner istiyor) ya da
-Milvus'u konteynerde tutup servisi **systemd** ile çıplak çalıştırmak.
+Two paths: **Docker Compose** (recommended — Milvus wants a container anyway) or keeping
+Milvus in a container and running the service bare with **systemd**.
 
-## Gereksinimler
+## Requirements
 
-| Kaynak | En az | Not |
+| Resource | Minimum | Note |
 |---|---|---|
-| İşletim sistemi | Linux x86_64 / arm64 | Docker 24+, compose v2 |
-| RAM | 8 GB (rahatı 16 GB) | bge-m3 ~3-4 GB, Milvus ~2-3 GB |
-| Disk | 20 GB+ | model cache ~5 GB + Milvus verisi + repo klonları |
-| CPU | 4+ çekirdek | embedding CPU'da ~5-8 chunk/sn; 3k chunk'lık repo ~8-10 dk |
-| GPU | gerekmez | varsa `RAG_EMBEDDING_DEVICE=cuda` ile 5-10x hız |
+| OS | Linux x86_64 / arm64 | Docker 24+, compose v2 |
+| RAM | 8 GB (16 GB is comfortable) | bge-m3 ~3-4 GB, Milvus ~2-3 GB |
+| Disk | 20 GB+ | model cache ~5 GB + Milvus data + repo clones |
+| CPU | 4+ cores | embedding on CPU ~5-8 chunks/s; a 3k-chunk repo ~8-10 min |
+| GPU | not required | with one, `RAG_EMBEDDING_DEVICE=cuda` gives 5-10x |
 
-Not: CPU yavaş geliyorsa `RAG_EMBEDDING_BACKEND=openai` (text-embedding-3-large,
-`OPENAI_API_KEY` gerekir) indexlemeyi API'ye taşır; model indirmesi de gerekmez.
+Note: if the CPU feels slow, `RAG_EMBEDDING_BACKEND=openai` (text-embedding-3-large, needs
+`OPENAI_API_KEY`) moves indexing to the API, and no model download is needed either.
 
-## Yol 1 — Docker Compose (önerilen)
+## Path 1 — Docker Compose (recommended)
 
 ```bash
-git clone <bu-repo> && cd <repo>
+git clone <this-repo> && cd <repo>
 cp .env.example .env        # AZURE_DEVOPS_* / GITHUB_TOKEN / RAG_WEBHOOK_SECRET / ANTHROPIC_API_KEY
 docker compose -f infra/docker-compose.prod.yml up -d --build
-docker compose -f infra/docker-compose.prod.yml logs -f rag   # "hazır" satırını bekle
+docker compose -f infra/docker-compose.prod.yml logs -f rag   # wait for the "ready" line
 curl -f http://localhost:8090/health
 ```
 
-- İlk açılışta embedding modeli (~2.2 GB) Hugging Face'ten iner; `hf-cache`
-  volume'ünde kalır, sonraki açılışlar saniyeler sürer.
-- tree-sitter grammar'ları (`PREFETCH_GRAMMARS`, ~60 dil) imaj build'inde indirilir ve
-  katmanda kalır; çalışma anında ağ gerekmez. Listede olmayan bir dil gelirse pack onu
-  ilk kullanımda indirmeyi dener, ağ yoksa o dosyalar düz pencereyle indexlenir (log'da
-  "grammar yüklenemedi").
-- `rag-data` volume'ü SQLite'ı (repo kayıtları, manifest, işler) ve repo
-  klonlarını tutar. **Yedeklenecek tek şey budur** — Milvus'taki veri türevdir,
-  `rag sync --force` ile yeniden üretilir.
-- Güncelleme: `git pull && docker compose -f infra/docker-compose.prod.yml up -d --build`
-  (chunk/embedding ayarı değiştiyse servis bir sonraki sync'te otomatik tam
-  yeniden index yapar).
+- On the first boot the embedding model (~2.2 GB) is downloaded from Hugging Face; it stays
+  in the `hf-cache` volume, so later boots take seconds.
+- The tree-sitter grammars (`PREFETCH_GRAMMARS`, ~60 languages) are downloaded during the
+  image build and stay in the layer; no network is needed at runtime. If a language outside
+  the list shows up, the pack tries to download it on first use, and with no network those
+  files are indexed with plain windows (the log says "grammar could not be loaded").
+- The `rag-data` volume holds SQLite (repo records, the manifest, jobs) and the repo clones.
+  **That is the only thing to back up** — the data in Milvus is derived and can be
+  regenerated with `rag sync --force`.
+- Updating: `git pull && docker compose -f infra/docker-compose.prod.yml up -d --build`
+  (if a chunk/embedding setting changed, the service does a full re-index automatically on
+  the next sync).
 
-## Yol 2 — systemd (Milvus konteynerde, servis çıplak)
+## Path 2 — systemd (Milvus in a container, the service bare)
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d      # yalnız Milvus + etcd + MinIO
+docker compose -f infra/docker-compose.yml up -d      # Milvus + etcd + MinIO only
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync --no-dev
-# grammar'ları şimdi indir (aksi halde ilk kullanımda iner; kapalı ağda düz pencereye düşer)
+# download the grammars now (otherwise they arrive on first use; on an offline host it falls back to plain windows)
 uv run python -c "from tree_sitter_language_pack import prefetch; from milvus_rag.sources.files import PREFETCH_GRAMMARS; prefetch(sorted(PREFETCH_GRAMMARS))"
 ```
 
@@ -71,23 +71,23 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload && sudo systemctl enable --now milvus-rag
 ```
 
-## Dışa açma: reverse proxy + TLS
+## Exposing it: reverse proxy + TLS
 
-**Servisin kendi kimlik doğrulaması yok.** 8090'ı doğrudan internete açma:
+**The service has no authentication of its own.** Do not put 8090 straight on the internet:
 
-- Webhook'lar dışarıdan erişilebilir olmalı (Azure/GitHub push gönderecek),
-- geri kalan her şey (arama, repo ekleme, dosya okuma!) iç ağda kalmalı.
+- the webhooks have to be reachable from outside (Azure/GitHub will push to them),
+- everything else (search, adding repos, reading files!) should stay on the internal network.
 
-Caddy ile pratik ayrım (otomatik TLS dahil) — `/etc/caddy/Caddyfile`:
+A practical split with Caddy (automatic TLS included) — `/etc/caddy/Caddyfile`:
 
 ```caddy
 rag.example.com {
-    # Webhook uçları herkese açık; güvenlik zaten imza/sır ile:
-    # Azure → paylaşılan sır, GitHub → HMAC-SHA256 (RAG_WEBHOOK_SECRET).
+    # The webhook endpoints are public; they are secured by signature/secret anyway:
+    # Azure → a shared secret, GitHub → HMAC-SHA256 (RAG_WEBHOOK_SECRET).
     handle /webhooks/* {
         reverse_proxy localhost:8090
     }
-    # Geri kalanı basic auth arkasında (şifre üret: caddy hash-password)
+    # Everything else behind basic auth (generate the password: caddy hash-password)
     handle {
         basic_auth {
             admin <bcrypt-hash>
@@ -97,50 +97,50 @@ rag.example.com {
 }
 ```
 
-nginx kullanıyorsan aynı ayrım `location /webhooks/ { proxy_pass ... }` + geri
-kalana `auth_basic` ile kurulur. Alternatif: servis hiç dışa açılmaz, webhook
-yerine yalnızca poller kullanılır (`RAG_POLL_INTERVAL_SECONDS`, varsayılan 300 sn)
-— push'tan en geç 5 dk sonra index tazelenir, hiçbir portu açman gerekmez.
+With nginx the same split is `location /webhooks/ { proxy_pass ... }` plus `auth_basic` on
+the rest. An alternative: never expose the service at all and use the poller instead of
+webhooks (`RAG_POLL_INTERVAL_SECONDS`, 300 s by default) — the index refreshes at most 5
+minutes after a push, and you open no ports.
 
-## Webhook kurulumları
+## Webhook setup
 
 - **Azure DevOps:** Project Settings → Service Hooks → Web Hooks → *Code pushed*
-  → URL `https://rag.example.com/webhooks/azure/push`, Basic auth password (ya da
-  `X-RAG-Webhook-Secret` header'ı) = `RAG_WEBHOOK_SECRET`.
+  → URL `https://rag.example.com/webhooks/azure/push`, Basic auth password (or the
+  `X-RAG-Webhook-Secret` header) = `RAG_WEBHOOK_SECRET`.
 - **GitHub:** repo → Settings → Webhooks → Add webhook → URL
-  `https://rag.example.com/webhooks/github/push`, content type
-  `application/json`, Secret = `RAG_WEBHOOK_SECRET`, "Just the push event".
-  (GitHub "Recent Deliveries" sekmesinden teslimatları ve cevapları görürsün;
-  ping olayına servis `{"pong": true}` döner.)
+  `https://rag.example.com/webhooks/github/push`, content type `application/json`,
+  Secret = `RAG_WEBHOOK_SECRET`, "Just the push event".
+  (GitHub's "Recent Deliveries" tab shows the deliveries and the responses; the service
+  answers a ping event with `{"pong": true}`.)
 
-## Ajanları bağlama (MCP)
+## Connecting agents (MCP)
 
-Servis `/mcp` altında MCP konuşur. Yerelde:
+The service speaks MCP under `/mcp`. Locally:
 
 ```bash
 claude mcp add --transport http milvus-rag http://localhost:8090/mcp
 ```
 
-Sunucuda çalışıyorsa iki şey gerekir: uç erişilebilir olmalı (reverse proxy'de
-`/mcp` de basic auth arkasında kalabilir — MCP istemcisi `--header` ile
-gönderebilir) ve **host'a izin verilmeli**:
+If it runs on a server, two things are needed: the endpoint has to be reachable (in the
+reverse proxy `/mcp` can stay behind basic auth — an MCP client can send it with `--header`)
+and **the host has to be allowed**:
 
 ```bash
 RAG_MCP_ALLOWED_HOSTS=rag.example.com
 ```
 
-Bu koruma DNS rebinding içindir; boş bırakılırsa yalnızca localhost'tan gelen MCP
-istekleri kabul edilir (HTTP API'yi etkilemez).
+That guard is for DNS rebinding; left empty, only MCP requests coming from localhost are
+accepted (it does not affect the HTTP API).
 
-## Sağlık ve işletme
+## Health and operations
 
-| Ne | Nasıl |
+| What | How |
 |---|---|
-| Sağlık | `GET /health` — Milvus bağlantısı, model, repo sayısı |
-| İş takibi | `GET /jobs?repo_id=...` — durum + `stats.progress` |
-| Loglar | `docker compose ... logs -f rag` (tek satır, `anahtar=değer`) |
-| Milvus arayüzü | `--profile ui` ile Attu (:8091) — üretimde kapalı tut |
-| Tam yeniden index | `POST /repos/{id}/sync {"force": true}` |
+| Health | `GET /health` — Milvus connection, model, repo count |
+| Job tracking | `GET /jobs?repo_id=...` — status + `stats.progress` |
+| Logs | `docker compose ... logs -f rag` (one line, `key=value`) |
+| Milvus UI | Attu with `--profile ui` (:8091) — keep it off in production |
+| Full re-index | `POST /repos/{id}/sync {"force": true}` |
 
-Bilinen sınırlar: tek worker (indexleme sıralı — kasıtlı, bkz. CLAUDE.md);
-Milvus standalone tek düğüm. İkisi de tek sunucu kurulumu için yeterli.
+Known limits: a single worker (indexing is sequential — deliberate, see CLAUDE.md); Milvus
+standalone is a single node. Both are enough for a one-server install.

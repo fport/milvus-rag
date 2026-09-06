@@ -1,14 +1,15 @@
-# Tek imaj: FastAPI servisi + index worker'ı (aynı süreç).
+# One image: the FastAPI service + the index worker (same process).
 #
 #   docker compose -f infra/docker-compose.prod.yml up -d --build
 #
-# Model imaja GÖMÜLMEZ (bge-m3 ~2.2 GB): ilk açılışta iner ve hf-cache
-# volume'ünde kalır — imaj küçük kalır, model güncellemesi imaj değiştirmez.
-# torch, pyproject'teki pytorch-cpu kaynağı sayesinde Linux'ta CUDA'sız gelir.
+# The model is NOT baked into the image (bge-m3 ~2.2 GB): it is downloaded on the first
+# boot and stays in the hf-cache volume — the image stays small, and updating the model
+# does not change the image. Thanks to the pytorch-cpu source in pyproject, torch comes
+# without CUDA on Linux.
 
 FROM python:3.12-slim
 
-# git: repo klonlamak için zorunlu. curl: compose healthcheck kullanıyor.
+# git: required to clone repos. curl: used by the compose healthcheck.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git curl \
     && rm -rf /var/lib/apt/lists/*
@@ -23,7 +24,7 @@ ENV PYTHONUNBUFFERED=1 \
     RAG_DATA_DIR=/app/data \
     HF_HOME=/app/.cache/huggingface
 
-# Önce bağımlılıklar: bu katman yalnızca lock değişince yeniden kurulur.
+# Dependencies first: this layer is only rebuilt when the lock file changes.
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
@@ -31,10 +32,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY src ./src
 RUN uv sync --frozen --no-dev
 
-# tree-sitter-language-pack ≥ 1.15 grammar'ları ilk kullanımda indirir. Kapalı ağda ilk
-# .kt / .php dosyası indirme denemesine takılıp düz pencereye düşmesin diye duman
-# testinden geçen liste (files.py → PREFETCH_GRAMMARS) imaja gömülür. ~/.cache altına
-# yazar; volume değil, katmanda kalır. Servis aynı kullanıcıyla (root) çalışır.
+# tree-sitter-language-pack >= 1.15 downloads grammars on first use. So that the first
+# .kt / .php file on an offline host does not stall on a download and fall back to plain
+# windows, the smoke-tested list (files.py -> PREFETCH_GRAMMARS) is baked into the image.
+# It writes under ~/.cache; that is a layer, not a volume. The service runs as the same
+# user (root).
 RUN uv run python -c "from tree_sitter_language_pack import prefetch; \
     from milvus_rag.sources.files import PREFETCH_GRAMMARS; prefetch(sorted(PREFETCH_GRAMMARS))"
 

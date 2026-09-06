@@ -1,5 +1,5 @@
-"""Parçaları ayarlardan kurar. CLI ve API aynı yığını buradan alır; üç yerde
-üç farklı kablolama olmasın."""
+"""Builds the pieces from the settings. The CLI and the API take the same stack from
+here, so there is no third way of wiring it up."""
 
 from __future__ import annotations
 
@@ -22,7 +22,8 @@ from milvus_rag.sources.github import GitHub
 
 log = get_logger("services")
 
-# Arayüzden girilebilen sırlar. Hepsi env'deki karşılığını ezer; boş kayıt env'e döner.
+# Secrets that can be entered from the UI. Each overrides its env counterpart;
+# an empty record falls back to env.
 CREDENTIAL_KEYS = (
     "github_token",
     "azure_org_url",
@@ -33,7 +34,7 @@ CREDENTIAL_KEYS = (
 
 
 def resolve_credentials(settings: Settings, db: Database) -> dict[str, str | None]:
-    """UI'dan kaydedilen değer env'i ezer; kayıt silinince env'e geri düşülür."""
+    """A value saved from the UI overrides the env; deleting the record falls back to env."""
     saved = db.get_app_settings(CREDENTIAL_KEYS)
     return {
         "github_token": saved.get("github_token") or settings.github_token,
@@ -45,7 +46,7 @@ def resolve_credentials(settings: Settings, db: Database) -> dict[str, str | Non
 
 
 def credential_sources(settings: Settings, db: Database) -> dict[str, str | None]:
-    """Her sır nereden geliyor: "ui", "env" ya da None. Değerin kendisi dönmez."""
+    """Where each secret comes from: "ui", "env" or None. The value itself is never returned."""
     saved = db.get_app_settings(CREDENTIAL_KEYS)
     env = {
         "github_token": settings.github_token,
@@ -62,18 +63,20 @@ def credential_sources(settings: Settings, db: Database) -> dict[str, str | None
 def _build_llm_and_enricher(
     settings: Settings, db: Database, anthropic_api_key: str | None
 ) -> tuple[LLM | None, Enricher | None]:
-    # Settings donuk; anahtarı ezmek için kopya. LLM yalnız cevap katmanında.
+    # Settings are frozen; copy it to override the key. The LLM lives only in the answer layer.
     llm = build_llm(settings.model_copy(update={"anthropic_api_key": anthropic_api_key}))
     enricher = (
-        Enricher(llm, db, settings.enrich_batch_chunks) if settings.enrich_enabled and llm else None
+        Enricher(llm, db, settings.enrich_batch_chunks, settings.enrich_language)
+        if settings.enrich_enabled and llm
+        else None
     )
     if settings.enrich_enabled and llm is None:
-        log.warning("RAG_ENRICH_ENABLED açık ama LLM yok; enrichment atlanacak")
+        log.warning("RAG_ENRICH_ENABLED is on but there is no LLM; enrichment will be skipped")
     return llm, enricher
 
 
 def apply_credentials(services: Services) -> None:
-    """İstemcileri güncel kimliklerle yeniden kurar — süreç yeniden başlamadan."""
+    """Rebuilds the clients with the current credentials — without restarting the process."""
     creds = resolve_credentials(services.settings, services.db)
     if services.github is not None:
         services.github.close()
@@ -89,7 +92,7 @@ def apply_credentials(services: Services) -> None:
     services.llm, services.enricher = _build_llm_and_enricher(
         services.settings, services.db, creds["anthropic_api_key"]
     )
-    # Aynı istemci nesnesini tutan herkes yenisini görsün.
+    # Everyone holding the same client object should see the new one.
     for holder in (services.indexer, services.repos, services.jobs):
         holder.github = services.github
         holder.azure = services.azure
@@ -111,11 +114,11 @@ class Services:
     indexer: Indexer
     repos: RepoService
     jobs: JobRunner
-    # Çözülmüş webhook sırrı (UI > env); webhook uçları settings'e değil buna bakar.
+    # The resolved webhook secret (UI > env); the webhook endpoints read this, not settings.
     webhook_secret: str | None = None
 
     def warm_up(self) -> None:
-        """Modelleri açılışta yükle; ilk isteğe 20 saniye bindirme."""
+        """Load the models at startup; do not put 20 seconds on the first request."""
         self.embedder.warm_up()
         if self.reranker is not None:
             self.reranker.warm_up()

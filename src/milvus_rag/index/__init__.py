@@ -1,1 +1,1 @@
-"""Index katmanı: chunk → temizle → embed → Milvus."""
+"""The index layer: chunk → scrub → embed → Milvus."""

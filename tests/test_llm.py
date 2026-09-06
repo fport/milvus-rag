@@ -1,8 +1,10 @@
-"""LLM katmanı: sağlayıcı seçimi (auto), Ollama/OpenAI istemcilerinin hata metinleri ve
-düşünen modellerin düşüncesini cevaptan ayıklama. Ağ yok — httpx.Client sahte.
+"""The LLM layer: provider selection (auto), the error texts of the Ollama/OpenAI clients,
+and stripping a thinking model's reasoning out of the answer. No network — httpx.Client
+is faked.
 
-Neden bu kadar mesaj testi: /ask'in ilk kullanıcı deneyimi bir hata metni olacak
-("model inmemiş", "Ollama kapalı"); o metin tam komutu söylemezse kimse ikinci kez denemez.
+Why so many message tests: the first thing a user sees from /ask will be an error text
+("the model is not pulled", "Ollama is down"); if that text does not print the exact
+command, nobody tries a second time.
 """
 
 from __future__ import annotations
@@ -40,8 +42,8 @@ def test_build_llm_defaults_to_local_ollama():
 
 
 def test_strip_thinking_removes_think_blocks_only():
-    assert strip_thinking("<think>uzun düşünce\nsatırlar</think>\nCevap [1].") == "Cevap [1]."
-    assert strip_thinking("Düz cevap") == "Düz cevap"
+    assert strip_thinking("<think>long reasoning\nlines</think>\nAnswer [1].") == "Answer [1]."
+    assert strip_thinking("Plain answer") == "Plain answer"
 
 
 # ---------------------------------------------------------- sahte httpx
@@ -58,7 +60,7 @@ class _Response:
 
 
 class _FakeClient:
-    """`httpx.Client` yerine: rota → yanıt. Kayıtlı istekler `calls`'ta."""
+    """A stand-in for `httpx.Client`: route → response. Recorded requests live in `calls`."""
 
     routes: ClassVar[dict[str, list[_Response] | Exception]] = {}
     calls: ClassVar[list[tuple[str, str, dict | None]]] = []
@@ -103,19 +105,19 @@ TAGS = "http://localhost:11434/api/tags"
 def test_ollama_disables_thinking_and_retries_for_models_without_it(fake_http):
     llm = OllamaLLM("qwen3.5:9b", "http://localhost:11434/", num_ctx=8192)
     fake_http.routes[CHAT] = [
-        _Response(200, {"message": {"content": "<think>hmm</think>\nCevap [1]", "thinking": "x"}})
+        _Response(200, {"message": {"content": "<think>hmm</think>\nAnswer [1]", "thinking": "x"}})
     ]
-    assert llm.complete("sys", "soru") == "Cevap [1]"
+    assert llm.complete("sys", "question") == "Answer [1]"
     _, _, payload = fake_http.calls[-1]
     assert payload["think"] is False and payload["options"]["num_ctx"] == 8192
 
-    # Düşünmeyen model `think` alanını reddeder → alan olmadan tekrar denenir.
+    # A non-thinking model rejects the `think` field → it is retried without it.
     fake_http.calls.clear()
     fake_http.routes[CHAT] = [
         _Response(400, text='{"error":"model does not support thinking"}'),
-        _Response(200, {"message": {"content": "Düz cevap"}}),
+        _Response(200, {"message": {"content": "Plain answer"}}),
     ]
-    assert llm.complete("sys", "soru") == "Düz cevap"
+    assert llm.complete("sys", "question") == "Plain answer"
     assert "think" in fake_http.calls[0][2] and "think" not in fake_http.calls[1][2]
 
 
@@ -123,27 +125,28 @@ def test_ollama_errors_tell_the_user_what_to_run(fake_http):
     llm = OllamaLLM("qwen3.5:9b", "http://localhost:11434")
     fake_http.routes[CHAT] = [_Response(404, text='{"error":"model not found"}')]
     with pytest.raises(LLMError, match=r"ollama pull qwen3\.5:9b"):
-        llm.complete("sys", "soru")
+        llm.complete("sys", "question")
 
     fake_http.routes[TAGS] = [_Response(200, {"models": [{"name": "llama3.2:latest"}]})]
-    with pytest.raises(LLMError, match=r"indirilmemiş — `ollama pull qwen3\.5:9b`"):
+    with pytest.raises(LLMError, match=r"is not pulled in Ollama — `ollama pull qwen3\.5:9b`"):
         llm.ping()
     fake_http.routes[TAGS] = [_Response(200, {"models": [{"name": "qwen3.5:9b"}]})]
     assert llm.ping() == "qwen3.5:9b"
-    # Etiketsiz model adı ":latest" ile eşleşir.
+    # A model name without a tag matches ":latest".
     fake_http.routes[TAGS] = [_Response(200, {"models": [{"name": "llama3.2:latest"}]})]
     assert OllamaLLM("llama3.2", "http://localhost:11434").ping() == "llama3.2"
 
     fake_http.routes[TAGS] = httpx.ConnectError("connection refused")
-    with pytest.raises(LLMError, match=r"Ollama çalışmıyor .*ollama serve.*ollama\.com/download"):
+    pattern = r"Ollama is not running .*ollama serve.*ollama\.com/download"
+    with pytest.raises(LLMError, match=pattern):
         llm.ping()
 
 
 def test_openai_compatible_server_uses_base_url(fake_http):
     llm = OpenAILLM("Qwen/Qwen3.5-9B", "x", "http://localhost:8000/v1")
     fake_http.routes["http://localhost:8000/v1/chat/completions"] = [
-        _Response(200, {"choices": [{"message": {"content": "<think>t</think>Cevap"}}]})
+        _Response(200, {"choices": [{"message": {"content": "<think>t</think>Answer"}}]})
     ]
-    assert llm.complete("sys", "soru") == "Cevap"
+    assert llm.complete("sys", "question") == "Answer"
     fake_http.routes["http://localhost:8000/v1/models"] = [_Response(200, {"data": []})]
     assert llm.ping() == "Qwen/Qwen3.5-9B"

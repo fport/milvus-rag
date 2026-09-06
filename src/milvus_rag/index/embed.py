@@ -1,11 +1,11 @@
 """Metin → vektör.
 
-Varsayılan BGE-M3 (1024 boyut, çok dilli): Türkçe soru ile İngilizce kod aynı
-uzayda. Vektörler çıkarken L2-normalize edilir; COSINE ile arama yapılır —
-metrik karışıklığı sessizce yanlış sıralama üretir, o yüzden tek yer.
-
-Model istek başına değil bir kez yüklenir (ilk yükleme 10-20 sn). Import'lar
-fonksiyon içinde: `milvus_rag`'ı import etmek torch'u çekmesin.
+BGE-M3 by default (1024 dimensions, multilingual): a question in one language and
+code in another land in the same space. Vectors are L2-normalized on the way out and
+searched with COSINE — mixing metrics silently produces wrong ordering, so it is
+done in one place.
+The model is loaded once, not per request (10-20 s the first time). Imports live
+inside the functions so that importing `milvus_rag` does not pull in torch.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ class Embedder(ABC):
 
     @abstractmethod
     def encode(self, texts: Sequence[str]) -> Vector:
-        """(n, dimension) float32, satırlar birim uzunlukta."""
+        """(n, dimension) float32, rows of unit length."""
 
     def encode_one(self, text: str) -> Vector:
         return np.asarray(self.encode([text])[0], dtype=np.float32)
@@ -55,7 +55,7 @@ def normalise(vectors: Vector) -> Vector:
 
 
 class LocalEmbedder(Embedder):
-    """sentence-transformers ile yerel model."""
+    """A local model via sentence-transformers."""
 
     def __init__(
         self,
@@ -81,7 +81,7 @@ class LocalEmbedder(Embedder):
             started = time.perf_counter()
             model = SentenceTransformer(self.model_name, device=self.device)
             model.max_seq_length = self.max_tokens
-            # sentence-transformers 5.x adı değiştirdi; eski sürümde yeni ad yok.
+            # sentence-transformers 5.x renamed it; the old name is gone in new versions.
             get_dimension = getattr(
                 model, "get_embedding_dimension", model.get_sentence_embedding_dimension
             )
@@ -89,7 +89,7 @@ class LocalEmbedder(Embedder):
             if dimension != self.expected_dimension:
                 msg = (
                     f"{self.model_name} {dimension} boyutlu vektör üretiyor, ayarlarda "
-                    f"{self.expected_dimension} var; Milvus şeması ile embedder uyuşmalı"
+                    f"got {self.expected_dimension}; the Milvus schema and the embedder must agree"
                 )
                 raise ValueError(msg)
             log.info(
@@ -119,7 +119,7 @@ class LocalEmbedder(Embedder):
 
 
 class OpenAIEmbedder(Embedder):
-    """text-embedding-3-* ; `dimensions` ile 1024'e indirgenir, Milvus şeması değişmez."""
+    """text-embedding-3-* ; `dimensions` reduces it to 1024, the Milvus schema is unchanged."""
 
     def __init__(
         self, api_key: str, model_name: str, dimension: int, batch_size: int = 100
@@ -177,7 +177,7 @@ class OpenAIEmbedder(Embedder):
 def build_embedder(settings: Settings) -> Embedder:
     if settings.embedding_backend == "openai":
         if not settings.openai_api_key:
-            msg = "RAG_EMBEDDING_BACKEND=openai için OPENAI_API_KEY gerekli"
+            msg = "RAG_EMBEDDING_BACKEND=openai requires OPENAI_API_KEY"
             raise ValueError(msg)
         model = settings.embedding_model
         if model.startswith("BAAI/"):

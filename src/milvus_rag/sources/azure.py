@@ -1,10 +1,10 @@
-"""Azure DevOps Git REST istemcisi (api-version 7.1).
+"""The Azure DevOps Git REST client (api-version 7.1).
 
-Yalnızca okuma: proje ve repo listesi, repo bilgisi, branch head'i. Dosya
-içeriği REST ile değil `git clone` ile gelir — artımlı sync için çalışma ağacı
-gerekir, REST'ten dosya dosya çekmek hem yavaş hem kırılgan.
+Read-only: the project and repo lists, repo info, the branch head. File content comes
+from `git clone`, not from REST — incremental sync needs a working tree, and pulling
+files one by one over REST is both slow and brittle.
 
-Kimlik: PAT, Basic auth'ta boş kullanıcı adıyla (Azure'ın beklediği biçim).
+Credential: the PAT, as Basic auth with an empty username (the form Azure expects).
 """
 
 import base64
@@ -70,7 +70,7 @@ def strip_ref(ref: str) -> str:
 
 
 def git_auth_header(pat: str) -> str:
-    """git'e `-c http.extraheader=` olarak geçen değer."""
+    """The value passed to git as `-c http.extraheader=`."""
     token = base64.b64encode(f":{pat}".encode()).decode()
     return f"AUTHORIZATION: Basic {token}"
 
@@ -95,16 +95,15 @@ class AzureDevOps:
         try:
             response = self._client.get(path, params=query)
         except httpx.HTTPError as error:
-            msg = f"Azure DevOps'a ulaşılamadı: {error}"
+            msg = f"could not reach Azure DevOps: {error}"
             raise AzureError(msg) from error
         if response.status_code == 401:
-            msg = "Azure DevOps 401: PAT geçersiz ya da süresi dolmuş (kapsam: Code → Read)"
+            msg = "Azure DevOps 401: the PAT is invalid or expired (scope: Code → Read)"
             raise AzureError(msg, 401)
         if response.status_code == 203:
-            # Azure, auth başarısızsa 203 + HTML oturum açma sayfası döner.
+            # When auth fails Azure returns 203 plus an HTML sign-in page.
             msg = (
-                "Azure DevOps kimlik doğrulamayı reddetti (203); "
-                "PAT ve organizasyon URL'sini kontrol et"
+                "Azure DevOps refused the credentials (203); check the PAT and the organization URL"
             )
             raise AzureError(msg, 203)
         if response.status_code == 404:
@@ -149,7 +148,7 @@ class AzureDevOps:
         return sorted((_to_repo(row) for row in rows), key=lambda repo: repo.name.lower())
 
     def get_repo(self, project: str, repo: str) -> AzureRepo:
-        """`repo` ad ya da GUID olabilir; Azure ikisini de kabul eder."""
+        """`repo` can be a name or a GUID; Azure accepts both."""
         response = self._get(f"/{project}/_apis/git/repositories/{repo}")
         return _to_repo(response.json())
 

@@ -8,7 +8,7 @@ from milvus_rag.index.chunk import (
 TS = """import { db } from "@/db";
 import { redis } from "@/shared/lib/redis";
 
-/** Oturumdan kullanıcıyı çözer. */
+/** Resolves the user from the session. */
 export async function withSession(c: Context, next: Next) {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   c.set("session", session);
@@ -52,7 +52,7 @@ def test_typescript_units_have_symbols_and_lines():
     assert {"withSession", "requireAuth"} <= symbols
     assert all(record.start_line <= record.end_line for record in records)
     assert all(len(record.text.encode()) <= 400 or record.kind for record in records)
-    # Sınıf sığmadığı için metodlarına bölündü; metodlar sınıfı ebeveyn olarak taşır.
+    # The class did not fit, so it was split into methods; each carries the class as parent.
     methods = [record for record in records if record.parent_symbol == "SessionCache"]
     assert {record.symbol for record in methods} >= {"get", "set"}
     assert all("file: src/middlewares/auth.ts" in record.header for record in records)
@@ -63,8 +63,8 @@ def test_typescript_units_have_symbols_and_lines():
 def test_small_pieces_merge_and_doc_comment_sticks_to_function():
     records = chunk_file("a.ts", TS, ChunkerConfig(max_bytes=2000, min_bytes=200))
     with_session = next(record for record in records if record.symbol == "withSession")
-    assert "Oturumdan kullanıcıyı" in with_session.text
-    assert with_session.text.startswith("import")  # import bloğu ilk chunk'a yapışır
+    assert "Resolves the user from the session" in with_session.text
+    assert with_session.text.startswith("import")  # the import block sticks to the first chunk
 
 
 def test_oversized_function_is_windowed_but_keeps_symbol():

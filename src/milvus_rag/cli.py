@@ -1,12 +1,12 @@
-"""Komut satırı.
+"""The command line.
 
 uv run rag serve
 uv run rag azure projects
-uv run rag azure repos <proje>
-uv run rag add-azure <proje> <repo> [--branch main]
+uv run rag azure repos <project>
+uv run rag add-azure <project> <repo> [--branch main]
 uv run rag add-local ~/code/my-api --name my-api
 uv run rag sync <repo-id> [--force]
-uv run rag search "jwt token nerede üretiliyor" [--repo <id>]
+uv run rag search "where is the jwt token issued" [--repo <id>]
 uv run rag ask "..." [--repo <id>]
 uv run rag eval evals/golden.example.jsonl --repo my-api --tag v1
 """
@@ -25,9 +25,9 @@ from milvus_rag import __version__
 from milvus_rag.config import get_settings
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help=__doc__)
-azure_app = typer.Typer(no_args_is_help=True, help="Azure DevOps'a göz at.")
+azure_app = typer.Typer(no_args_is_help=True, help="Browse Azure DevOps.")
 app.add_typer(azure_app, name="azure")
-github_app = typer.Typer(no_args_is_help=True, help="GitHub'a göz at.")
+github_app = typer.Typer(no_args_is_help=True, help="Browse GitHub.")
 app.add_typer(github_app, name="github")
 console = Console()
 
@@ -40,7 +40,7 @@ def _services() -> Any:
 
 @app.callback()
 def _root() -> None:
-    """Kod tabanı RAG servisi."""
+    """A RAG service over a codebase."""
 
 
 @app.command()
@@ -50,11 +50,11 @@ def version() -> None:
 
 @app.command()
 def serve(
-    port: Annotated[int | None, typer.Option(help="Varsayılan RAG_PORT")] = None,
+    port: Annotated[int | None, typer.Option(help="Defaults to RAG_PORT")] = None,
     host: str = "0.0.0.0",
     reload: bool = False,
 ) -> None:
-    """FastAPI servisini başlat."""
+    """Start the FastAPI service."""
     import uvicorn
 
     settings = get_settings()
@@ -74,8 +74,8 @@ def serve(
 def azure_projects() -> None:
     s = _services()
     if s.azure is None:
-        raise typer.BadParameter("AZURE_DEVOPS_ORG_URL ve AZURE_DEVOPS_PAT gerekli")
-    table = Table("proje", "id", "açıklama")
+        raise typer.BadParameter("AZURE_DEVOPS_ORG_URL and AZURE_DEVOPS_PAT are required")
+    table = Table("project", "id", "description")
     for project in s.azure.list_projects():
         table.add_row(project.name, project.id, project.description[:60])
     console.print(table)
@@ -85,9 +85,9 @@ def azure_projects() -> None:
 def azure_repos(project: str) -> None:
     s = _services()
     if s.azure is None:
-        raise typer.BadParameter("AZURE_DEVOPS_ORG_URL ve AZURE_DEVOPS_PAT gerekli")
+        raise typer.BadParameter("AZURE_DEVOPS_ORG_URL and AZURE_DEVOPS_PAT are required")
     registered = {r.external_id: r.id for r in s.db.list_repos() if r.provider == "azure"}
-    table = Table("repo", "branch", "boyut", "kayıtlı", "id")
+    table = Table("repo", "branch", "size", "registered", "id")
     for repo in s.azure.list_repos(project):
         table.add_row(
             repo.name,
@@ -101,10 +101,10 @@ def azure_repos(project: str) -> None:
 
 @github_app.command("repos")
 def github_repo_list(owner: str) -> None:
-    """Bir org'un ya da kullanıcının repoları (public; token varsa private de)."""
+    """The repos of an org or a user (public; private too when a token is set)."""
     s = _services()
     registered = {r.external_id: r.id for r in s.db.list_repos() if r.provider == "github"}
-    table = Table("repo", "branch", "private", "boyut", "kayıtlı")
+    table = Table("repo", "branch", "private", "size", "registered")
     for repo in s.github.list_repos(owner):
         table.add_row(
             repo.full_name,
@@ -121,9 +121,11 @@ def github_repo_list(owner: str) -> None:
 
 @app.command()
 def repos() -> None:
-    """Kayıtlı repolar."""
+    """Registered repos."""
     s = _services()
-    table = Table("id", "sağlayıcı", "branch", "durum", "dosya", "chunk", "son commit", "son index")
+    table = Table(
+        "id", "provider", "branch", "status", "files", "chunks", "last commit", "last index"
+    )
     for repo in s.db.list_repos():
         table.add_row(
             repo.id,
@@ -146,10 +148,10 @@ def add_azure(
     no_index: bool = False,
     no_auto_sync: bool = False,
 ) -> None:
-    """Azure DevOps reposunu kaydet ve indexle."""
+    """Register and index an Azure DevOps repo."""
     s = _services()
     record = s.repos.register_azure(project, repo, branch, auto_sync=not no_auto_sync)
-    console.print(f"[green]kayıtlı:[/] {record.id} ({record.remote_url})")
+    console.print(f"[green]registered:[/] {record.id} ({record.remote_url})")
     if not no_index:
         _sync(s, record.id, force=False)
 
@@ -161,10 +163,10 @@ def add_github(
     no_index: bool = False,
     no_auto_sync: bool = False,
 ) -> None:
-    """GitHub reposunu (`owner/repo`) kaydet ve indexle."""
+    """Register and index a GitHub repo (`owner/repo`)."""
     s = _services()
     record = s.repos.register_github(repo, branch, auto_sync=not no_auto_sync)
-    console.print(f"[green]kayıtlı:[/] {record.id} ({record.web_url})")
+    console.print(f"[green]registered:[/] {record.id} ({record.web_url})")
     if not no_index:
         _sync(s, record.id, force=False)
 
@@ -175,10 +177,10 @@ def add_local(
     name: Annotated[str | None, typer.Option()] = None,
     no_index: bool = False,
 ) -> None:
-    """Yerel bir dizini (git olması şart değil) kaydet ve indexle."""
+    """Register and index a local directory (it need not be a git repo)."""
     s = _services()
     record = s.repos.register_local(str(path), name)
-    console.print(f"[green]kayıtlı:[/] {record.id} ({record.local_path})")
+    console.print(f"[green]registered:[/] {record.id} ({record.local_path})")
     if not no_index:
         _sync(s, record.id, force=False)
 
@@ -187,40 +189,40 @@ def add_local(
 def add_git(
     url: str, branch: str = "main", name: Annotated[str | None, typer.Option()] = None
 ) -> None:
-    """Herkese açık ya da kimliksiz erişilebilen bir git URL'sini kaydet."""
+    """Register a public git URL, or any URL reachable without credentials."""
     s = _services()
     record = s.repos.register_git(url, branch, name)
-    console.print(f"[green]kayıtlı:[/] {record.id}")
+    console.print(f"[green]registered:[/] {record.id}")
     _sync(s, record.id, force=False)
 
 
 @app.command()
 def sync(repo_id: str, force: bool = False) -> None:
-    """Repoyu şimdi, bu süreçte senkronize et (artımlı; --force tam yeniden index)."""
+    """Sync the repo now, in this process (incremental; --force does a full re-index)."""
     _sync(_services(), repo_id, force)
 
 
 @app.command()
 def remove(repo_id: str, yes: bool = typer.Option(False, "--yes", "-y")) -> None:
-    """Repoyu, chunk'larını ve klonunu sil."""
+    """Delete the repo, its chunks and its clone."""
     if not yes and not typer.confirm(f"{repo_id} silinsin mi?"):
         raise typer.Abort()
     _services().repos.remove(repo_id)
-    console.print(f"[red]silindi:[/] {repo_id}")
+    console.print(f"[red]deleted:[/] {repo_id}")
 
 
 def _sync(s: Any, repo_id: str, force: bool) -> None:
-    with console.status(f"{repo_id} indexleniyor..."):
+    with console.status(f"indexing {repo_id}..."):
         job = s.jobs.run_now(repo_id, force=force)
     if job.status != "done":
-        console.print(f"[red]başarısız:[/] {job.error}")
+        console.print(f"[red]failed:[/] {job.error}")
         raise typer.Exit(1)
     stats = job.stats
     console.print(
-        f"[green]tamam[/] dosya={stats.get('files_seen')} eklendi={stats.get('added')} "
-        f"değişti={stats.get('modified')} silindi={stats.get('deleted')} "
-        f"aynı={stats.get('unchanged')} chunk={stats.get('chunks_written')} "
-        f"süre={stats.get('total_seconds')}s embed={stats.get('embed_seconds')}s"
+        f"[green]done[/] files={stats.get('files_seen')} added={stats.get('added')} "
+        f"modified={stats.get('modified')} deleted={stats.get('deleted')} "
+        f"unchanged={stats.get('unchanged')} chunks={stats.get('chunks_written')} "
+        f"seconds={stats.get('total_seconds')}s embed={stats.get('embed_seconds')}s"
     )
 
 
@@ -237,7 +239,7 @@ def search(
     path_prefix: str = "",
     as_json: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Kod parçalarını ara; kanal skorlarıyla birlikte."""
+    """Search code chunks, with their channel scores."""
     from milvus_rag.search.retrieve import SearchRequest
 
     s = _services()
@@ -255,7 +257,7 @@ def search(
         console.print_json(json.dumps(response.to_dict(), ensure_ascii=False))
         return
     console.print(
-        f"[dim]mode={response.mode} rerank={response.reranked} aday={response.candidates} "
+        f"[dim]mode={response.mode} rerank={response.reranked} candidates={response.candidates} "
         f"{' '.join(f'{k}={v:.0f}ms' for k, v in response.timings_ms.items())}[/]"
     )
     for hit in response.hits:
@@ -273,19 +275,19 @@ def ask(
     repo: Annotated[list[str] | None, typer.Option("--repo", "-r")] = None,
     k: Annotated[int | None, typer.Option()] = None,
 ) -> None:
-    """Atıflı cevap üret (LLM gerekir)."""
+    """Produce a cited answer (needs an LLM)."""
     from milvus_rag.search.answer import ask as run_ask
     from milvus_rag.search.retrieve import SearchRequest
 
     s = _services()
     if s.llm is None:
-        raise typer.BadParameter("LLM yapılandırılmamış (RAG_LLM_PROVIDER / API anahtarı)")
-    with console.status("düşünüyor..."):
+        raise typer.BadParameter("no LLM is configured (RAG_LLM_PROVIDER / API key)")
+    with console.status("thinking..."):
         result = run_ask(
             s.retriever, s.llm, SearchRequest(query=query, repo_ids=tuple(repo or ()), k=k)
         )
     console.print(result.answer)
-    console.print("\n[dim]kaynaklar:[/]")
+    console.print("\n[dim]sources:[/]")
     for source in result.sources:
         console.print(
             f"  [{source['n']}] {source['path']}:{source['start_line']}-{source['end_line']}"
@@ -304,20 +306,20 @@ def eval(
     candidates: Annotated[int | None, typer.Option()] = None,
     results_dir: Path = Path("evals/results"),
 ) -> None:
-    """Golden set ile Recall@k / MRR ölç; sonucu evals/results/ altına yaz."""
+    """Measure Recall@k / MRR against a golden set; write the result under evals/results/."""
     from milvus_rag.eval import load_golden, run_eval, save_report
 
     s = _services()
     cases = load_golden(golden)
-    with console.status(f"{len(cases)} soru ölçülüyor..."):
+    with console.status(f"measuring {len(cases)} questions..."):
         report = run_eval(s.retriever, cases, tuple(repo or ()), k, tag, mode, rerank, candidates)
     path = save_report(report, results_dir)
     table = Table(title=f"{tag} · k={k} · n={report.n}", title_justify="left")
-    table.add_column("kesit")
+    table.add_column("slice")
     table.add_column("n", justify="right")
     table.add_column("recall@k", justify="right")
     table.add_column("MRR", justify="right")
-    table.add_row("hepsi", str(report.n), f"{report.recall_at_k:.3f}", f"{report.mrr:.3f}")
+    table.add_row("all", str(report.n), f"{report.recall_at_k:.3f}", f"{report.mrr:.3f}")
     for kind, values in report.by_kind.items():
         if "abstain" in values:
             table.add_row(kind, str(int(values["n"])), f"abstain {values['abstain']:.3f}", "—")
@@ -332,26 +334,26 @@ def eval(
     cal = report.calibration
     if cal.get("positive_found_min_top_dense") is not None:
         signal += (
-            f" · kalibrasyon: pozitif min {cal['positive_found_min_top_dense']}"
-            f" / negatif max {cal.get('negative_max_top_dense')}"
+            f" · calibration: positive min {cal['positive_found_min_top_dense']}"
+            f" / negative max {cal.get('negative_max_top_dense')}"
         )
     console.print(
         f"[dim]p50={report.p50_ms:.0f}ms p95={report.p95_ms:.0f}ms · {signal} · {report.config}[/]"
     )
     if report.misses:
-        console.print(f"\n[dim]ilk {k}'de bulunamayan / çekimser kalınamayan:[/]")
+        console.print(f"\n[dim]not found in the top {k} / failed to abstain:[/]")
         for miss in report.misses:
             console.print(f"  · {miss.question}  [dim]→ {', '.join(miss.top[:3])}[/]")
-    console.print(f"\n[dim]yazıldı: {path}[/]")
+    console.print(f"\n[dim]written: {path}[/]")
 
 
 @app.command()
 def poll() -> None:
-    """Azure repolarının head'ini bir kez kontrol et; değişeni indexle."""
+    """Check the heads of the remote repos once; index whatever moved."""
     s = _services()
     triggered = s.jobs.poll_once()
     if not triggered:
-        console.print("değişiklik yok")
+        console.print("no changes")
         return
     for item in triggered:
         _sync(s, item["repo_id"], force=False)

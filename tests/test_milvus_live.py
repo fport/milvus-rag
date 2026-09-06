@@ -1,4 +1,4 @@
-"""Gerçek Milvus'a karşı depo katmanı. Model gerekmez: rastgele vektör + BM25 metni.
+"""The store layer against a real Milvus. No model needed: random vectors + BM25 text.
 
 RAG_LIVE=1 uv run pytest -q tests/test_milvus_live.py
 """
@@ -11,7 +11,7 @@ import pytest
 
 from milvus_rag.index.store import MilvusStore, build_filter
 
-pytestmark = pytest.mark.skipif(not os.getenv("RAG_LIVE"), reason="RAG_LIVE=1 ile çalışır")
+pytestmark = pytest.mark.skipif(not os.getenv("RAG_LIVE"), reason="runs with RAG_LIVE=1")
 
 DIM = 8
 

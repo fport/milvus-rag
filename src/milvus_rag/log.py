@@ -1,5 +1,5 @@
-"""Tek satır, okunur log. api/ tarafındaki pino çıktısına benzer: zaman, seviye,
-bağlam, mesaj ve anahtar=değer alanları."""
+"""One readable line per event: time, level, context, message and key=value
+fields."""
 
 import logging
 import sys
@@ -22,7 +22,7 @@ def _short(value: Any) -> str:
 
 
 class Logger(logging.LoggerAdapter):  # type: ignore[type-arg]
-    """`log.info("mesaj", repo=..., files=...)` biçimini destekler."""
+    """Supports the `log.info("message", repo=..., files=...)` form."""
 
     def process(self, msg: str, kwargs: Any) -> tuple[str, Any]:
         reserved = {"exc_info", "stack_info", "stacklevel", "extra"}
@@ -43,7 +43,7 @@ def setup_logging(level: str = "INFO") -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level.upper())
-    # Gürültülü üçüncü partiler.
+    # Noisy third parties.
     for noisy in ("httpx", "httpcore", "sentence_transformers", "pymilvus", "urllib3"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 

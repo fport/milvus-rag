@@ -1,16 +1,20 @@
-# Golden set şablonu. Kendi repon için kopyala: evals/golden.<repo-id>.jsonl
-# (golden.example.jsonl dışındaki golden dosyaları gitignore'da — repo yollarını yayınlama.)
+# Golden set template. Copy it for your own repo: evals/golden.<repo-id>.jsonl
+# (every golden file except golden.example.jsonl is gitignored — do not publish your repo paths.)
 #
-# Kurallar:
-# - `expect`: "path" (dosya eşleşmesi) ya da "path::symbol" (sembol/kapsayan sembol).
-#   Satır numarası YOK: kod değişince satırlar kayar, semboller kalır.
-# - `mode`: "any" → listedekilerden biri yeter; "all" (varsayılan) → hepsi gelmeli.
-# - `kind`: kırılım etiketi (prose-en / prose-tr / symbol gibi) — rapor buna göre bölünür.
-# - Bir soruyu eklemeden önce cevabın gerçekten orada olduğunu ELLE doğrula;
-#   etiketler repo okunarak yazılır, sistem çalıştırılarak değil.
-# - Negatif vaka: `expect: []` — cevabı bu repoda OLMAYAN soru (kind varsayılan "negative").
-#   Ölçülen: sistem bunu belli etti mi (boş sonuç ya da weak_match). Rapor `abstain_rate`
-#   ile pozitiflerde sinyalin yanlış yanma oranını (`false_weak_rate`) birlikte verir.
+# Rules:
+# - `expect`: "path" (a file match) or "path::symbol" (the symbol, or the one containing it).
+#   NO line numbers: lines shift when code changes, symbols do not.
+# - `mode`: "any" → one of the listed entries is enough; "all" (default) → all of them must come back.
+# - `kind`: a breakdown label (prose-en / prose-tr / symbol …) — the report is split by it.
+# - Before adding a question, verify BY HAND that the answer is really there; labels are
+#   written by reading the repo, not by running the system.
+# - Negative case: `expect: []` — a question whose answer is NOT in this repo (`kind` defaults
+#   to "negative"). What is measured: did the system show it (an empty result or weak_match).
+#   The report gives `abstain_rate` next to `false_weak_rate`, the rate at which the signal
+#   fires wrongly on positives.
+#
+# The Turkish rows below are deliberate: BGE-M3 is multilingual, and the point of the
+# prose-tr breakdown is to see a non-English question land on English code.
 {"q": "How is the authentication middleware implemented?", "expect": ["src/middlewares/auth.ts"], "mode": "all", "kind": "prose-en"}
 {"q": "Kimlik doğrulama middleware'i nasıl çalışıyor?", "expect": ["src/middlewares/auth.ts"], "mode": "all", "kind": "prose-tr"}
 {"q": "JWT nerede üretiliyor?", "expect": ["src/auth/session.ts::createSession"], "mode": "all", "kind": "prose-tr"}

@@ -1,9 +1,9 @@
 [project]
 name = "milvus-rag"
 version = "0.1.0"
-description = "Kod tabanı RAG servisi: Azure DevOps repo → tree-sitter chunk → Milvus (dense + BM25) → rerank; push'ta artımlı güncelleme."
+description = "A RAG service over a codebase: Azure DevOps / GitHub repo -> tree-sitter chunk -> Milvus (dense + BM25) -> rerank; incremental refresh on push."
 readme = "README.md"
-# Sistem Python'ı 3.14; torch / pymilvus için kararlı wheel'ler 3.12'de. uv bunu kendi indirir.
+# The system Python is 3.14; the stable wheels for torch / pymilvus are on 3.12. uv fetches it itself.
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115",
@@ -43,7 +43,7 @@ packages = ["src/milvus_rag"]
 [tool.uv]
 package = true
 
-# Linux sunucuda (Docker dahil) CUDA'sız torch: imaj ~5 GB küçülür. macOS etkilenmez.
+# torch without CUDA on a Linux server (Docker included): the image shrinks by ~5 GB. macOS is unaffected.
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
@@ -55,7 +55,7 @@ explicit = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "live: Milvus ya da model indirmesi gerektiren testler (RAG_LIVE=1 ile çalışır)",
+    "live: tests that need Milvus or a model download (run them with RAG_LIVE=1)",
 ]
 asyncio_mode = "auto"
 
@@ -66,7 +66,7 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "PTH"]
-ignore = ["RUF001", "RUF002", "RUF003"]  # Türkçe metinlerdeki karakter uyarıları
+ignore = ["RUF001", "RUF002", "RUF003"]  # ambiguous-unicode warnings on typographic characters
 
 [tool.mypy]
 python_version = "3.12"

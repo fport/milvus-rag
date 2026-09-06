@@ -1,11 +1,11 @@
-"""Grammar duman testi: PREFETCH_GRAMMARS'taki her grammar ayrı bir süreçte, dejenere
-girdilerle (boş, düz metin, 300 KB çok üyeli, dengesiz parantez, rastgele, tek uzun
-satır) chunk'lanır. Segfault ana süreci değil alt süreci düşürür; böylece pack
-sürümü değişince hangi grammar'ın çöktüğü tek tek görülür.
+"""Grammar smoke test: every grammar in PREFETCH_GRAMMARS is chunked in its own process,
+with degenerate inputs (empty, plain text, 300 KB with many members, unbalanced parens,
+random bytes, one very long line). A segfault takes down the subprocess, not the main
+one, so when the pack version changes you see exactly which grammar broke.
 
-`RAG_LIVE=1 uv run pytest tests/test_grammars_live.py -q` — grammar'ları indirir (ağ).
-Çöken ya da 300 s'yi aşan grammar'ın uzantıları `CODE_WITHOUT_GRAMMAR`'a alınır (sql, cobol
-böyle girdi); parse'a süre sınırı koymak bu sürümde mümkün değil.
+`RAG_LIVE=1 uv run pytest tests/test_grammars_live.py -q` — downloads the grammars (network).
+The extensions of a grammar that crashes or exceeds 300 s move into `CODE_WITHOUT_GRAMMAR`
+(that is how sql and cobol got there); a parse cannot be time-limited in this version.
 """
 
 import os
@@ -18,7 +18,7 @@ from milvus_rag.sources.files import GRAMMAR_ALIASES, GRAMMAR_BY_FILENAME, PREFE
 
 pytestmark = [
     pytest.mark.live,
-    pytest.mark.skipif(os.environ.get("RAG_LIVE") != "1", reason="RAG_LIVE=1 ile çalışır"),
+    pytest.mark.skipif(os.environ.get("RAG_LIVE") != "1", reason="runs with RAG_LIVE=1"),
 ]
 
 _CHILD = """

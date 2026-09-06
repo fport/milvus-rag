@@ -1,13 +1,13 @@
-"""Push webhook'ları: Azure DevOps "Code pushed" ve GitHub "push".
+"""Push webhooks: Azure DevOps "Code pushed" and GitHub "push".
 
-İki sağlayıcı da aynı `PushEvent`'e indirgenir; API katmanı olayı sağlayıcıya
-göre repo kaydıyla eşleştirir. Yalnızca izlenen branch'e gelen push iş açar;
-aynı (repo, commit) ikinci kez gelirse (yeniden deneme) iş açılmaz.
+Both providers are reduced to the same `PushEvent`; the API layer matches the event
+to a repo record per provider. Only a push to the tracked branch opens a job; if the
+same (repo, commit) arrives twice (a retry), no job is opened.
 
-Doğrulama sağlayıcıya göre:
-- Azure: paylaşılan sır — Basic auth şifresi, `X-RAG-Webhook-Secret`
-  header'ı ya da `?secret=`.
-- GitHub: gövdenin HMAC-SHA256 imzası (`X-Hub-Signature-256`), sır aynı
+Verification differs per provider:
+- Azure: a shared secret — the Basic auth password, the `X-RAG-Webhook-Secret`
+  header, or `?secret=`.
+- GitHub: an HMAC-SHA256 signature of the body (`X-Hub-Signature-256`), with the same
   RAG_WEBHOOK_SECRET.
 """
 
@@ -22,9 +22,9 @@ from typing import Any
 
 @dataclass(frozen=True, slots=True)
 class PushEvent:
-    external_id: str  # Azure repo GUID'i ya da GitHub sayısal id'si
+    external_id: str  # the Azure repo GUID or the GitHub numeric id
     repo_name: str
-    project: str  # Azure projesi ya da GitHub owner'ı
+    project: str  # the Azure project or the GitHub owner
     branch: str
     old_commit: str
     new_commit: str
@@ -34,7 +34,7 @@ class PushEvent:
 
 
 def parse_azure_push(payload: dict[str, Any]) -> list[PushEvent]:
-    """Bir push birden fazla ref güncelleyebilir; branch başına bir olay."""
+    """One push can update several refs; one event per branch."""
     if payload.get("eventType") not in (None, "git.push"):
         return []
     resource = payload.get("resource") or {}
@@ -61,7 +61,7 @@ def parse_azure_push(payload: dict[str, Any]) -> list[PushEvent]:
     return events
 
 
-# Eski ad; testler ve okunabilirlik için korunur.
+# Old name; kept for the tests and for readability.
 parse_push = parse_azure_push
 
 
@@ -71,10 +71,10 @@ def verify_secret(
     authorization: str | None,
     query_secret: str | None,
 ) -> bool:
-    """Header, Basic auth şifresi ya da ?secret= — biri eşleşsin yeter.
+    """A header, the Basic auth password or ?secret= — one match is enough.
 
-    Sır yapılandırılmamışsa her istek reddedilir: açık bir webhook, herkesin
-    index işi tetikleyebilmesi demek.
+    If no secret is configured every request is rejected: an open webhook means
+    anyone can trigger an index job.
     """
     if not expected:
         return False
@@ -92,7 +92,7 @@ def verify_secret(
 
 
 def parse_github_push(payload: dict[str, Any]) -> list[PushEvent]:
-    """GitHub push olayı tek ref taşır. Branch silme (`deleted`) iş açmaz."""
+    """A GitHub push event carries one ref. Deleting a branch (`deleted`) opens no job."""
     ref = str(payload.get("ref") or "")
     if not ref.startswith("refs/heads/") or payload.get("deleted") is True:
         return []
@@ -116,12 +116,13 @@ def parse_github_push(payload: dict[str, Any]) -> list[PushEvent]:
 
 
 def sign_github(secret: str, body: bytes) -> str:
-    """Testlerin ve dokümantasyonun kullandığı imza biçimi."""
+    """The signature format the tests and the documentation use."""
     return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
 
 def verify_github_signature(expected: str | None, body: bytes, signature: str | None) -> bool:
-    """GitHub, sır ayarlıysa gövdeyi HMAC-SHA256 ile imzalar; imzasız istek reddedilir."""
+    """GitHub signs the body with HMAC-SHA256 when a secret is set; an unsigned
+    request is rejected."""
     if not expected or not signature or not signature.startswith("sha256="):
         return False
     return hmac.compare_digest(signature, sign_github(expected, body))

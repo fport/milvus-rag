@@ -1,13 +1,13 @@
-"""Index'e girmeden önce sır ve kişisel veri temizliği.
+"""Redacting secrets and personal data before anything reaches the index.
 
-Vektör geri döndürülemez ama yanındaki `content` alanı aynen saklanır ve her
-atıfta prompt'a geri gelir. Bir token bir kez indexlenince cache'te, logda ve
-modelin cevabında dolaşır.
+A vector cannot be reversed, but the `content` field next to it is stored verbatim
+and comes back into the prompt on every citation. Once a token is indexed it travels
+through the cache, the logs and the model's answers.
 
-Kurallar bilerek tutucu. Gerçek bir repoya karşı ölçüldü: yalnızca isme bakan
-kural 78 dosyada 247 değeri kararttı ve neredeyse hiçbiri sır değildi
-(`token: text(` bir DB kolonu, `secret: string` bir tip).
-Bu sürüm aynı repoda 2 karartma yaptı, biri gerçek token.
+The rules are deliberately conservative. Measured against a real repo: a rule that
+only looked at names redacted 247 values across 78 files, and almost none of them
+were secrets (`token: text(` is a DB column, `secret: string` is a type).
+This version made 2 redactions on the same repo, one of them a real token.
 """
 
 import re
@@ -18,7 +18,7 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("[API_KEY]", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b")),
     ("[API_KEY]", re.compile(r"\bxox[baprs]-[A-Za-z0-9\-]{10,}\b")),
     ("[API_KEY]", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    # Azure DevOps PAT: 52 karakter base32/ base64 karışımı, çoğunlukla küçük harf+rakam.
+    # Azure DevOps PAT: 52 characters of mixed base32/base64, mostly lowercase + digits.
     ("[API_KEY]", re.compile(r"\b[a-z0-9]{52}\b")),
     ("[JWT]", re.compile(r"\beyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\b")),
     ("[EMAIL]", re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")),
@@ -26,8 +26,8 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("[PHONE]", re.compile(r"\b\d{3}[.\-]\d{3}[.\-]\d{4}\b")),
 )
 
-# SCREAMING_SNAKE anahtara atanmış, kendi başına şekli olmayan değer:
-# DB_PASSWORD=hunter2 sırdır; `promptTokens` ya da `this.accessToken` değildir.
+# A value assigned to a SCREAMING_SNAKE key that has no shape of its own:
+# DB_PASSWORD=hunter2 is a secret; `promptTokens` or `this.accessToken` are not.
 _ASSIGNED_SECRET = re.compile(
     r"\b([A-Z][A-Z0-9]*_[A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|APIKEY|API_KEY|PRIVATE_KEY|PAT)[A-Z0-9_]*"
     r"|(?:PASSWORD|SECRET|TOKEN|APIKEY|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)"

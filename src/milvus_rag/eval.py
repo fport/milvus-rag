@@ -1,21 +1,21 @@
-"""Golden set runner: Recall@k, MRR, gecikme; soru türüne göre kırılım.
+"""The golden-set runner: Recall@k, MRR, latency; broken down by question kind.
 
-Tek kural: ölçmediğin hiçbir şeyi ekleme. Her retrieval değişikliği bu tabloya
-bir satır olarak girer, "sanki iyi oldu" olarak değil.
+One rule: never ship what you did not measure. Every retrieval change enters this
+table as a row, not as "it feels better".
 
-Golden satırı (JSONL):
-  {"q": "JWT nerede üretiliyor?", "expect": ["src/auth/session.ts::createSession"],
+A golden row (JSONL):
+  {"q": "where is the JWT issued?", "expect": ["src/auth/session.ts::createSession"],
    "mode": "any", "kind": "prose"}
 
-`expect` girdisi `path` ya da `path::symbol`. Satır numarası yok: kod değişince
-satırlar kayar, semboller kalır. `mode: any` → listedekilerden biri yeter;
-`all` (varsayılan) → hepsi gelmeli.
+An `expect` entry is `path` or `path::symbol`. No line numbers: lines shift when code
+changes, symbols do not. `mode: any` → one of the listed entries is enough;
+`all` (the default) → all of them must come back.
 
-Negatif vaka: `expect: []` — cevabı kodda OLMAYAN soru. Retriever her sorguya
-bir şey döndürür; ölçülen şey "bunu belli etti mi": boş sonuç ya da
-`weak_match` sinyali = çekimser (abstain). Pozitiflerde aynı sinyalin yanlış
-yanma oranı da (`false_weak`) raporlanır; sinyal ancak ikisi birlikte okunursa
-bir şey söyler.
+Negative case: `expect: []` — a question whose answer is NOT in the code. The retriever
+returns something for every query; what is measured is whether it showed that: an empty
+result or a `weak_match` signal = abstain. The rate at which the same signal fires
+wrongly on positives (`false_weak`) is reported next to it; the signal only means
+something when the two are read together.
 """
 
 from __future__ import annotations
@@ -55,10 +55,11 @@ class CaseResult:
     top: list[str]
     negative: bool = False
     weak: bool = False
-    # Negatif vaka için: sistem "cevap yok"u belli etti mi (boş sonuç ya da weak_match).
+    # For a negative case: did the system show "no answer" (an empty result or weak_match).
     abstained: bool = False
-    # Dönen hit'lerin en iyi dense skoru: eşikleri (`min_dense_score`, `weak_dense_score`)
-    # yeniden kalibre etmenin ham malzemesi — pozitiflerin min'i ile negatiflerin max'ı.
+    # The best dense score among the returned hits: the raw material for recalibrating the
+    # thresholds (`min_dense_score`, `weak_dense_score`) — the min of the positives against
+    # the max of the negatives.
     top_dense: float | None = None
 
 
@@ -75,12 +76,12 @@ class EvalReport:
     misses: list[CaseResult]
     config: dict[str, Any] = field(default_factory=dict)
     results: list[CaseResult] = field(default_factory=list)
-    # Negatif vakalarda çekimser kalma oranı (negatif yoksa None); pozitiflerde
-    # zayıf-eşleşme sinyalinin yanlış yanma oranı.
+    # The abstain rate on negative cases (None when there are none); and the rate at which
+    # the weak-match signal fires wrongly on positives.
     abstain_rate: float | None = None
     false_weak_rate: float = 0.0
-    # Kalibrasyon özeti: bulunan pozitiflerin en düşük top-dense'i ile negatiflerin en
-    # yükseği. Taban ilkinin altında, not eşiği ikisinin arasında olmalı.
+    # Calibration summary: the lowest top-dense among the positives that were found, and the
+    # highest among the negatives. The floor goes below the first, the note between the two.
     calibration: dict[str, float | None] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -137,7 +138,7 @@ def load_golden(path: Path) -> list[Case]:
 
 
 def matches(expected: str, hit: Hit) -> bool:
-    """`path` → dosya eşleşmesi; `path::symbol` → sembol ya da kapsayan sembol."""
+    """`path` → a file match; `path::symbol` → the symbol, or the one containing it."""
     if "::" not in expected:
         return hit.path == expected
     path, symbol = expected.split("::", 1)
@@ -151,7 +152,7 @@ def matches(expected: str, hit: Hit) -> bool:
 
 
 def score_case(case: Case, hits: list[Hit]) -> tuple[float, float, list[str]]:
-    """(recall, reciprocal rank, bulunanlar). Sıra dosya/sembol bazında tekilleştirilmiş."""
+    """(recall, reciprocal rank, found). Ranks are deduplicated per file/symbol."""
     found: dict[str, int] = {}
     for rank, hit in enumerate(hits):
         for expected in case.expect:
@@ -238,7 +239,7 @@ def run_eval(
         p50_ms=latencies[len(latencies) // 2],
         p95_ms=latencies[min(len(latencies) - 1, int(len(latencies) * 0.95))],
         by_kind=by_kind,
-        # Pozitifte bulunamayan + negatifte çekimser kalınamayan: ikisi de "kaçırma".
+        # Not found on a positive + not abstained on a negative: both count as a "miss".
         misses=[result for result in results if result.recall < 1.0],
         abstain_rate=(
             statistics.mean(float(r.abstained) for r in negatives) if negatives else None

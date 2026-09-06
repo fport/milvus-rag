@@ -1,12 +1,12 @@
-# Milvus standalone + bağımlılıkları (etcd metadata, MinIO segment dosyaları).
+# Milvus standalone + its dependencies (etcd metadata, MinIO segment files).
 #
 #   docker compose -f infra/docker-compose.yml up -d
-#   curl -f http://localhost:9091/healthz        # "OK" dönene kadar bekle (~60-90 sn)
+#   curl -f http://localhost:9091/healthz        # wait until it returns "OK" (~60-90 s)
 #
-# Attu (Milvus arayüzü) isteğe bağlı:  docker compose -f infra/docker-compose.yml --profile ui up -d
+# Attu (the Milvus UI) is optional:  docker compose -f infra/docker-compose.yml --profile ui up -d
 #
-# Portlar Milvus'un varsayılanları (19530/9091): makinede başka bir Milvus varsa
-# ikisini aynı anda çalıştırma.
+# The ports are Milvus' defaults (19530/9091): if another Milvus is running on this
+# machine, do not run both at once.
 
 name: milvus-rag
 

@@ -1,17 +1,17 @@
-"""Bir repoyu indexler: kaynak tazele → manifest karşılaştır → değişeni yaz.
+"""Indexes one repo: refresh the source → compare the manifest → write what changed.
 
-Her commit'te tüm repoyu yeniden embed'lememek için dosya içeriğinin sha256'sı
-saklanır (SQLite `files`). Değişen dosya için önce o yolun chunk'ları silinir,
-sonra yeniden eklenir; silinen dosya → yalnızca silinir. Sonuç: bir push'ta
-yalnızca dokunulan dosyaların embedding maliyeti ödenir.
+So that every commit does not re-embed the whole repo, the sha256 of each file's
+content is stored (SQLite `files`). For a changed file the chunks at that path are
+deleted first and re-inserted; a deleted file is only deleted. The result: a push pays
+the embedding cost of the files it touched, and nothing else.
 
-Yarıda kesilmeye dayanıklılık: bir dosyanın manifest satırı, chunk'ları
-silinmeden ÖNCE kaldırılır ve yeni chunk'lar yazıldıktan SONRA geri konur.
-Süreç ortada ölürse dosya manifestte yoktur → bir sonraki sync onu yeni sayar.
+Resilience to interruption: a file's manifest row is removed BEFORE its chunks are
+deleted, and put back AFTER the new chunks are written. If the process dies in the
+middle the file is absent from the manifest → the next sync counts it as new.
 
-Değişiklik tespiti commit diff'ine değil içerik hash'ine dayanır: yeniden
-adlandırma, mod değişikliği, submodule gibi git kenar durumları yoktur ve yerel
-(git olmayan) dizinler aynı yoldan geçer.
+Change detection is based on the content hash, not on a commit diff: there are no git
+edge cases from renames, mode changes or submodules, and local (non-git) directories
+take the same path.
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ from milvus_rag.sources.github import GitHub
 
 log = get_logger("index")
 
-# Dosyalar bu kadar chunk biriktiğinde embed + insert yapılır. Embedding
-# batch'te çok daha hızlı; bu da bellek tavanını sınırlı tutar.
+# Files are embedded and inserted once this many chunks have piled up. Embedding is far
+# faster in a batch, and this keeps the memory ceiling bounded.
 FLUSH_CHUNKS = 96
 
 
@@ -74,7 +74,7 @@ class IndexStats:
 
 @dataclass(slots=True)
 class _Pending:
-    """Buffer'da chunk'ları bekleyen dosya."""
+    """A file whose chunks are waiting in the buffer."""
 
     path: str
     sha: str
@@ -102,28 +102,28 @@ class Indexer:
         self.chunker = ChunkerConfig(settings.chunk_max_bytes, settings.chunk_min_bytes)
         self.extra_extensions = source_files.parse_extra_extensions(settings.extra_extensions)
 
-    # ------------------------------------------------------------- kaynak
+    # ------------------------------------------------------------- source
     def refresh_source(self, repo: Repo) -> str:
-        """Çalışma kopyasını uzaktakiyle eşitler; bilinen commit'i döner."""
+        """Brings the working copy in line with the remote; returns the known commit."""
         root = Path(repo.local_path)
         if repo.provider == "local":
             if not root.is_dir():
-                msg = f"yerel dizin yok: {root}"
+                msg = f"no such local directory: {root}"
                 raise FileNotFoundError(msg)
             return git.head_commit(root) if git.is_work_tree(root) else ""
 
         auth_header = None
         if repo.provider == "azure":
             if self.azure is None:
-                msg = "Azure DevOps yapılandırılmamış (AZURE_DEVOPS_ORG_URL / AZURE_DEVOPS_PAT)"
+                msg = "Azure DevOps is not configured (AZURE_DEVOPS_ORG_URL / AZURE_DEVOPS_PAT)"
                 raise RuntimeError(msg)
             auth_header = self.azure.git_auth_header()
         elif repo.provider == "github" and self.github is not None:
-            # Token yoksa None döner; public repo kimliksiz klonlanır.
+            # Returns None when there is no token; a public repo clones anonymously.
             auth_header = self.github.git_auth_header()
 
         if not (root / ".git").exists():
-            log.info("klonlanıyor", repo=repo.id, branch=repo.branch)
+            log.info("cloning", repo=repo.id, branch=repo.branch)
             git.clone(repo.remote_url, root, repo.branch, auth_header)
             return git.head_commit(root)
         return git.fetch_and_reset(root, repo.branch, auth_header)
@@ -143,12 +143,12 @@ class Indexer:
 
         if repo.index_version and repo.index_version != self.settings.index_version:
             force = True
-            stats.reason = "index sürümü değişti"
+            stats.reason = "the index version changed"
         stats.forced = force
 
         manifest = {} if force else self.db.manifest(repo.id)
         if force:
-            # Tam yeniden index: eski chunk'lar ve manifest tek seferde gider.
+            # A full re-index: the old chunks and the manifest go in one shot.
             self.db.clear_files(repo.id)
             self.store.delete_repo(repo.id)
 
@@ -230,8 +230,8 @@ class Indexer:
             if not pending:
                 return
             paths = [item.path for item in pending]
-            # Manifest önce gider (yarıda kalırsa "yeni" sayılsın), sonra eski
-            # chunk'lar, sonra yeniler; en son manifest geri yazılır.
+            # The manifest goes first (so an interruption counts the file as "new"), then
+            # the old chunks, then the new ones; the manifest is written back last.
             self.db.delete_files(repo.id, paths)
             self.store.delete_paths(repo.id, paths)
             if rows:

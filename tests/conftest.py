@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-# Testler .env okumasın; ortamdan gelen gerçek anahtarlar sonucu değiştirmesin.
+# Tests must not read .env; real keys from the environment should not change the result.
 os.environ.setdefault("RAG_DATA_DIR", str(Path(__file__).parent / ".data"))
 
 

@@ -1,17 +1,17 @@
-"""Sorgunun biçiminden retriever seçimi.
+"""Choosing the retriever from the shape of the query.
 
-Önceki bir RAG denemesinde ölçüldü (30 soru):
+Measured in an earlier RAG experiment (30 questions):
 
-| recall@5      | sembol araması | düz cümle |
+| recall@5      | symbol search  | prose     |
 |---------------|----------------|-----------|
 | dense         | 0.60           | 0.62      |
 | BM25          | 0.80           | 0.36      |
-| RRF (ikisi)   | 0.60           | 0.52      |
+| RRF (both)    | 0.60           | 0.52      |
 
-Sembol biçimli sorgu (`handleAuthCallback`, `QUEUE_NAMES`, `auth.service`) için
-embedding'in söyleyecek bir şeyi yok; BM25'in var. Düz cümle için tersi. İkisini
-her zaman birleştirmek, bulamayan kanalın da en iyi tahminini tam güçle terfi
-ettirir. Yönlendirme bir regex'e mal olur.
+For a symbol-shaped query (`handleAuthCallback`, `QUEUE_NAMES`, `auth.service`) an
+embedding has nothing to say; BM25 does. For a plain sentence it is the other way
+round. Always merging the two promotes the best guess of the channel that failed
+to find it, at full strength. Routing costs one regex.
 """
 
 import re
@@ -21,10 +21,10 @@ _CAMEL_BOUNDARY = re.compile(r"[a-z0-9][A-Z]")
 
 
 def looks_like_symbol(query: str) -> bool:
-    """Tek token, içinde bir sınır var: camelCase, snake_case, kebab-case, a.b.c, a/b.
+    """A single token with a boundary in it: camelCase, snake_case, kebab-case, a.b.c, a/b.
 
-    Bilerek dar: yanlış pozitif gerçek bir soruyu BM25'e gönderir (düz cümlede
-    ölçülebilir kötü); yanlış negatif yalnızca bir iyileşmeden vazgeçer.
+    Deliberately narrow: a false positive sends a real question to BM25 (measurably
+    bad on prose); a false negative only gives up an improvement.
     """
     text = query.strip()
     if not text or any(character.isspace() for character in text):

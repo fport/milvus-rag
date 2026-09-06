@@ -226,7 +226,7 @@ def test_webhook_auth_and_dedupe(client: TestClient):
     again = client.post(
         "/webhooks/azure/push", json=payload, headers={"X-RAG-Webhook-Secret": "s3cret"}
     ).json()
-    assert again["results"][0]["ignored"] == "bu commit zaten işlendi"
+    assert again["results"][0]["ignored"] == "this commit was already handled"
 
 
 def test_github_webhook(client: TestClient):
@@ -284,7 +284,7 @@ def test_github_webhook(client: TestClient):
     first = client.post("/webhooks/github/push", content=body, headers=headers).json()
     assert first["results"][0]["job_id"] and first["results"][0]["new"] is True
     again = client.post("/webhooks/github/push", content=body, headers=headers).json()
-    assert again["results"][0]["ignored"] == "bu commit zaten işlendi"
+    assert again["results"][0]["ignored"] == "this commit was already handled"
 
 
 def test_home_serves_ui(client: TestClient):
@@ -430,7 +430,8 @@ def test_search_signal_and_file_guard(client: TestClient):
     for path in ("node_modules/x.js", ".env", "src/made-up.ts"):
         response = client.get("/repos/demo/file", params={"path": path})
         assert (
-            response.status_code == 404 and "indexli değil ya da yok" in response.json()["detail"]
+            response.status_code == 404
+            and "is not indexed or does not exist" in response.json()["detail"]
         )
 
     (repo_dir / "src" / "auth.ts").write_text('const API_TOKEN="abc123def456ghi789";\n')

@@ -1,12 +1,12 @@
-# Üretim: Milvus + RAG servisi tek compose'ta.
+# Production: Milvus + the RAG service in one compose file.
 #
-#   cp .env.example .env      # sırları doldur
+#   cp .env.example .env      # fill in the secrets
 #   docker compose -f infra/docker-compose.prod.yml up -d --build
 #   curl -f http://localhost:8090/health
 #
-# İlk açılışta embedding modeli (~2.2 GB) iner ve hf-cache volume'ünde kalır.
-# Servisin KİMLİK DOĞRULAMASI YOK: 8090'ı internete açma; reverse proxy arkasına
-# koy (bkz. DEPLOYMENT.md) ya da yalnızca iç ağdan eriştir.
+# On the first boot the embedding model (~2.2 GB) is downloaded and stays in the hf-cache volume.
+# The service has NO AUTHENTICATION: do not expose 8090 to the internet; put it behind a
+# reverse proxy (see DEPLOYMENT.md) or reach it only from the internal network.
 
 name: milvus-rag-prod
 
@@ -84,15 +84,15 @@ services:
       - path: ../.env
         required: false
     environment:
-      # Compose ağı içinde servis adı çözülür; .env'deki localhost değerini ezer.
+      # Inside the compose network the service name resolves; this overrides the localhost value in .env.
       RAG_MILVUS_URI: http://milvus:19530
     volumes:
-      - rag-data:/app/data          # SQLite (repos/jobs/manifest) + repo klonları
+      - rag-data:/app/data          # SQLite (repos/jobs/manifest) + the repo clones
       - hf-cache:/app/.cache/huggingface
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
       interval: 30s
-      start_period: 120s            # ilk açılışta model inebilir
+      start_period: 120s            # the model may be downloading on the first boot
       timeout: 10s
       retries: 5
     depends_on:

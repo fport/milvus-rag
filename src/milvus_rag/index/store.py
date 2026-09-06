@@ -1,12 +1,12 @@
-"""Milvus deposu: tek collection, `repo_id` partition key.
+"""The Milvus store: one collection, `repo_id` as the partition key.
 
-Dense ve sparse aynı collection'da. Sparse alanına kimse değer yazmaz; Milvus'un
-BM25 Function'ı `indexed_text`'ten üretir, ayrı bir leksik index kodu yok.
+Dense and sparse live in the same collection. Nobody writes the sparse field; Milvus'
+own BM25 Function derives it from `indexed_text`, so there is no separate lexical index.
 
-Silme/güncelleme `repo_id + path` üzerinden: bir dosya değişince önce o yolun
-chunk'ları silinir, sonra yenileri eklenir (arşivleme yok — Milvus'taki veri
-türev, kaynak Azure'da). Partition key sayesinde `repo_id in [...]` filtresi
-yalnızca ilgili partition'lara iner.
+Deletes and updates go through `repo_id + path`: when a file changes, the chunks at
+that path are deleted first and the new ones inserted (no archiving — the data in
+Milvus is derived, the source is the repo). Thanks to the partition key, a
+`repo_id in [...]` filter descends only into the relevant partitions.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ SPARSE_FIELD = "sparse"
 BM25_FUNCTION = "indexed_text_bm25"
 HNSW_INDEX = {"M": 16, "efConstruction": 200}
 HNSW_SEARCH = {"ef": 128}
-CONSISTENCY = "Session"  # read-your-writes: silip yazdıktan hemen sonra saymak doğru olsun
+CONSISTENCY = "Session"  # read-your-writes: counting right after a delete+write is correct
 
 OUTPUT_FIELDS = [
     "id",
@@ -47,7 +47,7 @@ OUTPUT_FIELDS = [
     "context",
 ]
 
-# Milvus VARCHAR sınırı byte cinsinden; kenardan uzak dur.
+# The Milvus VARCHAR limit is in bytes; stay well away from the edge.
 _MAX_TEXT_BYTES = 60_000
 
 
@@ -122,7 +122,7 @@ class MilvusStore:
             consistency_level=CONSISTENCY,
         )
         self.client.load_collection(self.collection)
-        log.info("collection oluşturuldu", collection=self.collection, dim=self.dimension)
+        log.info("collection created", collection=self.collection, dim=self.dimension)
         self._ready = True
 
     def healthy(self) -> bool:
@@ -211,7 +211,7 @@ class MilvusStore:
         return _to_hits(matches, "bm25")
 
     def chunks_of(self, repo_id: str, path: str) -> list[Hit]:
-        """Bir dosyanın chunk'ları, sırayla. Komşu genişletme ve hata ayıklama için."""
+        """A file's chunks, in order. For neighbour expansion and for debugging."""
         if not self.client.has_collection(self.collection):
             return []
         self.ensure_collection()

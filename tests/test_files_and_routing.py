@@ -25,7 +25,7 @@ def test_indexable_paths():
     assert not is_indexable_path("Foo.Designer.cs")
     assert not is_indexable_path("Connected Services/Svc/Reference.cs")
     assert not is_indexable_path("Scripts/bootstrap.bundle.js")
-    assert not is_indexable_path("data/export.csv")  # csv grammar'ı var ama veri
+    assert not is_indexable_path("data/export.csv")  # a csv grammar exists, but this is data
     assert is_indexable_path("schema.proto")
     assert is_indexable_path("Pages/Index.razor") and is_indexable_path("Views/Home/Index.cshtml")
     assert is_indexable_path("db/procs.sql") and is_indexable_path("Content/site.less")
@@ -44,13 +44,13 @@ def test_language_and_category():
 
 
 def test_grammar_mapping_is_generic():
-    """Dil tablosu değil kural: uzantı adı pack'te grammar adıysa eşleşir."""
+    """A rule, not a language table: it matches when the extension name is a grammar name."""
     assert language_for("x.lua") == "lua" and language_for("x.zig") == "zig"
     assert language_for("Cart.vue") == "vue" and language_for("App.svelte") == "svelte"
     assert language_for("Index.razor") == "razor" and language_for("Index.cshtml") == "razor"
     assert language_for("main.tf") == "terraform" and language_for("X.KT") == "kotlin"
     assert language_for("Dockerfile") == "dockerfile" and language_for("go.mod") == "gomod"
-    # Düz okunanlar grammar'ı olsa da parser'a gitmez; veri uzantıları hiç girmez.
+    # Flat-read types never reach the parser even with a grammar; data extensions never enter.
     assert language_for("a.json") is None and language_for("a.html") is None
     assert language_for("a.css") is None and language_for("a.csv") is None
     assert category_for("Cart.vue") == "code" and category_for("a.less") == "other"
@@ -75,7 +75,7 @@ def test_symbol_routing():
     assert looks_like_symbol("src/middlewares/auth.ts")
     assert not looks_like_symbol("auth")
     assert not looks_like_symbol("how does auth work")
-    assert not looks_like_symbol("Kimlik doğrulama nasıl çalışıyor?")
+    assert not looks_like_symbol("how does the authentication work?")
 
 
 def _hit(id_: str, **scores: float) -> Hit:
