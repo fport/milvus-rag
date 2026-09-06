@@ -1,215 +1,226 @@
 <p align="center">
-  <img src="docs/hero.svg" alt="Milvus RAG akışı: push → tree-sitter chunk → BGE-M3 + BM25 → Milvus → MCP + RAG ile kodunu bilen agent" width="100%">
+  <img src="docs/hero.svg" alt="Milvus RAG flow: push → tree-sitter chunk → BGE-M3 + BM25 → Milvus → an agent that knows your code, over MCP + RAG" width="100%">
 </p>
 
 <h1 align="center">Milvus RAG</h1>
 
-<p align="center"><em>Kod tabanını anlayan, push'ta kendini tazeleyen arama servisi.</em></p>
+<p align="center"><em>A search service that understands a codebase and refreshes itself on push.</em></p>
 
 <p align="center">
-  <a href="#neden-bu-yığın">Neden bu yığın</a> ·
-  <a href="#kurulum">Kurulum</a> ·
-  <a href="#kullanım">Kullanım</a> ·
-  <a href="#repo-değişince-ne-olur">Tazeleme akışı</a> ·
-  <a href="#retrieval-zinciri-ve-bayraklar">Retrieval</a> ·
-  <a href="#ölçüm-defteri">Ölçüm defteri</a> ·
-  <a href="DEPLOYMENT.md">Sunucuya kurulum</a>
+  <strong>English</strong> · <a href="README.tr.md">Türkçe</a>
+</p>
+
+<p align="center">
+  <a href="#why-this-stack">Why this stack</a> ·
+  <a href="#setup">Setup</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#what-happens-when-the-repo-changes">Refresh flow</a> ·
+  <a href="#retrieval-chain-and-flags">Retrieval</a> ·
+  <a href="#measurement-ledger">Measurement ledger</a> ·
+  <a href="DEPLOYMENT.md">Deploying to a server</a>
 </p>
 
 ---
 
-Azure DevOps'tan ya da GitHub'dan bir repo seçersin; servis
-onu klonlar, tree-sitter ile kod birimlerine böler, BGE-M3 (dense) + BM25 (sparse)
-ile Milvus'a yazar; sorguda sembol biçimli sorgular BM25'e, düz cümleler dense'e gider
-(hybrid RRF ve cross-encoder rerank bayrakla açılır — ikisi de ölçüldü, tabloya bak).
-Repoya push geldiğinde yalnızca değişen dosyalar yeniden indexlenir.
+You pick a repo from Azure DevOps or GitHub; the service clones it, splits it into code
+units with tree-sitter, and writes it to Milvus with BGE-M3 (dense) + BM25 (sparse). At
+query time, symbol-shaped queries go to BM25 and plain sentences go to dense (hybrid RRF
+and cross-encoder rerank are behind flags — both were measured, see the table). When a
+push lands, only the changed files are re-indexed.
 
 ```mermaid
 flowchart LR
-    KAYNAK["Azure / GitHub / yerel"] -->|"clone / fetch"| KOPYA["çalışma kopyası"]
-    HOOK["push webhook · poller"] --> KUYRUK["iş kuyruğu"] --> KOPYA
-    KOPYA -->|"sha256 manifest farkı"| FARK["değişen dosyalar"]
-    FARK -->|"tree-sitter chunk<br>sil + yeniden yaz"| MILVUS[("Milvus<br>dense + BM25")]
+    SOURCE["Azure / GitHub / local"] -->|"clone / fetch"| WORKING["working copy"]
+    HOOK["push webhook · poller"] --> QUEUE["job queue"] --> WORKING
+    WORKING -->|"sha256 manifest diff"| CHANGED["changed files"]
+    CHANGED -->|"tree-sitter chunk<br>delete + rewrite"| MILVUS[("Milvus<br>dense + BM25")]
 ```
 
 ```mermaid
 flowchart LR
-    ASK["POST /ask"] --> SEARCH["POST /search"] --> ROTA{"sembol mü?"}
-    ROTA -->|evet| BM25["BM25"] --> HIT["8 hit<br>kanal skorlarıyla"]
-    ROTA -->|hayır| DENSE["dense<br>(bayrak: hybrid RRF · rerank)"] --> HIT
-    HIT -->|"/ask ise"| CEVAP["LLM → atıflı cevap"]
+    ASK["POST /ask"] --> SEARCH["POST /search"] --> ROUTE{"a symbol?"}
+    ROUTE -->|yes| BM25["BM25"] --> HIT["8 hits<br>with channel scores"]
+    ROUTE -->|no| DENSE["dense<br>(flags: hybrid RRF · rerank)"] --> HIT
+    HIT -->|"if /ask"| ANSWER["LLM → cited answer"]
 ```
 
-## Neden bu yığın
+## Why this stack
 
-Kod tabanı için RAG'ın zor kısmı vektör aramak değil. Zor olan dört şey: **sembolü tam
-bulmak**, **Türkçe soruyu İngilizce koda bağlamak**, **repo değişince bayat kalmamak** ve
-**cevap yokken "yok" diyebilmek**. Her parça bu dört soruya göre seçildi; ölçülebilen her
-karar aşağıda "ölçüldü" diye işaretli ve rakamı [Ölçüm defteri](#ölçüm-defteri)'nde.
+The hard part of RAG over a codebase is not the vector search. Four things are hard:
+**finding a symbol exactly**, **connecting a question in another language to English
+code**, **not going stale when the repo moves**, and **being able to say "no answer"
+when there isn't one**. Every piece here was picked against those four; every decision
+that could be measured is marked "measured" below, with the number in the
+[measurement ledger](#measurement-ledger).
 
-| Parça | Ne işe yarıyor | Neden bu | Alternatifler — neden değil |
+| Piece | What it does | Why this one | Alternatives — why not |
 |---|---|---|---|
-| **Milvus 2.6** (Docker) | Vektör deposu: dense + BM25 sparse aynı collection'da, `repo_id` partition key | BM25'i Milvus'un kendi `Function`'ı üretir → ayrı leksik index kodu yok; partition key ile repo filtresi ucuz; range search var | **pgvector**: BM25 yok, hybrid için tsvector ayrı yol · **Qdrant**: sparse alanı var ama BM25 hesabı istemcide · **Chroma / FAISS**: tek süreç, filtre ve ölçek zayıf · **Elasticsearch**: hybrid iyi ama ayrı dünya, ağır |
-| **BGE-M3** (yerel, 1024d) | Düz cümleyi vektöre çevirir; Türkçe soru ile İngilizce kod aynı uzayda | Çok dilli: TR düz cümlede R@8 0.684 — MiniLM'de 0.04'tü (ölçüldü); kod makineden çıkmaz; 8192 token pencere | **OpenAI text-embedding-3**: iyi ama kod dışarı gider, ücret (`RAG_EMBEDDING_BACKEND=openai` ile açılır) · **MiniLM**: Türkçede çöktü (ölçüldü) · **Voyage-code**: API, aynı sebep |
-| **BM25** (Milvus sparse) | `handleAuthCallback`, `QUEUE_NAMES` gibi sembolleri tam bulur | Embedding sembolde kördür; BM25 sembollerde 1.0 / 1.0 (ölçüldü) | **Yalnız dense**: sembolde MRR 0.875 · **grep**: canlı ama anlam/sıralama yok — o zaten ajanın kendi aracı |
-| **Sorgu yönlendirme** (regex) | Sembol biçimli sorgu → BM25, düz cümle → dense | Bedava MRR: 0.678 → 0.690; hybrid'i hep açmak bulamayan kanalı da terfi ettiriyor (MRR 0.604) (ölçüldü) | **Her zaman hybrid RRF**: daha kötü (ölçüldü) · **LLM router**: gecikme + maliyet, bir regex yetiyor |
-| **RRF** (bayrak) | dense + BM25 listelerini *sırayla* birleştirir | cosine (0–1) ile BM25 (0–30) toplanamaz; RRF skora değil sıraya bakar | **Ağırlıklı toplam / Milvus WeightedRanker**: normalize etsen de korpusa göre kayar |
-| **Cross-encoder rerank** bge-reranker-v2-m3 (bayrak, kapalı) | 40 adayı soruyla yan yana okuyup yeniden sıralar | Ölçüldü: bu korpusta sıralamayı bozdu (MRR 0.690 → 0.514), p50 2–4 sn → kapalı. recall@40 = 0.95 boşluğu duruyor, daha iyi bir reranker tabloya satır olarak girer | **Cohere / Voyage rerank**: API; denenmedi |
-| **tree-sitter** chunking | Dosyayı fonksiyon / sınıf / metod sınırından böler, sembol adını taşır; dil kapsamı elle tablo değil, pack'in 371 grammar'ı (uzantı adı = grammar adı kuralı + küçük takma ad tablosu) | Chunk = kod birimi: atıf "dosya:satır — fonksiyon" olur, embedding tek bir şeyi temsil eder | **Sabit pencere / RecursiveCharacterTextSplitter**: fonksiyonu ortadan keser · **LLM chunking**: pahalı · `.sql` tree-sitter dışı: grammar segfault veriyor (ölçüldü), satır pencereleriyle bölünür |
-| **sha256 manifest** ile artımlı sync | Push gelince yalnız değişen dosya yeniden indexlenir | İçerik hash'i: rename / mod / submodule kenar durumu yok, yerel dizin de aynı yoldan; yarıda kesilen iş eksik bırakmaz | **git diff**: kenar durumları · **Tam yeniden index**: 300 dosya ≈ dakikalar |
-| **Webhook + poller** | Azure "Code pushed", GitHub push (HMAC); kaçarsa poller yakalar | Push anında tazelik, poller güvenlik ağı | **Yalnız cron**: bayat pencere · **Yalnız webhook**: kaçan event kalıcı boşluk |
-| **SQLite** + tek worker kuyruk | repos / files / jobs / webhook_events; repo başına tek bekleyen iş | Tek süreç, tek dosya; Postgres + Redis kurulumu istemez | **Postgres + Celery / BullMQ**: iki ek servis, burada iş yok |
-| **scrub** (regex) | Index'e girmeden sır ve PII karartır | Tutucu kurallar: aynı repoda isim bazlı kural 247 yanlış pozitif verdi, bu sürüm 2 (biri gerçek) (ölçüldü) | **detect-secrets / gitleaks**: bağımlılık + aynı yanlış pozitif sorunu |
-| **Üç bant** (0.45 taban · 0.55 not) | Cevap yokken "yok" der; gri bölgeyi uyarıyla döner | kNN "yakın olan yok" demez; cosine gri bölgede ayırmıyor (bulunan min 0.526 / çöp max 0.587) → sert kapı değil, sinyal + hakem ajan (CRAG'ın üç bandı) | **Tek cosine eşiği**: gerçekleri de keser · **Reranker kapısı**: %29 yanlış alarm, +550 ms (ölçüldü) · **LLM hakem**: her sorguya bir LLM çağrısı |
-| **MCP** (aynı süreç, `/mcp`) | Claude Code / Cursor için `search_code` · `read_code` · `list_repos` | Aynı retriever, ek süreç yok; ajan adayları alır, gerisini okuyarak karar verir; `read_code` yalnız indexli dosyayı okur | **stdio ayrı süreç**: model iki kez yüklenir · **Yalnız HTTP**: her ajan aracı elle sarılır |
-| **Golden eval** (Recall@k · MRR · abstain) | Her retrieval kararını sayıyla verir | 42 soru + 13 negatif; "sanki iyi oldu" yok, bayrak varsayılanı JSON düşmeden değişmez | **Ragas / TruLens**: LLM hakemli, yavaş ve pahalı; retrieval'ı doğrudan ölçmek yetiyor |
-| **LLM katmanı** (`auto`: Claude › OpenAI › yerel Ollama) | Atıflı cevap (`/ask`); istenirse chunk'lara Türkçe açıklama | Retrieval LLM'siz çalışır, LLM yalnız cevap katmanında; anahtar yoksa yerel `qwen3.5:9b` ile sıfır kurulum (ölçüldü, Kurulum → Yerel LLM) | **Yalnız bulut**: anahtarsız denenemez · **Yalnız yerel**: kalite/hız tavanı; ikisi de bayrakla · qwen2.5 enrichment'ta Çince'ye kayıyor (ölçüldü) → alfabe kontrolü |
+| **Milvus 2.6** (Docker) | Vector store: dense + BM25 sparse in one collection, `repo_id` as partition key | Milvus' own `Function` produces BM25 → no separate lexical index to maintain; the partition key makes repo filtering cheap; range search available | **pgvector**: no BM25, hybrid needs a separate tsvector path · **Qdrant**: has a sparse field but BM25 is computed client-side · **Chroma / FAISS**: single process, weak filtering and scale · **Elasticsearch**: good hybrid, but a separate world and heavy |
+| **BGE-M3** (local, 1024d) | Turns a plain sentence into a vector; a Turkish question and English code land in the same space | Multilingual: Turkish prose R@8 0.684 — MiniLM scored 0.04 (measured); the code never leaves the machine; 8192-token window | **OpenAI text-embedding-3**: good, but the code goes out and it costs (enable with `RAG_EMBEDDING_BACKEND=openai`) · **MiniLM**: collapsed on Turkish (measured) · **Voyage-code**: API, same reason |
+| **BM25** (Milvus sparse) | Finds symbols like `handleAuthCallback`, `QUEUE_NAMES` exactly | Embeddings are blind to symbols; BM25 scores 1.0 / 1.0 on them (measured) | **Dense only**: MRR 0.875 on symbols · **grep**: live but no meaning or ranking — and that is already the agent's own tool |
+| **Query routing** (regex) | Symbol-shaped query → BM25, plain sentence → dense | Free MRR: 0.678 → 0.690; always-on hybrid also promotes the channel that failed to find it (MRR 0.604) (measured) | **Always hybrid RRF**: worse (measured) · **LLM router**: latency + cost, one regex is enough |
+| **RRF** (flag) | Merges the dense and BM25 lists *by rank* | Cosine (0–1) and BM25 (0–30) cannot be summed; RRF looks at rank, not score | **Weighted sum / Milvus WeightedRanker**: even normalized, it drifts with the corpus |
+| **Cross-encoder rerank** bge-reranker-v2-m3 (flag, off) | Reads 40 candidates side by side with the question and re-orders them | Measured: it broke the ordering on this corpus (MRR 0.690 → 0.514), p50 2–4 s → off. The recall@40 = 0.95 gap is still there; a better reranker earns a row in the table | **Cohere / Voyage rerank**: API; not tried |
+| **tree-sitter** chunking | Splits files on function / class / method boundaries and carries the symbol name; language coverage is a rule, not a hand-written table — the pack's 371 grammars (extension name = grammar name, plus a small alias table) | Chunk = code unit: a citation becomes "file:line — function", and the embedding represents exactly one thing | **Fixed window / RecursiveCharacterTextSplitter**: cuts a function in half · **LLM chunking**: expensive · `.sql` is outside tree-sitter here: the grammar segfaults (measured), so it is split with line windows |
+| **sha256 manifest** for incremental sync | On push, only the changed files are re-indexed | Content hashing: no rename / mode / submodule edge cases, and local directories take the same path; an interrupted job never leaves a gap | **git diff**: edge cases · **Full re-index**: 300 files ≈ minutes |
+| **Webhook + poller** | Azure "Code pushed", GitHub push (HMAC); the poller catches whatever the webhook misses | Freshness at push time, with the poller as the safety net | **Cron only**: a stale window · **Webhook only**: a missed event is a permanent gap |
+| **SQLite** + single-worker queue | repos / files / jobs / webhook_events; one pending job per repo | One process, one file; no Postgres + Redis to install | **Postgres + Celery / BullMQ**: two extra services with nothing to do here |
+| **scrub** (regex) | Redacts secrets and PII before anything is indexed | Deliberately conservative: on the same repo, a name-based rule produced 247 false positives; this version produces 2 (one of them real) (measured) | **detect-secrets / gitleaks**: a dependency, and the same false-positive problem |
+| **Three bands** (0.45 floor · 0.55 note) | Says "no answer" when there is none; returns the grey zone with a warning | kNN never says "nothing is close"; cosine does not separate in the grey zone (lowest real hit 0.526 / highest junk 0.587) → not a hard gate, but a signal plus an adjudicating agent (CRAG's three bands) | **A single cosine threshold**: cuts real answers too · **Reranker gate**: 29% false alarms, +550 ms (measured) · **LLM judge**: one LLM call per query |
+| **MCP** (same process, `/mcp`) | `search_code` · `read_code` · `list_repos` for Claude Code / Cursor | Same retriever, no extra process; the agent gets candidates and decides by reading the rest; `read_code` only opens indexed files | **stdio in a separate process**: the model loads twice · **HTTP only**: every agent tool has to be wrapped by hand |
+| **Golden eval** (Recall@k · MRR · abstain) | Puts a number on every retrieval decision | 42 questions + 13 negatives; no "feels better", and no flag default changes without a JSON landing on disk | **Ragas / TruLens**: LLM-judged, slow and expensive; measuring retrieval directly is enough |
+| **LLM layer** (`auto`: Claude › OpenAI › local Ollama) | Cited answers (`/ask`); optional per-chunk descriptions | Retrieval works with no LLM at all — the LLM lives only in the answer layer; with no key, local `qwen3.5:9b` gives you a zero-setup start (measured, Setup → Local LLM) | **Cloud only**: cannot be tried without a key · **Local only**: a quality/speed ceiling; both are behind flags · qwen2.5 drifts into Chinese during enrichment (measured) → an alphabet check |
 
-Çevresi: Python 3.12 + uv, FastAPI + uvicorn, typer CLI, pydantic-settings; tek `docker compose`
-ile Milvus + etcd + MinIO. Dış dünyayla yalnızca HTTP konuşur, indexlediği repolara asla yazmaz.
-Bu tablo özet; her satırın gerekçesi ve tuzakları [Tasarım notları](#tasarım-notları)'nda.
+Around it: Python 3.12 + uv, FastAPI + uvicorn, a typer CLI, pydantic-settings; one
+`docker compose` brings up Milvus + etcd + MinIO. It talks to the outside world over HTTP
+only, and never writes to the repos it indexes. This table is the summary; the reasoning
+and the traps behind each row are in [Design notes](#design-notes).
 
-## Kurulum
+## Setup
 
 ```bash
 git clone git@github.com:fport/milvus-rag.git && cd milvus-rag
-uv sync                                              # Python 3.12 + bağımlılıklar (uv indirir)
+uv sync                                              # Python 3.12 + dependencies (uv fetches them)
 docker compose -f infra/docker-compose.yml up -d     # Milvus 2.6 + etcd + MinIO
-curl -f http://localhost:9091/healthz                # "OK" (ilk açılış ~60-90 sn)
-docker compose -f infra/docker-compose.yml --profile ui up -d   # (isteğe bağlı) Attu, Milvus arayüzü → :8091
-ollama pull qwen3.5:9b                               # yerel LLM (6.6 GB) — /ask bununla çalışır, anahtar gerekmez
-cp .env.example .env                                 # aşağıdaki değerleri doldur (yerel deneme için hiçbiri şart değil)
+curl -f http://localhost:9091/healthz                # "OK" (~60-90 s on first boot)
+docker compose -f infra/docker-compose.yml --profile ui up -d   # (optional) Attu, the Milvus UI → :8091
+ollama pull qwen3.5:9b                               # local LLM (6.6 GB) — /ask runs on this, no key needed
+cp .env.example .env                                 # fill in the values below (none are required for a local trial)
 ```
 
-Ollama kurulu değilse: macOS'ta `brew install ollama && brew services start ollama`,
-Linux'ta `curl -fsSL https://ollama.com/install.sh | sh`. Model seçenekleri ve
-ölçümler [Yerel LLM ile deneme](#yerel-llm-ile-deneme-varsayılan) başlığında.
+If Ollama is not installed: on macOS `brew install ollama && brew services start ollama`,
+on Linux `curl -fsSL https://ollama.com/install.sh | sh`. Model options and measurements
+are under [Trying it with a local LLM](#trying-it-with-a-local-llm-the-default).
 
-`.env`'de gerekenler — yerel bir dizin + yerel LLM ile denemek için **hiçbiri gerekmez**:
+What `.env` needs — to try it against a local directory with a local LLM, **none of it**:
 
-| Değişken | Ne |
+| Variable | What |
 |---|---|
 | `AZURE_DEVOPS_ORG_URL` | `https://dev.azure.com/<org>` |
-| `AZURE_DEVOPS_PAT` | Personal Access Token, kapsam **Code → Read** |
-| `GITHUB_TOKEN` | isteğe bağlı — public repolar tokensız çalışır; private için fine-grained PAT (Contents: Read) |
-| `RAG_WEBHOOK_SECRET` | Azure Service Hook'un göndereceği paylaşılan sır |
-| `ANTHROPIC_API_KEY` | isteğe bağlı — varsa `/ask` ve enrichment Claude'a geçer; yoksa yerel Ollama modeli (aşağıya bak) |
+| `AZURE_DEVOPS_PAT` | Personal Access Token, scope **Code → Read** |
+| `GITHUB_TOKEN` | optional — public repos work without a token; private ones need a fine-grained PAT (Contents: Read) |
+| `RAG_WEBHOOK_SECRET` | the shared secret an Azure Service Hook will send |
+| `ANTHROPIC_API_KEY` | optional — if set, `/ask` and enrichment switch to Claude; otherwise the local Ollama model (see below) |
 
-Hepsi arayüzden de girilebilir ve girilen değer `.env`'i ezer (silinince env'e dönülür):
-GitHub token ve Azure org+PAT **Repolar › Repo bağla** panelinde, webhook sırrı ve Anthropic
-anahtarı **Bağlan › Anahtarlar** kartında. Doğrulanır, `data/rag.db`'de saklanır, yeniden
-başlatma gerekmez.
+All of them can be entered from the UI too, and what you enter overrides `.env` (clear it
+and it falls back to the env): the GitHub token and Azure org+PAT live in the
+**Repos › Connect repo** panel, the webhook secret and Anthropic key in the
+**Connect › Keys** card. They are verified, stored in `data/rag.db`, and need no restart.
 
-### Yerel LLM ile deneme (varsayılan)
+### Trying it with a local LLM (the default)
 
-Sağlayıcı `RAG_LLM_PROVIDER=auto`: Anthropic anahtarı varsa Claude, yoksa OpenAI anahtarı varsa
-OpenAI, o da yoksa **yerel Ollama** — yani sıfır anahtarla `/ask` çalışır. Retrieval (`/search`,
-MCP) LLM'e hiç bağımlı değil.
+The provider is `RAG_LLM_PROVIDER=auto`: Claude if an Anthropic key is present, otherwise
+OpenAI if an OpenAI key is present, otherwise **local Ollama** — so `/ask` works with zero
+keys. Retrieval (`/search`, MCP) does not depend on an LLM at all.
 
 ```bash
 # 1. Ollama: https://ollama.com/download  (macOS: brew install ollama · Linux: curl -fsSL https://ollama.com/install.sh | sh)
-ollama pull qwen3.5:9b                 # 6.6 GB; zayıf makine için qwen3.5:4b (3.4 GB) → RAG_LLM_MODEL=qwen3.5:4b
-# 2. Ollama uygulaması açık olsun (ya da `ollama serve`), sonra:
-#    `ollama pull` "run ollama serve" diyorsa sunucu ayakta değil: macOS'ta uygulamayı aç
-#    (brew kurulumunda `brew services start ollama`), Linux'ta `sudo systemctl enable --now ollama`,
-#    ya da ayrı terminalde `ollama serve`. Kontrol: curl localhost:11434 → "Ollama is running"
+ollama pull qwen3.5:9b                 # 6.6 GB; on a weaker machine qwen3.5:4b (3.4 GB) → RAG_LLM_MODEL=qwen3.5:4b
+# 2. Keep the Ollama app running (or `ollama serve`), then:
+#    if `ollama pull` says "run ollama serve", the server is down: on macOS open the app
+#    (with a brew install, `brew services start ollama`), on Linux `sudo systemctl enable --now ollama`,
+#    or run `ollama serve` in another terminal. Check: curl localhost:11434 → "Ollama is running"
 uv run rag add-local ~/code/my-api --name my-api
-uv run rag ask "webhook olayları nasıl kuyruğa alınıyor?" -r my-api
+uv run rag ask "how are webhook events queued?" -r my-api
 ```
 
-Arayüzde **Bağlan › Anahtarlar** kartı Ollama'nın ayakta olup olmadığını ve modelin indirilip
-indirilmediğini canlı gösterir; eksikse çalıştırılacak komutu yazar. Düşünen modellerde (qwen3.x)
-düşünme kapalı gönderilir — atıflı cevapta gerekmiyor, süre 2-3 kat kısalıyor. Bağlam penceresi
-`RAG_OLLAMA_NUM_CTX=16384`: Ollama'nın 4k varsayılanı 8 chunk'lık prompt'u sessizce kırpardı.
+The **Connect › Keys** card in the UI shows live whether Ollama is up and whether the model
+has been pulled, and prints the command to run if something is missing. Thinking models
+(qwen3.x) are called with thinking off — a cited answer does not need it, and it cuts the
+time by 2-3x. The context window is `RAG_OLLAMA_NUM_CTX=16384`: Ollama's 4k default silently
+truncated an 8-chunk prompt.
 
-Hugging Face'ten başka bir model, vLLM / LM Studio / llama.cpp gibi **OpenAI uyumlu** bir sunucuyla:
+Another model from Hugging Face, served by an **OpenAI-compatible** server such as
+vLLM / LM Studio / llama.cpp:
 
 ```bash
-vllm serve Qwen/Qwen3.5-9B --port 8000          # ya da LM Studio → Local Server
+vllm serve Qwen/Qwen3.5-9B --port 8000          # or LM Studio → Local Server
 RAG_LLM_PROVIDER=openai RAG_OPENAI_BASE_URL=http://localhost:8000/v1 \
 RAG_LLM_MODEL=Qwen/Qwen3.5-9B OPENAI_API_KEY=local uv run rag serve
 ```
 
-Ölçüldü (2026-09-01, Apple M-serisi, aynı 6 chunk'lık prompt, 3 soru — TR, EN ve cevabı olmayan):
+Measured (2026-09-01, Apple M-series, same 6-chunk prompt, 3 questions — Turkish, English,
+and one with no answer in the corpus):
 
-| Model | süre / cevap | Kalite | "Cevap yok" davranışı |
+| Model | time / answer | Quality | "No answer" behaviour |
 |---|---|---|---|
-| **qwen3.5:9b, think kapalı** ✓ | 12-17 s | iyi: [1][2][4] atıflı, doğru kod parçası, düzgün Türkçe (EN soruya da Türkçe cevapladı) | doğru: "kod tabanında bu soruya cevap verebilecek bilgi yok", 2 s |
-| qwen3.5:9b, think açık | 48-51 s | 3 sorunun 2'sinde **boş cevap**: düşünce 1024 token'ın hepsini yedi → kapalı gönderilir | — |
-| qwen2.5:7b | 22-32 s | iyi: dosya + fonksiyon atıflı, dilini koruyor | doğru: "kod parçaları bulunmadığından cevaplayamam", 4 s |
-| qwen3:1.7b, think kapalı | 11-15 s | zayıf: "implemetasyonu", "konflikt deteksiyonu" | kararsız, konu dışına kayıyor |
-| claude-opus-5 | — | referans; anahtar girilince `auto` buna geçer | doğru |
+| **qwen3.5:9b, thinking off** ✓ | 12-17 s | good: cited [1][2][4], the right snippet, clean Turkish (it answered the English question in Turkish too) | correct: "there is nothing in the codebase that answers this", 2 s |
+| qwen3.5:9b, thinking on | 48-51 s | **empty answer** on 2 of 3 questions: thinking ate all 1024 tokens → we send it off | — |
+| qwen2.5:7b | 22-32 s | good: cites file + function, keeps the question's language | correct: "I cannot answer, no snippets were found", 4 s |
+| qwen3:1.7b, thinking off | 11-15 s | weak: mangled words, invented terms | unstable, drifts off topic |
+| claude-opus-5 | — | the reference; `auto` switches to it once a key is set | correct |
 
-Enrichment (chunk açıklaması) için yerel model kullanacaksan alfabe kontrolü var: qwen2.5 yük
-altında Çince'ye kayıyor (ölçüldü), yanlış alfabe reddedilir.
+If you use a local model for enrichment (chunk descriptions) there is an alphabet check:
+qwen2.5 drifts into Chinese under load (measured), and the wrong alphabet is rejected.
 
-İlk çalıştırmada `BAAI/bge-m3` (~2.2 GB) ve `BAAI/bge-reranker-v2-m3` (~2.2 GB)
-Hugging Face'ten iner; sonrası `~/.cache/huggingface`'ten gelir. Apple M-serisinde
-otomatik `mps` kullanılır.
+On the first run `BAAI/bge-m3` (~2.2 GB) and `BAAI/bge-reranker-v2-m3` (~2.2 GB) are
+downloaded from Hugging Face; after that they come from `~/.cache/huggingface`. On Apple
+M-series machines `mps` is selected automatically.
 
-## Kullanım
+## Usage
 
 ```bash
-uv run rag serve   # http://localhost:8090 → web arayüzü · /docs → OpenAPI
+uv run rag serve   # http://localhost:8090 → web UI · /docs → OpenAPI
 
-# Azure'a göz at, repo seç
+# Browse Azure, pick a repo
 uv run rag azure projects
 uv run rag azure repos Platform
-uv run rag add-azure Platform backend-api         # kaydeder + klonlar + indexler
+uv run rag add-azure Platform backend-api         # registers + clones + indexes
 uv run rag add-azure Platform backend-api --branch develop
 
-# GitHub'dan repo seç (public için token gerekmez)
+# Pick a repo from GitHub (public ones need no token)
 uv run rag github repos sindresorhus
 uv run rag add-github sindresorhus/p-limit
 uv run rag add-github acme/backend --branch develop
 
-# Yerel bir dizinle dene (git olması şart değil)
+# Try it against a local directory (it does not have to be a git repo)
 uv run rag add-local ~/code/my-api --name my-api
 
-# Ara / sor / ölç
-uv run rag search "webhook eventleri nasıl kuyruğa alınıyor" -r my-api
+# Search / ask / measure
+uv run rag search "how are webhook events queued" -r my-api
 uv run rag search withSession --mode bm25
-uv run rag ask "optimistic lock nasıl çalışıyor?" -r my-api
-uv run rag eval evals/golden.example.jsonl -r my-api --tag v1   # şablonu kopyalayıp doldur
+uv run rag ask "how does the optimistic lock work?" -r my-api
+uv run rag eval evals/golden.example.jsonl -r my-api --tag v1   # copy the template and fill it in
 
-# Kimlikler arayüzden de kaydedilebilir: Repolar → Repo bağla panelinde GitHub token /
-# Azure org+PAT gir, doğrulanır ve data/rag.db'de saklanıp env'i ezer; repoları listeden seçersin.
+# Credentials can also be saved from the UI: enter the GitHub token / Azure org+PAT in the
+# Repos → Connect repo panel; they are verified, stored in data/rag.db, override the env,
+# and you pick repos from a list.
 
-# Tazele
-uv run rag sync my-api                            # artımlı: yalnızca değişen dosyalar
-uv run rag sync my-api --force                    # tam yeniden index
-uv run rag poll                                   # Azure head'lerini bir kez kontrol et
+# Refresh
+uv run rag sync my-api                            # incremental: only the changed files
+uv run rag sync my-api --force                    # full re-index
+uv run rag poll                                   # check the Azure heads once
 ```
 
-Aynı işlemler HTTP'den. `/` altında basit bir web arayüzü de var — üç sekme:
-**Ara** (kanal skorlarıyla arama, LLM'e soru), **İşler** (her index çalışmasının
-pipeline akışı: kaynak → fark → chunk → embed → Milvus, canlı ilerleme),
-**Bağlan** (kopyalanabilir webhook URL'leri, poller, curl örnekleri, MCP ayarı):
+The same operations are available over HTTP. There is also a small web UI at `/` with three
+tabs: **Search** (search with channel scores, ask the LLM), **Jobs** (the pipeline of every
+index run: source → diff → chunk → embed → Milvus, with live progress), and **Connect**
+(copyable webhook URLs, the poller, curl examples, MCP setup). The UI ships in Turkish:
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Milvus RAG arayüzü — Türkçe soruyla kod araması, vektör uzayı görünümü, kanal skorları ve bağlı repolar" width="920">
+  <img src="docs/screenshot.png" alt="The Milvus RAG UI — a Turkish question searching code, the vector-space view, channel scores and the connected repos" width="920">
 </p>
 
-Görseldeki arama bu reponun kendisine karşı çalışıyor: Türkçe düz cümle → dense kanal →
-`jobs.py`'deki `JobRunner`, 80 ms. **DOKÜMAN** rozeti plan/tasarım metninden gelen
-sonuçları koddan ayırır.
+The search in that image runs against this repo itself: a plain Turkish sentence → the dense
+channel → `JobRunner` in `jobs.py`, 80 ms. The **DOKÜMAN** (document) badge separates hits
+that come from design notes from hits that come from code.
 
-| Uç | İş |
+| Endpoint | Job |
 |---|---|
-| `GET /health` | Milvus, model ve Azure durumu |
-| `GET /azure/projects`, `GET /azure/projects/{p}/repos` | Azure'a göz at (`registered_as` alanı kayıtlıysa dolu) |
-| `GET /github/{owner}/repos` | GitHub org/kullanıcı repoları (aynı `registered_as` alanıyla) |
-| `POST /repos` | kaydet + indexle — `{provider:"azure", project, repo}` · `{provider:"github", repo:"owner/repo"}` · `{provider:"local", path}` |
-| `GET /repos`, `GET /repos/{id}`, `DELETE /repos/{id}` | durum (aktif iş dahil), silme |
-| `POST /repos/{id}/sync` `{force?}` | iş kuyruğa alınır → 202 |
-| `GET /repos/{id}/files`, `GET /repos/{id}/file?path=&start=&end=` | manifest; dosyadan satır aralığı (agent `read_file`) |
-| `GET /jobs`, `GET /jobs/{id}` | iş geçmişi ve ilerleme (`stats.progress`) |
+| `GET /health` | Milvus, model and Azure status |
+| `GET /azure/projects`, `GET /azure/projects/{p}/repos` | browse Azure (the `registered_as` field is filled in if already registered) |
+| `GET /github/{owner}/repos` | GitHub org/user repos (with the same `registered_as` field) |
+| `POST /repos` | register + index — `{provider:"azure", project, repo}` · `{provider:"github", repo:"owner/repo"}` · `{provider:"local", path}` |
+| `GET /repos`, `GET /repos/{id}`, `DELETE /repos/{id}` | status (including the active job), deletion |
+| `POST /repos/{id}/sync` `{force?}` | the job is queued → 202 |
+| `GET /repos/{id}/files`, `GET /repos/{id}/file?path=&start=&end=` | the manifest; a line range from a file (an agent's `read_file`) |
+| `GET /jobs`, `GET /jobs/{id}` | job history and progress (`stats.progress`) |
 | `POST /search` | `{q, repo_ids?, k?, mode?, rerank?, candidates?, path_prefix?, lang?, category?}` |
-| `POST /ask` | aynı gövde → `{answer, sources[]}` |
-| `POST /webhooks/azure/push` | Azure Service Hook hedefi |
-| `POST /webhooks/github/push` | GitHub webhook hedefi (HMAC-SHA256 imza doğrulanır) |
+| `POST /ask` | same body → `{answer, sources[]}` |
+| `POST /webhooks/azure/push` | the Azure Service Hook target |
+| `POST /webhooks/github/push` | the GitHub webhook target (HMAC-SHA256 signature verified) |
 
-Her `/search` sonucu kanal skorlarını taşır — hangi kanalın neyi bulduğu görünür:
+Every `/search` result carries its channel scores — you can see which channel found what:
 
 ```json
 {"path": "src/features/jira-webhook/jira-webhook.queue.ts", "symbol": "enqueueWebhookEvent",
@@ -217,233 +228,254 @@ Her `/search` sonucu kanal skorlarını taşır — hangi kanalın neyi bulduğu
  "scores": {"dense": 0.71, "bm25": 14.2, "rrf": 0.0325, "rerank": 0.93}}
 ```
 
-## Repo değişince ne olur
+## What happens when the repo changes
 
-1. **Tetik.**
-   - *Azure:* Project Settings → Service Hooks → *Web Hooks* → olay **Code pushed**,
-     URL `https://<host>:8090/webhooks/azure/push`, "Basic authentication password" ya da
-     `X-RAG-Webhook-Secret` header'ı = `RAG_WEBHOOK_SECRET`.
+1. **Trigger.**
+   - *Azure:* Project Settings → Service Hooks → *Web Hooks* → event **Code pushed**,
+     URL `https://<host>:8090/webhooks/azure/push`, with either the "Basic authentication
+     password" or the `X-RAG-Webhook-Secret` header = `RAG_WEBHOOK_SECRET`.
    - *GitHub:* repo → Settings → Webhooks → Add webhook: URL
      `https://<host>:8090/webhooks/github/push`, content type `application/json`,
-     **Secret** = `RAG_WEBHOOK_SECRET` (HMAC-SHA256 imzası doğrulanır), olay: *Just the push event*.
-   - Webhook yoksa/kaçarsa poller `RAG_POLL_INTERVAL_SECONDS` aralığıyla Azure/GitHub
-     branch head'ini karşılaştırır.
-2. **Kuyruk.** Repo başına tek bekleyen iş: beş push gelirse bir iş çalışır, bir iş bekler.
-   Aynı commit ikinci kez gelirse (Azure yeniden dener) iş açılmaz.
-3. **Fark.** `git fetch` + `reset --hard origin/<branch>`, sonra her indexlenebilir dosyanın
-   sha256'sı SQLite manifest ile karşılaştırılır: eklenen / değişen / silinen / aynı.
-4. **Yazma.** Değişen dosya için önce o yolun chunk'ları silinir, sonra yenileri eklenir;
-   silinen dosya yalnızca silinir; aynı kalan dosya embed edilmez. Manifest satırı silmeden
-   önce kaldırılır, yazdıktan sonra geri konur — yarıda kesilen iş eksik bırakmaz.
-5. **Cache.** İş bitince arama cache'i boşalır; eski satır numaralarını gösteren cevap kalmaz.
+     **Secret** = `RAG_WEBHOOK_SECRET` (the HMAC-SHA256 signature is verified),
+     event: *Just the push event*.
+   - If there is no webhook, or one is missed, the poller compares the Azure/GitHub branch
+     head every `RAG_POLL_INTERVAL_SECONDS`.
+2. **Queue.** One pending job per repo: if five pushes arrive, one job runs and one waits.
+   If the same commit arrives twice (Azure retries), no job is opened.
+3. **Diff.** `git fetch` + `reset --hard origin/<branch>`, then the sha256 of every
+   indexable file is compared against the SQLite manifest: added / changed / deleted / same.
+4. **Write.** For a changed file the chunks at that path are deleted first, then the new
+   ones are inserted; a deleted file is only deleted; an unchanged file is never embedded.
+   The manifest row is removed before the delete and put back after the write — an
+   interrupted job never leaves a gap.
+5. **Cache.** When the job finishes the search cache is cleared, so no answer keeps showing
+   old line numbers.
 
-`RAG_*` chunk/embedding ayarı değişirse `index_version` değişir ve bir sonraki sync tam
-yeniden index yapar.
+If a `RAG_*` chunk/embedding setting changes, `index_version` changes with it and the next
+sync does a full re-index.
 
-## Retrieval zinciri ve bayraklar
+## Retrieval chain and flags
 
-| Bayrak | Varsayılan | Ne yapar |
+| Flag | Default | What it does |
 |---|---|---|
-| `RAG_SEARCH_MODE` | `auto` | sembol biçimli sorgu (`handleAuthCallback`, `QUEUE_NAMES`, `a.b.c`) → BM25; düz cümle → `RAG_PROSE_MODE` |
-| `RAG_PROSE_MODE` | `dense` | `dense` ya da `hybrid` (dense + BM25 → RRF, `RAG_RRF_K=60`) — ölçüldü, aşağıya bak |
-| `RAG_RERANK_ENABLED` | `false` | `RAG_CANDIDATES=40` aday → `bge-reranker-v2-m3` → `RAG_TOP_K=8` — ölçüldü, zarar etti |
-| `RAG_CHUNK_MAX_BYTES` / `MIN` | 2000 / 200 | chunk sınırları (≈500 token tavan) |
-| `RAG_ENRICH_ENABLED` | `false` | her chunk için LLM'den Türkçe açıklama, `indexed_text`'e girer (cache'li) |
-| `RAG_MIN_DENSE_SCORE` | `0.45` | sert taban: dense skoru bunun altındaki parça hiç dönmez (`dropped` sayar); BM25'e uygulanmaz; 0 = kapalı — ölçüldü, aşağıya bak |
-| `RAG_WEAK_DENSE_SCORE` | `0.55` | en iyi dense skoru bunun altındaysa yanıt `weak_match: true` taşır — **sinyal, filtre değil**; sonuçlar yine döner — ölçüldü, aşağıya bak |
+| `RAG_SEARCH_MODE` | `auto` | symbol-shaped query (`handleAuthCallback`, `QUEUE_NAMES`, `a.b.c`) → BM25; plain sentence → `RAG_PROSE_MODE` |
+| `RAG_PROSE_MODE` | `dense` | `dense` or `hybrid` (dense + BM25 → RRF, `RAG_RRF_K=60`) — measured, see below |
+| `RAG_RERANK_ENABLED` | `false` | `RAG_CANDIDATES=40` candidates → `bge-reranker-v2-m3` → `RAG_TOP_K=8` — measured, it hurt |
+| `RAG_CHUNK_MAX_BYTES` / `MIN` | 2000 / 200 | chunk bounds (≈500 tokens at the ceiling) |
+| `RAG_ENRICH_ENABLED` | `false` | a Turkish description from the LLM for every chunk, added to `indexed_text` (cached) |
+| `RAG_MIN_DENSE_SCORE` | `0.45` | hard floor: a chunk scoring below it is never returned (counted as `dropped`); not applied to BM25; 0 = off — measured, see below |
+| `RAG_WEAK_DENSE_SCORE` | `0.55` | if the best dense score is below it, the response carries `weak_match: true` — **a signal, not a filter**; the results still come back — measured, see below |
 
-Her bayrağı `POST /search` gövdesinde ve `rag eval` parametrelerinde istek başına ezebilirsin;
-ablation için tasarlandı.
+Every flag can be overridden per request in the `POST /search` body and in `rag eval`
+parameters; it was designed for ablation.
 
-### Ölçüm defteri
+### Measurement ledger
 
-`rag eval` her çalışmada `evals/results/<tarih>_<etiket>.json` yazar. Golden set
-şablonu `evals/golden.example.jsonl`; kendi repon için kopyalayıp doldur (repo'ya
-özel setler gitignore'da — iç dosya yollarını yayınlama). Aşağıdaki rakamlar örnek
-bir korpus üzerinde (318 dosyalık TypeScript API monorepo'su, 42 soru: 19 EN düz,
-19 TR düz, 4 sembol; etiketler repo okunarak yazıldı), k=8:
+Every `rag eval` run writes `evals/results/<date>_<tag>.json`. The golden set template is
+`evals/golden.example.jsonl`; copy it and fill it in for your own repo (repo-specific sets
+are gitignored — do not publish your internal file paths). The numbers below are from an
+example corpus (a 318-file TypeScript API monorepo, 42 questions: 19 English prose,
+19 Turkish prose, 4 symbols; the labels were written by reading the repo), k=8:
 
-İlk ölçüm (2026-08-31, BGE-M3, chunk 200–2000B):
+First measurement (2026-08-31, BGE-M3, chunks 200–2000B):
 
-| Etiket | Ayar | Recall@8 | MRR | TR-prose R@8 | p50 |
+| Tag | Setting | Recall@8 | MRR | TR-prose R@8 | p50 |
 |---|---|---|---|---|---|
-| bm25 | yalnız BM25 | 0.405 | 0.240 | 0.263 | 2 ms |
+| bm25 | BM25 only | 0.405 | 0.240 | 0.263 | 2 ms |
 | hybrid | dense+BM25 → RRF | 0.786 | 0.604 | 0.684 | 40 ms |
-| dense | yalnız dense | 0.786 | 0.678 | 0.684 | 32 ms |
-| **auto+dense** ✓ | sembol→bm25, düz→dense | **0.786** | **0.690** | 0.684 | 34 ms |
-| hybrid k=40 | aday havuzu | 0.952 | — | 0.895 | 39 ms |
+| dense | dense only | 0.786 | 0.678 | 0.684 | 32 ms |
+| **auto+dense** ✓ | symbol→bm25, prose→dense | **0.786** | **0.690** | 0.684 | 34 ms |
+| hybrid k=40 | candidate pool | 0.952 | — | 0.895 | 39 ms |
 | hybrid+rerank | 40→8, bge-reranker-v2-m3 | 0.762 | 0.508 | 0.579 | 4389 ms |
-| auto+rerank | aynı | 0.762 | 0.514 | 0.579 | 2050 ms |
+| auto+rerank | same | 0.762 | 0.514 | 0.579 | 2050 ms |
 
-Okuma: sembollerde BM25 1.0/1.0, dense 1.0/0.875 — yönlendirme MRR'ı bedavaya taşıyor.
-BGE-M3 çok dilli olduğu için Türkçe sorular çalışıyor (eski MiniLM deneyinde 0.04'tü).
-Recall@40 = 0.95: reranker'ın kapatabileceği +0.17'lik alan VAR ama bge-reranker-v2-m3
-onu kapatmak yerine sıralamayı bozdu ve saniyeler yedi → kapalı. Daha iyi bir reranker
-denenecekse tabloya yeni satır olarak girer.
+Reading: on symbols BM25 scores 1.0/1.0 and dense 1.0/0.875 — routing buys the MRR for free.
+Because BGE-M3 is multilingual, Turkish questions work (in the old MiniLM experiment they
+scored 0.04). Recall@40 = 0.95: there IS a +0.17 gap a reranker could close, but instead of
+closing it bge-reranker-v2-m3 broke the ordering and ate seconds → off. If a better reranker
+gets tried, it enters as a new row in this table.
 
-**Çekimserlik (2026-09-01).** kNN araması "en yakın k" demektir, "yakın olan yok" diye bir
-kavramı yoktur: retriever "Beş yıldızlı bir tatil köyüne gittiniz mi?" sorusuna da 8 parça
-döndürür (en iyisi 0.366). Halüsinasyon buradan başlar. Golden'a cevabı repoda OLMAYAN 12
-negatif soru eklendi (`expect: []`); `abstain` = boş sonuç ya da `weak_match` sinyali,
-`false_weak` = pozitifte sinyalin yanlış yanması. Cosine gri bölgede ayırmıyor (golden top-1
-dense medyan 0.636 / min 0.526; alakasız medyan 0.531 / max 0.598 — örtüşüyor). Çözüm
-CRAG'ın üç bandı: **< 0.45 → atılır** (`RAG_MIN_DENSE_SCORE`, golden'ın en düşük gerçek
-cevabının hayli altında, yalnız saçma kuyruğu keser), **0.45–0.55 → döner ama "zayıf
-eşleşme" notuyla** (`RAG_WEAK_DENSE_SCORE`), **≥ 0.55 → normal**. Karar tüketicinin
-(ajan / LLM / arayüzdeki insan); taban sadece "cevap olamaz" bandını temizler.
+**Abstention (2026-09-01).** A kNN search means "the nearest k"; it has no concept of
+"nothing is near": the retriever returns 8 chunks for "have you ever been to a five-star
+resort?" too (best one 0.366). That is where hallucination starts. 12 negative questions
+whose answers are NOT in the repo were added to the golden set (`expect: []`); `abstain` =
+an empty result or a `weak_match` signal, `false_weak` = the signal firing wrongly on a
+positive. Cosine does not separate in the grey zone (golden top-1 dense median 0.636 /
+min 0.526; irrelevant median 0.531 / max 0.598 — they overlap). The answer is CRAG's three
+bands: **< 0.45 → dropped** (`RAG_MIN_DENSE_SCORE`, well below the lowest real answer in the
+golden set, so it only cuts the absurd tail), **0.45–0.55 → returned, but with a "weak
+match" note** (`RAG_WEAK_DENSE_SCORE`), **≥ 0.55 → normal**. The decision belongs to the
+consumer (agent / LLM / the human in the UI); the floor only clears the "cannot be an
+answer" band.
 
-| Kapı | abstain (negatif) | false_weak (42 pozitif) | Recall@8 / MRR | ek gecikme |
+| Gate | abstain (negatives) | false_weak (42 positives) | Recall@8 / MRR | added latency |
 |---|---|---|---|---|
-| dense < 0.55 notu | 10/12 = 0.833 | 2/42 = 0.048 | 0.786 / 0.690 (değişmedi) | 0 |
-| **taban 0.45 + not 0.55** ✓ | 11/13 = 0.846 (2'si boş döndü) | 2/42 = 0.048 | 0.786 / 0.690 (değişmedi) | 0 |
-| rerank < 0.05 (bge-reranker-v2-m3, yalnız top-8) | 12/12 | 12/42 = 0.286 | — | +550 ms p50 |
+| dense < 0.55 note | 10/12 = 0.833 | 2/42 = 0.048 | 0.786 / 0.690 (unchanged) | 0 |
+| **floor 0.45 + note 0.55** ✓ | 11/13 = 0.846 (2 came back empty) | 2/42 = 0.048 | 0.786 / 0.690 (unchanged) | 0 |
+| rerank < 0.05 (bge-reranker-v2-m3, top-8 only) | 12/12 | 12/42 = 0.286 | — | +550 ms p50 |
 | rerank < 0.5 | 12/12 | 25/42 | — | +550 ms |
 
-Eşikler resmi değil, **bu model + bu korpus için ölçülmüş**: cosine dağılımı embedding
-modeline göre kayar (aynı iş için Mistral ~0.73, Gemini ~0.46 çıkabiliyor). Model değişince
-yeniden kalibre et: `rag eval` raporundaki `calibration` bloğu bulunan pozitiflerin en düşük
-top-dense'ini ve negatiflerin en yükseğini verir; taban ilkinin altına, not eşiği ikisinin
-arasına konur. fport-site (blog) için de bakıldı: 6 gerçek soru 0.567–0.700, ikisi de güvende.
+The thresholds are not universal, they were **measured for this model and this corpus**: the
+cosine distribution shifts with the embedding model (for the same job Mistral can land around
+0.73 and Gemini around 0.46). Recalibrate when you change the model: the `calibration` block
+in the `rag eval` report gives the lowest top-dense among the positives that were found and
+the highest among the negatives; put the floor below the first and the note threshold between
+the two. It was also checked against a blog repo: 6 real questions scored 0.567–0.700, so
+both thresholds were safe.
 
-Okuma: reranker negatifleri kusursuz yakalıyor ama gerçek cevapların p25'ine de 0.039
-veriyor — her üç sorgudan birinde yanlış alarm, ajanın notu yok saymayı öğrenmesi için
-yeterli; cosine notu %5 yanlış alarmla yakalıyor → o kaldı. Taban 0.45 golden'dan hiçbir
-şey düşürmedi, "tatil köyü" (0.366) ve "Kafka rebalance" (0.418) sorularını sıfır sonuca
-indirdi. Kaçan ikisi ("CSV export stream", "puppeteer") repoda gerçekten *benzer* kod olan
-sorular (0.598 / 0.544); orada karar ajanın. Sinyalin nasıl sunulduğu: MCP bölümü ve
-arayüz (zayıf eşleşme notu, DOKÜMAN rozeti, "N elendi").
+Reading: the reranker catches the negatives perfectly, but it also gives 0.039 to the p25 of
+the real answers — a false alarm on one query in three, enough for an agent to learn to
+ignore the note; the cosine note catches them with a 5% false-alarm rate → that is the one
+that stayed. The 0.45 floor dropped nothing from the golden set, and took the "resort" (0.366)
+and "Kafka rebalance" (0.418) questions down to zero results. The two that got through
+("CSV export stream", "puppeteer") are questions where genuinely *similar* code exists in the
+repo (0.598 / 0.544); there, the decision is the agent's. How the signal is presented: see the
+MCP section and the UI (the weak-match note, the DOKÜMAN badge, "N dropped").
 
-**Chunk ablasyonu (2026-09-01).** Soru: tree-sitter (AST) chunk'ı düz pencereye göre ne
-kazandırıyor? Aynı korpus iki kez indexlendi: `ast` (mevcut chunker) ve `plain` (kod dosyaları
-boş satırdan bölünen ≤ 2000 B pencereler — bugün grammar'sız uzantıların, ör. `.vue`/`.razor`,
-gördüğü yol; `chunk_file`'ı `_chunk_plain`'e yönlendiren tek seferlik betik). Aynı golden,
-auto+dense, k=8. Golden'daki `expect`'ler yalnız dosya yolu (sembolsüz) → bu ölçüm atıf
-doğruluğunu (`path::symbol`) ödüllendirmiyor, saf retrieval'ı ölçüyor.
+**Chunk ablation (2026-09-01).** The question: what does tree-sitter (AST) chunking buy over
+a plain window? The same corpus was indexed twice: `ast` (the current chunker) and `plain`
+(code files split on blank lines into ≤ 2000 B windows — the path extensions without a grammar,
+e.g. `.vue`/`.razor`, take today; a one-off script pointing `chunk_file` at `_chunk_plain`).
+Same golden set, auto+dense, k=8. The `expect`s in the golden set are file paths only (no
+symbols) → this measurement does not reward citation accuracy (`path::symbol`), it measures
+pure retrieval.
 
-| Etiket | chunk | Recall@8 | MRR | EN-prose R@8 / MRR | TR-prose R@8 / MRR | sembol R@8 / MRR | abstain / false_weak |
+| Tag | chunks | Recall@8 | MRR | EN-prose R@8 / MRR | TR-prose R@8 / MRR | symbol R@8 / MRR | abstain / false_weak |
 |---|---|---|---|---|---|---|---|
 | **ablation-ast** ✓ | 2761 | **0.786** | **0.690** | 0.842 / 0.744 | 0.684 / 0.570 | 1.0 / 1.0 | 0.846 / 0.048 |
 | ablation-plain | 2100 | 0.762 | 0.598 | 0.895 / 0.737 | 0.632 / 0.518 | 0.75 / 0.321 | 0.923 / 0.071 |
 
-Okuma: recall farkı 1 soru (+0.024), MRR +0.09; kazancın neredeyse tamamı sembol sorgularında
-(MRR 0.32 → 1.0) ve TR düz cümlede. EN düz cümlede düz pencere eşit, hatta 1 soru önde (n=19,
-gürültü). AST chunk "daha çok bulmuyor", **doğru parçayı üste koyuyor ve adını söylüyor**;
-grammar'sız kalan bir dil için kayıp yıkıcı değil, sıralama + atıf kaybı. Dil desteğini
-genişletirken beklenti bu ölçekte tutulmalı.
+Reading: the recall difference is one question (+0.024) and MRR is +0.09; almost all of the
+gain is in symbol queries (MRR 0.32 → 1.0) and in Turkish prose. On English prose the plain
+window ties, and is even one question ahead (n=19, noise). AST chunking does not "find more",
+it **puts the right piece on top and says its name**; for a language left without a grammar
+the loss is not catastrophic — it costs ranking and citation, not recall. Keep expectations at
+that scale when extending language support.
 
-**Enrichment ölçümü (2026-09-01).** Soru: chunk başına LLM açıklaması (`RAG_ENRICH_ENABLED`,
-dil bağımsız — Anthropic "contextual retrieval") ne kazandırıyor? Tam korpusta yerel modelle
-~3,5 saat sürdüğü için küçük ve adil bir düzenek: golden'ın beklediği 21 dosya + rastgele 25 kod
-dosyası (46 dosya / 423 chunk) **aynı korpus iki kez** indexlendi — enrichment kapalı ve açık
-(Ollama `qwen3.5:9b`, açıklamalar Türkçe, 21 dk, 0 ret). Aynı golden, auto+dense, k=8. Mutlak
-sayılar küçük korpusta (az dikkat dağıtıcı) tam korpustan yüksek; okunacak şey iki kol arasındaki fark.
+**Enrichment measurement (2026-09-01).** The question: what does a per-chunk LLM description
+(`RAG_ENRICH_ENABLED`, language-independent — Anthropic's "contextual retrieval") buy? Since
+it takes ~3.5 hours on the full corpus with a local model, the setup was small and fair: the
+21 files the golden set expects + 25 random code files (46 files / 423 chunks), **the same
+corpus indexed twice** — enrichment off and on (Ollama `qwen3.5:9b`, descriptions in Turkish,
+21 min, 0 rejections). Same golden set, auto+dense, k=8. The absolute numbers are higher than
+on the full corpus because a small corpus has fewer distractors; what to read is the gap
+between the two arms.
 
-| Etiket | Recall@8 | MRR | EN-prose R@8 / MRR | TR-prose R@8 / MRR | sembol | abstain / false_weak |
+| Tag | Recall@8 | MRR | EN-prose R@8 / MRR | TR-prose R@8 / MRR | symbol | abstain / false_weak |
 |---|---|---|---|---|---|---|
 | subset-plain | 0.929 | 0.839 | 0.947 / 0.866 | 0.895 / 0.778 | 1.0 / 1.0 | 0.923 / 0.119 |
 | **subset-enriched** | **1.000** | **0.912** | 1.000 / 0.874 | **1.000 / 0.932** | 1.0 / 1.0 | 0.923 / **0.048** |
 
-Okuma: kazanç tam beklenen yerde — **TR düz cümlede MRR +0.15** (0.778 → 0.932), EN'de +0.01;
-recall'da 3 soru; `false_weak` yarıya indi (gerçek cevapların dense skoru yükseliyor, 0.55 notu
-daha az yanlış yanıyor); negatiflerde abstain değişmedi (açıklamalar alakasız soruya güven
-üretmedi). Kalibrasyon kaymadı: pozitif min top-dense / negatif max = 0.498 / 0.587 (kapalı) →
-0.483 / 0.582 (açık); 0.45 tabanı ve 0.55 notu enrichment'la da geçerli. Bu, chunk ablasyonundaki
-AST kazancından (MRR +0.09, çoğu sembol sorgusu) daha büyük ve dil/framework bağımsız.
+Reading: the gain is exactly where it was expected — **MRR +0.15 on Turkish prose**
+(0.778 → 0.932), +0.01 on English; 3 questions in recall; `false_weak` halved (the dense
+scores of real answers rise, so the 0.55 note fires wrongly less often); abstain on the
+negatives did not move (the descriptions did not manufacture confidence for an irrelevant
+question). Calibration did not shift: positive min top-dense / negative max = 0.498 / 0.587
+(off) → 0.483 / 0.582 (on); the 0.45 floor and the 0.55 note hold with enrichment too. This is
+bigger than the AST gain in the chunk ablation (MRR +0.09, mostly symbol queries), and it is
+independent of language and framework.
 
-Maliyet: yerel 9B ile ~11 açıklama/dk → 2.8k chunk'lık repo ilk seferde ~4 saat, sonrası
-artımlı (chunk hash + model ile cache; değişmeyen chunk ikinci kez üretilmez); bulut modelle
-dakikalar. Varsayılan **kapalı kalıyor**: anahtarsız kurulumda her `add-*` saatlerce Ollama
-döndürürdü. Türkçe soru trafiği olan ve LLM bütçesi bulunan kurulumda `RAG_ENRICH_ENABLED=true`
-(`RAG_LLM_MODEL` ile ucuz bir model) — ölçülmüş kazanç bu tabloda.
+Cost: ~11 descriptions/min with a local 9B → a 2.8k-chunk repo takes ~4 hours the first time,
+and is incremental after that (cached by chunk hash + model; an unchanged chunk is never
+generated twice); with a cloud model, minutes. The default **stays off**: on a keyless install
+every `add-*` would spin Ollama for hours. On an install with non-English question traffic and
+an LLM budget, turn on `RAG_ENRICH_ENABLED=true` (with a cheap model via `RAG_LLM_MODEL`) —
+the measured gain is in the table above.
 
 ```bash
-G=evals/golden.example.jsonl   # kendi setinle değiştir
+G=evals/golden.example.jsonl   # replace with your own set
 uv run rag eval $G -r my-api --tag dense  --mode dense  --no-rerank
 uv run rag eval $G -r my-api --tag bm25   --mode bm25   --no-rerank
 uv run rag eval $G -r my-api --tag hybrid --mode hybrid --no-rerank
 uv run rag eval $G -r my-api --tag rerank --mode auto   --rerank
 ```
 
-## Tasarım notları
+## Design notes
 
-- **Neden içerik hash'i, commit diff'i değil?** Yeniden adlandırma, mod değişikliği,
-  submodule, force-push gibi kenar durumları yok; yerel (git olmayan) dizinler de aynı
-  yoldan geçer. Maliyet: her sync tüm dosyaları hash'ler — 5k dosyada bir saniyenin altı,
-  embedding'in yanında görünmez.
-- **Neden tek Milvus collection?** `repo_id` partition key; `repo_id in [...]` filtresi
-  yalnızca ilgili partition'lara iner. Repo başına collection açmak çapraz-repo aramayı
-  zorlaştırır ve collection sayısını sınırlar.
-- **Neden sembol sorguları BM25'e gidiyor?** Önceki bir RAG denemesi aynı korpusta
-  ölçtü: sembol aramasında BM25 0.80, dense 0.60, ikisinin RRF'i
-  0.60 — bulamayan kanal da tam güçle terfi ediyor. Bir regex bunu bedavaya çözer.
-- **Neden reranker kapalı?** Ölçüldü: bge-reranker-v2-m3 bu korpusta hem recall hem MRR
-  düşürdü (özellikle Türkçe'de) ve p50'yi 2-4 sn yaptı. Açıksa 40 aday alır — 8 adayı
-  yeniden sıralamak recall'a dokunamaz; Recall@40 − Recall@8 farkı reranker'ın çalışma
-  alanıdır. Fark bu korpusta var (0.95 − 0.79); onu kapatan bir model bulunursa tabloya
-  satır olarak girer.
-- **Neden enrichment kapalı?** Deneyde İngilizce kod üstünde Türkçe soru recall@5 = 0.04
-  çıktı ve LLM açıklamaları çare oldu; ama o deney İngilizce-only MiniLM iledi. BGE-M3 çok
-  dilli. Önce ölç, gerekiyorsa aç.
-- **tree-sitter'da iki tuzak (ölçüldü).** py-tree-sitter 0.26 + language-pack 1.15 ile
-  `Node.start_point/end_point` okumak uzun süreçte segfault veriyor (aynı dosya tek başına
-  geçiyor, 39. dosyada çöküyor); satır numaraları byte ofsetinden bisect ile hesaplanır.
-  `tree-sitter-sql` drizzle migration dosyalarında doğrudan çöküyor; `.sql` kod sayılır ama
-  paragraf/satır pencereleriyle chunk'lanır (`CODE_WITHOUT_GRAMMAR`). Dil kapsamı elle tablo
-  değil: uzantı adı pack'te grammar adıysa (`.vue`, `.razor`, `.lua`, `.zig` …) o grammar kullanılır,
-  adı farklı olanlar (`.ts`, `.cs`, `.kt`) pack'e karşı doğrulanan küçük bir takma ad tablosundan
-  geçer; pack ≥ 1.15 grammar'ı ilk kullanımda indirdiği için Docker imajı `prefetch()` ile
-  `PREFETCH_GRAMMARS` listesini gömer ve `RAG_LIVE=1 pytest tests/test_grammars_live.py` her
-  grammar'ı ayrı süreçte dejenere girdiyle dener (segfault alt süreci düşürür, listeyi korur).
-- **PAT güvenliği.** Token URL'ye gömülmez; git'e `-c http.extraheader=` ile geçer,
-  `.git/config`'e yazılmaz, hata mesajlarında redakte edilir. İndex'e girmeden önce
-  `scrub` (API anahtarı, JWT, e-posta, `X_PASSWORD=...`) çalışır.
+- **Why content hashing, not a commit diff?** No edge cases from renames, mode changes,
+  submodules or force-pushes; local (non-git) directories take the same path. The cost: every
+  sync hashes every file — under a second for 5k files, invisible next to embedding.
+- **Why a single Milvus collection?** `repo_id` is the partition key, so a `repo_id in [...]`
+  filter only descends into the relevant partitions. A collection per repo makes cross-repo
+  search awkward and caps how many repos you can have.
+- **Why do symbol queries go to BM25?** An earlier RAG experiment measured it on the same
+  corpus: on symbol search BM25 scored 0.80, dense 0.60, and the RRF of the two 0.60 — the
+  channel that failed to find it gets promoted at full strength too. One regex solves this
+  for free.
+- **Why is the reranker off?** Measured: bge-reranker-v2-m3 lowered both recall and MRR on
+  this corpus (especially in Turkish) and pushed p50 to 2-4 s. When on, it takes 40
+  candidates — re-ordering 8 of them cannot touch recall; the Recall@40 − Recall@8 gap is the
+  reranker's working area. That gap exists on this corpus (0.95 − 0.79); if a model is found
+  that closes it, it enters the table as a row.
+- **Why is enrichment off?** In the experiment, a Turkish question over English code scored
+  recall@5 = 0.04 and LLM descriptions were the cure; but that experiment ran on
+  English-only MiniLM. BGE-M3 is multilingual. Measure first, turn it on if you need it.
+- **Two tree-sitter traps (measured).** With py-tree-sitter 0.26 + language-pack 1.15,
+  reading `Node.start_point/end_point` segfaults in a long-running process (the same file
+  passes on its own, then it crashes on the 39th file); line numbers are computed from byte
+  offsets with a bisect instead. `tree-sitter-sql` crashes outright on drizzle migration
+  files; `.sql` counts as code but is chunked with paragraph/line windows
+  (`CODE_WITHOUT_GRAMMAR`). Language coverage is not a hand-written table: if the extension
+  name is a grammar name in the pack (`.vue`, `.razor`, `.lua`, `.zig` …) that grammar is
+  used, and the ones whose names differ (`.ts`, `.cs`, `.kt`) go through a small alias table
+  validated against the pack. Because pack ≥ 1.15 downloads a grammar on first use, the
+  Docker image bakes in the `PREFETCH_GRAMMARS` list with `prefetch()`, and
+  `RAG_LIVE=1 pytest tests/test_grammars_live.py` tries every grammar in its own process with
+  degenerate input (a segfault takes down the subprocess and leaves the list intact).
+- **PAT safety.** The token is never embedded in a URL; it is passed to git with
+  `-c http.extraheader=`, never written to `.git/config`, and redacted in error messages.
+  Before anything is indexed, `scrub` runs (API keys, JWTs, e-mail addresses,
+  `X_PASSWORD=...`).
 
-## Geliştirme
+## Development
 
 ```bash
-uv run pytest -q                              # birim testleri (Milvus/model gerekmez)
-RAG_LIVE=1 uv run pytest -q tests/test_milvus_live.py   # gerçek Milvus'a karşı depo testi
+uv run pytest -q                              # unit tests (no Milvus or model needed)
+RAG_LIVE=1 uv run pytest -q tests/test_milvus_live.py   # store tests against a real Milvus
 uv run ruff check src tests && uv run ruff format --check src tests
 ```
 
-Proje düzeni ve bağlayıcı kararlar için `CLAUDE.md`.
+For the project layout and the binding decisions, see `CLAUDE.md` (Turkish).
 
-## Bir agent'a bağlama — MCP
+## Connecting an agent — MCP
 
-Servis **MCP konuşur** (streamable HTTP, uç: `/mcp`). Claude Code'a bağlamak tek satır:
+The service **speaks MCP** (streamable HTTP, endpoint: `/mcp`). Connecting Claude Code is one
+line:
 
 ```bash
 claude mcp add --transport http milvus-rag http://localhost:8090/mcp
 ```
 
-Cursor, VS Code ve MCP konuşan diğer istemcilere de aynı URL'i verirsin. Üç araç
-gelir, hepsi salt okuma:
+You give the same URL to Cursor, VS Code and any other MCP client. Three tools arrive, all
+read-only:
 
-| Araç | İş |
+| Tool | Job |
 |---|---|
-| `search_code(query, repo?, path_prefix?, category?, k?)` | kanal skorlarıyla ilk adaylar; `category` = `code` / `doc` / `other` |
-| `read_code(repo, path, start?, end?)` | bulunan dosyadan satır aralığı — ajan gerisini okuyarak karar verir; yalnızca **indexli** dosya okunur |
-| `list_repos()` | hangi kod tabanları bağlı |
+| `search_code(query, repo?, path_prefix?, category?, k?)` | the first candidates with channel scores; `category` = `code` / `doc` / `other` |
+| `read_code(repo, path, start?, end?)` | a line range from a file that was found — the agent decides by reading the rest; only **indexed** files can be read |
+| `list_repos()` | which codebases are connected |
 
-Retriever her sorguya bir şey döndürür, alakasız sorguya da; kapı koymak yerine
-(cosine ayırmıyor, ölçüm defterine bak) ajanı hakem yapıyoruz ve ona dürüst sinyal
-veriyoruz — profesyonel sistemlerin de yaptığı bu (kalibre skor ya da LLM hakem + atıf +
-doğrulama). `search_code` başlığında: kaç sonucun **DOKÜMAN** olduğu (plan metnindeki
-kod gerçek sanılmasın), **zayıf eşleşme** notu (`RAG_WEAK_DENSE_SCORE`), reponun son index
-zamanı ve durumu. `read_code` yalnızca manifest'teki dosyayı okur — uydurma yol,
-`node_modules`, `.env` hepsi "indexli değil ya da yok" döner, dosya son indexten sonra
-değişmişse ⚠ der, çıktı index'e giren metin gibi scrub'lanır. Sunucu talimatı da
-"bulamadım" demeyi açıkça serbest bırakır ve her iddiaya `repo/dosya:satır` ister.
-Aynı sinyaller `POST /search` (`weak_match`, hit başına `category`) ve `/ask`
-prompt'unda da var: tek istek atan tüketici de görsün.
+The retriever returns something for every query, including an irrelevant one. Instead of
+putting up a gate (cosine does not separate — see the measurement ledger) we make the agent
+the adjudicator and give it an honest signal — which is what professional systems do too
+(a calibrated score, or an LLM judge + citation + verification). In the `search_code` header:
+how many results are **DOKÜMAN** (so code inside a design document is not mistaken for real
+code), the **weak match** note (`RAG_WEAK_DENSE_SCORE`), and the repo's last index time and
+status. `read_code` only opens files in the manifest — an invented path, `node_modules`, `.env`
+all come back as "not indexed or does not exist"; if the file changed after the last index it
+says ⚠, and the output is scrubbed like the text that goes into the index. The server
+instructions also explicitly permit saying "I could not find it", and demand a
+`repo/file:line` for every claim. The same signals are in `POST /search` (`weak_match`, a
+per-hit `category`) and in the `/ask` prompt, so a consumer making a single request sees them
+too.
 
-Uç, DNS rebinding'e karşı varsayılan olarak yalnızca localhost'tan gelen istekleri
-kabul eder; başka bir adresten bağlanılacaksa host'u `RAG_MCP_ALLOWED_HOSTS`'a ekle.
-Dönen kod parçaları ajana **veri** olarak işaretlenir (talimat değil).
+By default the endpoint only accepts requests coming from localhost, as a defence against DNS
+rebinding; if you will connect from another address, add the host to `RAG_MCP_ALLOWED_HOSTS`.
+Returned code snippets are marked to the agent as **data** (not instructions).
 
-MCP konuşmayan bir uygulama aynı işi düz HTTP ile yapar: `POST /search` ve
-`GET /repos/{id}/file` (`stale` alanı ve 404 = indexli değil). Kendi MCP sunucusu olan
-bir servisi bu RAG'a bağlamak için o servis tarafında tek ayar yeter:
+An application that does not speak MCP does the same job over plain HTTP: `POST /search` and
+`GET /repos/{id}/file` (the `stale` field, and 404 = not indexed). To connect a service that
+has its own MCP server to this RAG, one setting on that service's side is enough:
 `RAG_SERVICE_URL=http://<host>:8090`.
 
-Sunucuya kurulum için `DEPLOYMENT.md`. Lisans: MIT.
+For deploying to a server, see `DEPLOYMENT.md` (Turkish). License: MIT.

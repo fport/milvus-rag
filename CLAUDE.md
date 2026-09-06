@@ -58,12 +58,12 @@ güncelle → retriever cache'ini boşalt`.
   (`.lua`, `.vue`, `.razor`, `.zig`) o grammar; adı farklı olanlar (`.ts`, `.cs`, `.kt`) pack'e
   karşı doğrulanan küçük takma ad tablosundan (`files.py`). Grammar'sız/verilmeyen her şey
   yine indexlenir (düz pencere) — ölçüldü: AST'nin katkısı recall'da 1 soru, MRR +0.09
-  (README → "Chunk ablasyonu"), o yüzden dil/framework başına kural YAZILMAZ; rol etiketi,
+  (README.tr.md → "Chunk ablasyonu"), o yüzden dil/framework başına kural YAZILMAZ; rol etiketi,
   regex sembol çıkarıcı yok. Çöken/takılan grammar `CODE_WITHOUT_GRAMMAR`'a (bugün `sql`, `cobol`); yeni
   grammar `PREFETCH_GRAMMARS` + `RAG_LIVE=1 pytest tests/test_grammars_live.py` ile girer.
   Pack ≥ 1.15 grammar'ı ilk kullanımda indirir → Dockerfile `prefetch()` ile imaja gömer.
 - **Sembol biçimli sorgu → BM25, düz cümle → dense; rerank kapalı.** Ölçüldü
-  (README → Ölçüm defteri): auto+dense 0.786/0.690, semboller BM25'te 1.0/1.0;
+  (README.tr.md → Ölçüm defteri): auto+dense 0.786/0.690, semboller BM25'te 1.0/1.0;
   bge-reranker-v2-m3 zarar etti (0.762/0.508, p50 2-4 sn) → varsayılan kapalı.
   Her hit kanal skorlarını taşır (`dense`, `bm25`, `rrf`, `rerank`).
 - **Her retrieval değişikliği `rag eval` ile ölçülür.** "Sanki iyi oldu" sonuç değildir;
@@ -77,13 +77,13 @@ güncelle → retriever cache'ini boşalt`.
   bloklayan iş (embedding, Milvus, dosya) `anyio.to_thread` ile çalışır — MCP oturumu
   tek event loop'ta akıyor. Araç çıktısı ajana VERİ olarak işaretlenir, talimat değil.
 - **Alakasızlık üç bantta ele alınır (CRAG).** kNN "yakın olan yok" demez; cosine gri
-  bölgede ayırmıyor (ölçüldü, README → Çekimserlik), reranker kapısı %29 yanlış alarm
+  bölgede ayırmıyor (ölçüldü, README.tr.md → Çekimserlik), reranker kapısı %29 yanlış alarm
   veriyor. O yüzden: dense < 0.45 atılır (`min_dense_score`, `dropped` sayar — saçma
   kuyruk), 0.45-0.55 `weak_match` notuyla döner, üstü normal. Yanına DOKÜMAN etiketi,
   index tazeliği, manifest'e kilitli `read_code`; hakem ajan/LLM/insan. Golden'da negatif
   vakalar (`expect: []`) var; `abstain` ve `false_weak` birlikte okunur.
 - **LLM sağlayıcı `auto`.** Anthropic anahtarı varsa Claude, yoksa OpenAI, o da yoksa yerel
-  Ollama (`qwen3.5:9b`; ölçüldü, README → Yerel LLM). Düşünen modellere `think: false`,
+  Ollama (`qwen3.5:9b`; ölçüldü, README.tr.md → Yerel LLM). Düşünen modellere `think: false`,
   `num_ctx` 16k. OpenAI istemcisi `base_url` alır: vLLM/LM Studio aynı yoldan bağlanır.
 - **PAT hiçbir yere yazılmaz.** git'e `-c http.extraheader=` ile geçer; hata mesajları
   redakte edilir. Index'e girmeden önce `scrub` çalışır.
@@ -96,4 +96,4 @@ güncelle → retriever cache'ini boşalt`.
   `live` işaretli; birim testleri sahte embedder/store ile çalışır.
 - Anthropic çağrıları `llm.py` üzerinden, `claude-opus-5`, streaming + `get_final_message`,
   `fallbacks="default"`. Başka yerde `anthropic.Anthropic()` açma.
-- Ölçüm rakamlarını README'deki "Ölçüm defteri"ne yaz; tahmin değil, çalışmış komut çıktısı.
+- Ölçüm rakamlarını README.tr.md'deki "Ölçüm defteri"ne yaz; tahmin değil, çalışmış komut çıktısı.

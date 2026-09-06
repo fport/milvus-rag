@@ -18,7 +18,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # yeniden indexler.
 CHUNKER_VERSION = "ast-v1"
 
-# Sağlayıcı başına varsayılan model. Ollama'daki seçim README → "Yerel LLM" bölümünde
+# Sağlayıcı başına varsayılan model. Ollama'daki seçim README.tr.md → "Yerel LLM" bölümünde
 # ölçülerek yapıldı; değiştirmek için RAG_LLM_MODEL.
 _DEFAULT_LLM_MODEL: dict[str, str] = {
     "anthropic": "claude-opus-5",

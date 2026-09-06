@@ -13,7 +13,7 @@ takma ad tablosundan geçer ve tablo içe aktarmada pack'e karşı doğrulanır 
 paket sürümü değişince çökmek yerine o uzantı düz pencereye iner. Grammar'ı
 olmayan ya da bilerek verilmeyen her şey yine indexlenir (paragraf/satır
 pencereleri). Üretim sistemlerinin yaptığı da bu; AST'nin ölçülen katkısı
-sınırlı (README → Ölçüm defteri, "Chunk ablasyonu"), o yüzden dil başına kural
+sınırlı (README.tr.md → Ölçüm defteri, "Chunk ablasyonu"), o yüzden dil başına kural
 yazılmaz.
 """
 

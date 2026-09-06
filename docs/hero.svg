@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 420" role="img" aria-label="Milvus RAG akışı: push, tree-sitter chunk, BGE-M3 + BM25 ile Milvus, MCP + RAG ile kodunu bilen agent">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 420" role="img" aria-label="Milvus RAG flow: push, tree-sitter chunk, BGE-M3 + BM25 into Milvus, an agent that knows your code over MCP + RAG">
   <!-- Anlatı hero'su, tek 10 sn'lik döngü: commit darbesi dosyayı chunk'lara böler,
        chunk'lar vektör kümesine (Milvus) akar, Türkçe sorgu kümeye gidip skorlu
        hit'leri geri getirir. JS yok — GitHub <img> içinde yalnızca SMIL/CSS çalışır. -->
@@ -155,7 +155,7 @@
   <text class="label" x="980" y="348" text-anchor="middle">BGE-M3 + BM25 → Milvus</text>
 
   <!-- ═ Sahne 4: Türkçe sorgu ve skorlu hit'ler ═ -->
-  <text x="1233" y="148" font-size="16" fill="#dcebe1" opacity="0.95">&gt; <tspan fill="#3bf66b" font-weight="600">MCP + RAG</tspan> · kodunu bilen agent</text>
+  <text x="1233" y="148" font-size="16" fill="#dcebe1" opacity="0.95">&gt; <tspan fill="#3bf66b" font-weight="600">MCP + RAG</tspan> · knows your code</text>
   <rect class="motion" x="1546" y="134" width="8" height="16" fill="#3bf66b">
     <animate attributeName="opacity" dur="1.2s" repeatCount="indefinite" calcMode="discrete" values="1;0" keyTimes="0;0.5"/>
   </rect>
@@ -205,5 +205,5 @@
   <rect class="motion" x="1240" y="272" width="300" height="26" rx="6" fill="none" stroke="#3bf66b" stroke-width="1.5" opacity="0">
     <animate attributeName="opacity" dur="10s" repeatCount="indefinite" values="0;0;0.9;0;0" keyTimes="0;0.79;0.82;0.92;1"/>
   </rect>
-  <text class="label" x="1380" y="348" text-anchor="middle">8 hit · kanal skorlarıyla</text>
+  <text class="label" x="1380" y="348" text-anchor="middle">8 hits · with channel scores</text>
 </svg>
