@@ -27,7 +27,7 @@ def test_auto_provider_follows_the_keys():
     assert _settings(anthropic_api_key="sk-ant-x").resolved_llm_provider == "anthropic"
     assert _settings(openai_api_key="sk-x").resolved_llm_provider == "openai"
     both = _settings(anthropic_api_key="a", openai_api_key="o")
-    assert both.resolved_llm_provider == "anthropic"  # anahtar varsa Claude öncelikli
+    assert both.resolved_llm_provider == "anthropic"  # with both keys set, Claude wins
     assert _settings(llm_provider="ollama", anthropic_api_key="a").resolved_llm_provider == "ollama"
     assert _settings().resolved_llm_model == _settings(llm_provider="ollama").resolved_llm_model
     assert _settings(llm_model="qwen3.5:4b").resolved_llm_model == "qwen3.5:4b"

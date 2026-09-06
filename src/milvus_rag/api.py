@@ -185,7 +185,7 @@ def create_app(services: Services | None = None, warm_up: bool = True) -> FastAP
     async def _github_error(_: Request, error: GitHubError) -> JSONResponse:
         return JSONResponse(status_code=502, content={"detail": str(error)})
 
-    # ---------------------------------------------------------------- arayüz
+    # ------------------------------------------------------------------- UI
     static_dir = Path(__file__).parent / "static"
 
     @app.get("/", include_in_schema=False)

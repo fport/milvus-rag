@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#070b09">
 <title>Milvus RAG</title>
 <style>
-  /* ── Fosfor konsol: üst nav + vektör uzayı sahnesi ──────────────────────── */
+  /* ── Phosphor console: top nav + the vector-space stage ─────────────────── */
   :root {
     color-scheme: dark;
     --bg: #070b09;
@@ -42,7 +42,7 @@
   a:hover { text-decoration-color: var(--neon); }
   :focus-visible { outline: 2px solid var(--neon); outline-offset: 2px; border-radius: 4px; }
 
-  /* ── Üst bar ─────────────────────────────────────────────────────────── */
+  /* ── Top bar ─────────────────────────────────────────────────────────── */
   .topbar {
     position: sticky; top: 0; z-index: 6;
     display: flex; align-items: center; gap: 6px; padding: 10px 22px;
@@ -92,7 +92,7 @@
   button.quiet:hover { color: var(--ink); border-color: var(--line-2); }
   button.quiet.danger:hover { color: var(--err); border-color: var(--err); }
 
-  /* ── Komut çubuğu ────────────────────────────────────────────────────── */
+  /* ── Command bar ─────────────────────────────────────────────────────── */
   .cmd {
     display: flex; align-items: center; gap: 12px;
     background: linear-gradient(180deg, rgba(220,255,235,.025), transparent 50%), var(--panel);
@@ -135,13 +135,13 @@
   .repofilter label { display: inline-flex; gap: 5px; align-items: center; margin: 0; }
   input[type=checkbox] { accent-color: var(--neon); width: 14px; height: 14px; }
 
-  /* ── Vektör uzayı ────────────────────────────────────────────────────── */
+  /* ── Vector space ────────────────────────────────────────────────────── */
   .space-wrap { position: relative; margin-top: 14px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
     background: radial-gradient(120% 140% at 50% 45%, rgba(13,25,17,.9), rgba(7,11,9,.98)); box-shadow: 0 18px 50px rgba(0,0,0,.35); }
   #space { display: block; width: 100%; height: 430px; cursor: default; }
   .space-hint { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font: 11px/1.6 var(--mono); color: var(--faint); pointer-events: none; letter-spacing: .06em; }
 
-  /* ── Sonuç listesi ───────────────────────────────────────────────────── */
+  /* ── Result list ─────────────────────────────────────────────────────── */
   .timing { color: var(--muted); font: 12px var(--mono); margin: 14px 2px 2px; }
   .timing b { color: var(--neon); font-weight: 600; }
   .hit { border: 1px solid var(--line); background: var(--panel); border-radius: 11px; margin-top: 10px; overflow: hidden; animation: rise .25s ease-out both; }
@@ -154,14 +154,14 @@
   .hit .sym { color: var(--muted); font-size: 12px; }
   .badge { font: 10.5px/1.6 var(--mono); background: var(--neon-soft); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--muted); }
   .badge.doc { color: var(--warn); border-color: rgba(255,194,75,.35); }
-  /* Halüsinasyon sinyalleri: retriever alakasız sorguya da sonuç döndürür; bunu söylemek UI'ın işi. */
+  /* Hallucination signals: the retriever answers an irrelevant query too; saying so is the UI's job. */
   .note { font: 12.5px/1.5 var(--mono); color: var(--warn); border: 1px solid rgba(255,194,75,.35); background: rgba(255,194,75,.06); border-radius: 9px; padding: 8px 12px; margin-top: 10px; }
   .hit pre { margin: 0; padding: 12px 14px; background: var(--bg); font: 12px/1.5 var(--mono); overflow: hidden; border-top: 1px solid var(--line); max-height: 96px; max-width: 100%; }
   .answer { white-space: pre-wrap; background: var(--neon-soft); border: 1px solid var(--line-2); border-radius: 11px; padding: 14px 16px; margin-top: 12px; font-size: 13.5px; }
   .srcs { font: 12px/1.8 var(--mono); color: var(--muted); margin-top: 10px; }
   .empty { color: var(--muted); padding: 30px 12px; text-align: center; font-size: 13.5px; }
 
-  /* ── Sağ çekmece ─────────────────────────────────────────────────────── */
+  /* ── Right drawer ────────────────────────────────────────────────────── */
   .drawer {
     position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 94vw); z-index: 20;
     background: linear-gradient(180deg, rgba(220,255,235,.02), transparent 40%), var(--panel);
@@ -228,7 +228,7 @@
   .starter { padding: 34px 20px; text-align: center; color: var(--muted); }
   .starter b { color: var(--ink); }
 
-  /* ── İşler ───────────────────────────────────────────────────────────── */
+  /* ── Jobs ────────────────────────────────────────────────────────────── */
   .opts { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
   .job { border: 1px solid var(--line); background: var(--panel); border-radius: 11px; padding: 12px 14px; margin-top: 10px; }
   .job .head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -248,7 +248,7 @@
   .job summary { font: 11px var(--mono); color: var(--faint); cursor: pointer; }
   .job pre { margin: 6px 0 0; padding: 12px 14px; background: var(--bg); font: 12px/1.5 var(--mono); overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
 
-  /* ── Bağlan: kompakt kartlar + ⓘ popover ─────────────────────────────── */
+  /* ── Connect: compact cards + an ⓘ popover ───────────────────────────── */
   .cgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 14px; }
   .ccard { background: var(--panel); border: 1px solid var(--line); border-radius: 13px; padding: 16px; position: relative; box-shadow: 0 18px 50px rgba(0,0,0,.3); }
   .ccard h3 { margin: 0 0 10px; font: 700 13px var(--mono); display: flex; align-items: center; gap: 8px; }
@@ -291,116 +291,116 @@
 <body>
 <div class="topbar">
   <div class="brand"><span class="sig">❯</span> MILVUS<span class="sub">//</span>RAG</div>
-  <button class="item" id="tabbtn-ara" onclick="showTab('ara')"><span class="ico">❯</span> Ara</button>
-  <button class="item" id="tabbtn-repolar" onclick="showTab('repolar')"><span class="ico">▤</span> Repolar <span class="cnt" id="repoCount"></span></button>
-  <button class="item" id="tabbtn-isler" onclick="showTab('isler')"><span class="ico">⟲</span> İşler</button>
-  <button class="item" id="tabbtn-baglan" onclick="showTab('baglan')"><span class="ico">⇄</span> Bağlan</button>
+  <button class="item" id="tabbtn-search" onclick="showTab('search')"><span class="ico">❯</span> Search</button>
+  <button class="item" id="tabbtn-repos" onclick="showTab('repos')"><span class="ico">▤</span> Repos <span class="cnt" id="repoCount"></span></button>
+  <button class="item" id="tabbtn-jobs" onclick="showTab('jobs')"><span class="ico">⟲</span> Jobs</button>
+  <button class="item" id="tabbtn-connect" onclick="showTab('connect')"><span class="ico">⇄</span> Connect</button>
   <span class="spacer"></span>
   <span class="foot-chips" id="chips"></span>
 </div>
 
 <div class="content">
-  <!-- ── Ara: komut çubuğu + vektör uzayı ─────────────────────────────── -->
-  <div id="tab-ara">
+  <!-- ── Search: command bar + vector space ───────────────────────────── -->
+  <div id="tab-search">
     <div class="cmd">
       <span class="prompt" aria-hidden="true">❯</span>
-      <input id="q" placeholder="Soru yaz ya da fonksiyon adı yapıştır…" autofocus aria-label="Kod tabanında ara">
+      <input id="q" placeholder="Ask a question, or paste a function name…" autofocus aria-label="Search the codebase">
       <div class="actions">
-        <button class="primary" id="btnSearch">Ara</button>
-        <button id="btnAsk" title="Bulunan kodla AI'dan atıflı cevap ister">AI'ya sor</button>
+        <button class="primary" id="btnSearch">Search</button>
+        <button id="btnAsk" title="Asks the AI for a cited answer built from the code found">Ask the AI</button>
       </div>
     </div>
     <div class="deckrow">
-      <span class="try">DENE</span>
-      <button class="exq" onclick="tryQuery(this)">jwt token nerede üretiliyor</button>
+      <span class="try">TRY</span>
+      <button class="exq" onclick="tryQuery(this)">where is the jwt token issued</button>
       <button class="exq" onclick="tryQuery(this)">withSession</button>
-      <button class="exq" onclick="tryQuery(this)">webhook eventleri nasıl kuyruğa alınıyor</button>
+      <button class="exq" onclick="tryQuery(this)">how are webhook events queued</button>
       <details class="adv">
-        <summary>Ayarlar</summary>
+        <summary>Settings</summary>
         <div class="advbody">
-          <span><label for="mode">arama modu</label><select id="mode">
-            <option value="">Otomatik (önerilen)</option>
-            <option value="dense">Anlamsal</option>
-            <option value="bm25">Kelime (BM25)</option>
-            <option value="hybrid">Karma (RRF)</option>
+          <span><label for="mode">search mode</label><select id="mode">
+            <option value="">Automatic (recommended)</option>
+            <option value="dense">Semantic</option>
+            <option value="bm25">Lexical (BM25)</option>
+            <option value="hybrid">Hybrid (RRF)</option>
           </select></span>
-          <span><label for="k">sonuç</label><input id="k" type="number" value="8" min="1" max="50" style="width:64px"></span>
-          <span><label for="rr">yeniden sırala</label><input id="rr" type="checkbox" title="Cross-encoder; daha isabetli ama saniyeler sürer"></span>
+          <span><label for="k">results</label><input id="k" type="number" value="8" min="1" max="50" style="width:64px"></span>
+          <span><label for="rr">rerank</label><input id="rr" type="checkbox" title="Cross-encoder; more accurate but takes seconds"></span>
           <span class="repofilter" id="repoFilter"></span>
         </div>
       </details>
     </div>
     <div class="space-wrap">
       <canvas id="space"></canvas>
-      <div class="space-hint" id="spaceHint">vektör uzayı — bağlı repoların ve aramanın canlı haritası</div>
+      <div class="space-hint" id="spaceHint">vector space — a live map of the connected repos and the search</div>
     </div>
     <div id="out"></div>
   </div>
 
-  <!-- ── Repolar ──────────────────────────────────────────────────────── -->
-  <div id="tab-repolar" hidden>
+  <!-- ── Repos ────────────────────────────────────────────────────────── -->
+  <div id="tab-repos" hidden>
     <div class="vhead">
-      <h1>Repolar</h1><span class="sub" id="repoSub"></span>
+      <h1>Repos</h1><span class="sub" id="repoSub"></span>
       <span class="spacer"></span>
-      <button class="primary" id="btnAddRepo">＋ Repo bağla</button>
+      <button class="primary" id="btnAddRepo">＋ Connect repo</button>
     </div>
     <div class="addcard" id="addBox" hidden>
-      <h3>Repo bağla</h3>
-      <p class="note">Bağlanınca klonlanır ve indexlenir; sonrasında her push'ta yalnızca değişen dosyalar güncellenir.</p>
+      <h3>Connect repo</h3>
+      <p class="note">Once connected it is cloned and indexed; after that every push updates only the files that changed.</p>
       <div class="credzone" id="credZone"></div>
       <div class="addgrid">
-        <div style="flex:0 0 170px"><label for="aProvider">Nereden</label>
+        <div style="flex:0 0 170px"><label for="aProvider">Source</label>
           <select id="aProvider">
             <option value="github">GitHub</option>
             <option value="azure">Azure DevOps</option>
-            <option value="local">Sunucudaki dizin</option>
+            <option value="local">A directory on the server</option>
             <option value="git">Git URL</option>
           </select></div>
-        <div id="fGithub"><label for="aGh">owner/repo</label><input id="aGh" placeholder="örn: vercel/next.js"></div>
-        <div id="fAzure" hidden><label for="aProj">Proje</label><input id="aProj" placeholder="Platform"></div>
-        <div id="fAzure2" hidden><label for="aRepo">Repo adı</label><input id="aRepo" placeholder="backend-api"></div>
-        <div id="fLocal" hidden><label for="aPath">Dizin yolu</label><input id="aPath" placeholder="/opt/repos/my-api"></div>
+        <div id="fGithub"><label for="aGh">owner/repo</label><input id="aGh" placeholder="e.g. vercel/next.js"></div>
+        <div id="fAzure" hidden><label for="aProj">Project</label><input id="aProj" placeholder="Platform"></div>
+        <div id="fAzure2" hidden><label for="aRepo">Repo name</label><input id="aRepo" placeholder="backend-api"></div>
+        <div id="fLocal" hidden><label for="aPath">Directory path</label><input id="aPath" placeholder="/opt/repos/my-api"></div>
         <div id="fGit" hidden><label for="aUrl">Clone URL</label><input id="aUrl" placeholder="https://…/repo.git"></div>
-        <div style="flex:0 0 140px"><label for="aBranch">Branch</label><input id="aBranch" placeholder="varsayılan"></div>
+        <div style="flex:0 0 140px"><label for="aBranch">Branch</label><input id="aBranch" placeholder="default"></div>
         <div class="btns">
-          <button class="primary" id="aSubmit">Bağla & indexle</button>
-          <button class="quiet" id="aCancel">Vazgeç</button>
+          <button class="primary" id="aSubmit">Connect &amp; index</button>
+          <button class="quiet" id="aCancel">Cancel</button>
         </div>
       </div>
       <div id="pickZone"></div>
     </div>
-    <div class="card"><div id="repos"><div class="empty">yükleniyor…</div></div></div>
+    <div class="card"><div id="repos"><div class="empty">loading…</div></div></div>
   </div>
 
-  <!-- ── İşler ────────────────────────────────────────────────────────── -->
-  <div id="tab-isler" hidden>
+  <!-- ── Jobs ─────────────────────────────────────────────────────────── -->
+  <div id="tab-jobs" hidden>
     <div class="vhead">
-      <h1>Index işleri</h1><span class="sub">4 sn'de bir yenilenir</span>
+      <h1>Index jobs</h1><span class="sub">refreshes every 4 s</span>
       <span class="spacer"></span>
-      <span class="opts"><label for="jobRepo">repo</label> <select id="jobRepo" onchange="loadJobs()"><option value="">hepsi</option></select></span>
+      <span class="opts"><label for="jobRepo">repo</label> <select id="jobRepo" onchange="loadJobs()"><option value="">all</option></select></span>
     </div>
-    <div id="jobs"><div class="empty">yükleniyor…</div></div>
+    <div id="jobs"><div class="empty">loading…</div></div>
   </div>
 
-  <!-- ── Bağlan ───────────────────────────────────────────────────────── -->
-  <div id="tab-baglan" hidden>
-    <div class="vhead"><h1>Bağlan</h1><span class="sub">webhook · API · MCP</span></div>
-    <div id="connect"><div class="empty">yükleniyor…</div></div>
+  <!-- ── Connect ──────────────────────────────────────────────────────── -->
+  <div id="tab-connect" hidden>
+    <div class="vhead"><h1>Connect</h1><span class="sub">webhook · API · MCP</span></div>
+    <div id="connect"><div class="empty">loading…</div></div>
   </div>
 </div>
 
-<!-- Sağ çekmece -->
+<!-- Right drawer -->
 <div class="backdrop" id="backdrop" onclick="closeDrawer()"></div>
-<aside class="drawer" id="drawer" aria-label="Kod detayı">
+<aside class="drawer" id="drawer" aria-label="Code detail">
   <div class="dhead">
     <div class="dpath" id="dPath"></div>
     <div class="dmeta" id="dMeta"></div>
-    <button class="quiet dclose" onclick="closeDrawer()" aria-label="Kapat">✕</button>
+    <button class="quiet dclose" onclick="closeDrawer()" aria-label="Close">✕</button>
   </div>
   <div class="dbody"><pre id="dCode"></pre></div>
   <div class="dfoot">
-    <button id="dMore">± 40 satır bağlam</button>
-    <button class="quiet" id="dCopy">kodu kopyala</button>
+    <button id="dMore">± 40 lines of context</button>
+    <button class="quiet" id="dCopy">copy code</button>
     <span style="flex:1"></span>
     <span class="meta" id="dLines"></span>
   </div>
@@ -412,7 +412,6 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let repos = [];
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const STATUS_TR = { ready: "hazır", indexing: "indexleniyor", error: "hata", pending: "bekliyor" };
 
 function toast(msg, ok = false) {
   const el = $("toast"); el.textContent = msg; el.classList.toggle("err", !ok); el.style.display = "block";
@@ -427,9 +426,9 @@ async function api(path, options) {
 }
 function tryQuery(btn) { $("q").value = btn.textContent; doSearch(); }
 
-// ════════════════════════════════ VEKTÖR UZAYI ═══════════════════════════
-// Bağlı repolar takımyıldız, chunk'lar yıldız tozu; arama sonuçları skora
-// göre çekirdeğe yaklaşan düğümler. Düğüme tıkla → sağdan kod çekmecesi.
+// ════════════════════════════════ VECTOR SPACE ═══════════════════════════
+// Connected repos are constellations, chunks are stardust; search results are nodes
+// that drift toward the core by score. Click a node → the code drawer slides in.
 const viz = { nodes: [], repoPts: [], anim0: 0, hover: -1, sel: -1, raf: 0, W: 0, H: 0 };
 const canvas = $("space"), ctx = canvas.getContext("2d");
 
@@ -465,7 +464,7 @@ function vizLayout() {
 function vizPlaceResults() {
   const hits = window._hits || [];
   const { cx, cy, W, H } = viz; if (!W) return;
-  // Aynı repodan gelenler tek açıya yığılmasın: repo grubu içinde yelpaze aç.
+  // Hits from one repo should not pile onto a single angle: fan them out within the group.
   const groups = {};
   hits.forEach((h, i) => { (groups[h.repo_id] ||= []).push(i); });
   viz.nodes = hits.map((h, i) => {
@@ -474,7 +473,7 @@ function vizPlaceResults() {
     const group = groups[h.repo_id];
     const pos = group.indexOf(i);
     const fan = group.length > 1 ? (pos - (group.length - 1) / 2) * (1.5 / Math.max(group.length - 1, 1)) : 0;
-    const t = i / Math.max(hits.length, 2);              // sıra → mesafe: iyi skor çekirdeğe yakın
+    const t = i / Math.max(hits.length, 2);              // rank → distance: a good score sits near the core
     const dist = (0.24 + t * 0.5) * Math.min(W * 0.34, H * 0.62);
     return { hit: h, i,
       x: cx + Math.cos(baseAngle + fan) * dist * 1.25,
@@ -491,7 +490,7 @@ function vizDraw(ts) {
   const busy = repos.some(r => r.active_job);
   const NEON = "59,246,107";
 
-  // repo kümeleri: yıldız tozu + etiket + çekirdeğe bağ
+  // repo clusters: stardust + label + a link to the core
   for (const p of viz.repoPts) {
     ctx.strokeStyle = `rgba(${NEON},.05)`; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(p.x, p.y); ctx.stroke();
@@ -508,7 +507,7 @@ function vizDraw(ts) {
     ctx.fillText(p.repo.name, p.x, p.y + (p.y < cy ? -12 : 20));
   }
 
-  // çekirdek
+  // the core
   const breathe = REDUCED ? 1 : 1 + .06 * Math.sin(T * (busy ? 5 : 1.4));
   const R = 17 * breathe;
   const grad = ctx.createRadialGradient(cx - R * .3, cy - R * .35, 1, cx, cy, R);
@@ -522,7 +521,7 @@ function vizDraw(ts) {
     ctx.beginPath(); ctx.arc(cx, cy, R + ringT * 70, 0, 7); ctx.stroke();
   }
 
-  // sonuç düğümleri: çekirdekten doğup yerine süzülür
+  // result nodes: born at the core, drifting into place
   const age = REDUCED ? 1 : Math.min((ts - viz.anim0) / 900, 1);
   viz.nodes.forEach((n, idx) => {
     const k = REDUCED ? 1 : Math.min(Math.max(age * viz.nodes.length - idx, 0), 1);
@@ -534,7 +533,7 @@ function vizDraw(ts) {
     ctx.strokeStyle = `rgba(${NEON},${(.28 - idx * .02) * ease})`;
     ctx.lineWidth = hot ? 1.6 : 1;
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
-    for (let j = 0; j < idx; j++) {                      // aynı dosyanın parçaları bağlı
+    for (let j = 0; j < idx; j++) {                      // chunks of the same file are linked
       const m = viz.nodes[j];
       if (m.hit.path === n.hit.path && m.dx != null) {
         ctx.strokeStyle = `rgba(${NEON},.14)`; ctx.setLineDash([3, 4]);
@@ -566,9 +565,9 @@ canvas.addEventListener("mousemove", (e) => {
   if (REDUCED) vizDraw(0);
 });
 canvas.addEventListener("click", () => { if (viz.hover >= 0) openDrawer(viz.hover); });
-addEventListener("resize", () => { if (!$("tab-ara").hidden) { vizSize(); if (REDUCED) vizDraw(0); } });
+addEventListener("resize", () => { if (!$("tab-search").hidden) { vizSize(); if (REDUCED) vizDraw(0); } });
 
-// ── sağ çekmece ──────────────────────────────────────────────────────────
+// ── right drawer ─────────────────────────────────────────────────────────
 let drawerHit = null, drawerExpanded = false;
 function openDrawer(i) {
   const hit = (window._hits || [])[i]; if (!hit) return;
@@ -581,8 +580,8 @@ function openDrawer(i) {
     `<span class="badge">${esc(hit.repo_id)}</span>` +
     Object.entries(hit.scores).map(([k, v]) => `<span class="badge">${k}=${k === "bm25" ? v.toFixed(2) : v.toFixed(3)}</span>`).join("");
   $("dCode").textContent = hit.content;
-  $("dLines").textContent = `${hit.end_line - hit.start_line + 1} satır`;
-  $("dMore").disabled = false; $("dMore").textContent = "± 40 satır bağlam";
+  $("dLines").textContent = `${hit.end_line - hit.start_line + 1} lines`;
+  $("dMore").disabled = false; $("dMore").textContent = "± 40 lines of context";
   $("drawer").classList.add("open"); $("backdrop").classList.add("show");
 }
 function closeDrawer() {
@@ -593,28 +592,28 @@ function closeDrawer() {
 addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
 $("dMore").onclick = async () => {
   if (!drawerHit) return;
-  const btn = $("dMore"); btn.disabled = true; btn.textContent = "yükleniyor…";
+  const btn = $("dMore"); btn.disabled = true; btn.textContent = "loading…";
   try {
     const pad = drawerExpanded ? 120 : 40;
     const start = Math.max(1, drawerHit.start_line - pad);
     const d = await api(`/repos/${encodeURIComponent(drawerHit.repo_id)}/file?path=${encodeURIComponent(drawerHit.path)}&start=${start}&end=${drawerHit.end_line + pad}`);
     $("dCode").textContent = d.text;
-    $("dLines").textContent = `${d.start}-${d.end} / ${d.total_lines} satır`;
+    $("dLines").textContent = `${d.start}-${d.end} of ${d.total_lines} lines`;
     drawerExpanded = true;
-    btn.textContent = "± 120 satır bağlam"; btn.disabled = false;
-  } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = "± 40 satır bağlam"; }
+    btn.textContent = "± 120 lines of context"; btn.disabled = false;
+  } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = "± 40 lines of context"; }
 };
-$("dCopy").onclick = () => { navigator.clipboard.writeText($("dCode").textContent).then(() => toast("Kod panoya kopyalandı ✓", true)); };
+$("dCopy").onclick = () => { navigator.clipboard.writeText($("dCode").textContent).then(() => toast("Code copied to the clipboard ✓", true)); };
 
-// ── sağlık ───────────────────────────────────────────────────────────────
+// ── health ───────────────────────────────────────────────────────────────
 async function loadHealth() {
   try {
     const h = (window._health = await api("/health"));
-    if (!$("tab-baglan").hidden) renderConnect();
+    if (!$("tab-connect").hidden) renderConnect();
     $("chips").innerHTML =
       `<span class="chip ${h.milvus ? "ok" : "err"}">milvus</span>` +
       `<span class="chip ok">${esc(h.embedding.split("/").pop())}</span>` +
-      `<span class="chip ${h.llm ? "ok" : ""}">${h.llm ? esc(h.llm) : "LLM kapalı"}</span>`;
+      `<span class="chip ${h.llm ? "ok" : ""}">${h.llm ? esc(h.llm) : "LLM off"}</span>`;
   } catch (e) { $("chips").innerHTML = `<span class="chip err">servis yok</span>`; }
 }
 
@@ -629,7 +628,7 @@ function repoRow(r) {
   if (job) {
     sub = `<tr class="subrow"><td colspan="8">
       <div class="bar"><div style="width:${pct ?? 5}%"></div></div>
-      <div class="meta">${job.status === "running" ? (pct !== null ? `indexleniyor — ${p.files_done}/${p.files_total} dosya` : "indexleniyor…") : "sırada bekliyor"}</div>
+      <div class="meta">${job.status === "running" ? (pct !== null ? `indexing — ${p.files_done}/${p.files_total} files` : "indexing…") : "waiting in the queue"}</div>
     </td></tr>`;
   } else if (r.status === "error") {
     sub = `<tr class="subrow"><td colspan="8"><div class="errtxt">${esc(r.error)}</div></td></tr>`;
@@ -637,19 +636,19 @@ function repoRow(r) {
   return `<tr class="mainrow">
     <td class="cname"><span class="led ${esc(state)}"></span>${esc(r.name)}</td>
     <td class="dim">${esc(r.provider)}</td>
-    <td><span class="st ${esc(state)}">${STATUS_TR[state] ?? esc(state)}</span></td>
+    <td><span class="st ${esc(state)}">${esc(state)}</span></td>
     <td class="num">${r.file_count}</td>
     <td class="num">${r.chunk_count}</td>
     <td class="dim">${esc(r.branch || "—")}</td>
     <td class="dim">${esc(when)}</td>
     <td class="acts">
-      <button class="quiet" onclick="syncRepo('${esc(r.id)}')" ${job ? "disabled" : ""} title="Değişen dosyaları şimdi tara">Güncelle</button>
+      <button class="quiet" onclick="syncRepo('${esc(r.id)}')" ${job ? "disabled" : ""} title="Scan for changed files now">Refresh</button>
       ${r.web_url ? `<a href="${esc(r.web_url)}" target="_blank" rel="noopener">↗</a>` : ""}
-      <button class="quiet danger" onclick="removeRepo('${esc(r.id)}')" ${job ? "disabled" : ""}>Kaldır</button>
+      <button class="quiet danger" onclick="removeRepo('${esc(r.id)}')" ${job ? "disabled" : ""}>Remove</button>
     </td>
   </tr>${sub}`;
 }
-const STARTER = `<div class="starter"><b>1</b> — Sağ üstten repo bağla &nbsp;·&nbsp; <b>2</b> — index'in bitmesini bekle &nbsp;·&nbsp; <b>3</b> — Ara'ya geç, soruyu sor</div>`;
+const STARTER = `<div class="starter"><b>1</b> — Connect a repo, top right &nbsp;·&nbsp; <b>2</b> — wait for the index to finish &nbsp;·&nbsp; <b>3</b> — go to Search and ask</div>`;
 async function loadRepos() {
   try {
     repos = await api("/repos");
@@ -659,52 +658,52 @@ async function loadRepos() {
       : "";
     if (repos.length) {
       $("repos").innerHTML = `<table>
-        <thead><tr><th>Repo</th><th>Tür</th><th>Durum</th><th class="hides" style="text-align:right">Dosya</th><th class="hides" style="text-align:right">Chunk</th><th class="hides">Branch</th><th class="hides">Güncellendi</th><th></th></tr></thead>
+        <thead><tr><th>Repo</th><th>Type</th><th>Status</th><th class="hides" style="text-align:right">Files</th><th class="hides" style="text-align:right">Chunks</th><th class="hides">Branch</th><th class="hides">Updated</th><th></th></tr></thead>
         <tbody>${repos.map(repoRow).join("")}</tbody></table>`;
     } else {
       $("repos").innerHTML = STARTER;
       $("addBox").hidden = false;
     }
-    $("repoFilter").innerHTML = repos.length < 2 ? "" : `<label style="color:var(--faint)">repolar:</label>` + repos.map(r =>
+    $("repoFilter").innerHTML = repos.length < 2 ? "" : `<label style="color:var(--faint)">repos:</label>` + repos.map(r =>
       `<label><input type="checkbox" value="${esc(r.id)}" checked> ${esc(r.id)}</label>`).join("");
     const jobSel = $("jobRepo");
     if (jobSel) {
       const current = jobSel.value;
-      jobSel.innerHTML = `<option value="">hepsi</option>` + repos.map(r => `<option>${esc(r.id)}</option>`).join("");
+      jobSel.innerHTML = `<option value="">all</option>` + repos.map(r => `<option>${esc(r.id)}</option>`).join("");
       jobSel.value = current;
     }
     vizLayout(); if (REDUCED) vizDraw(0);
     if (repos.some(r => r.active_job)) setTimeout(loadRepos, 3000);
-  } catch (e) { toast("repolar yüklenemedi: " + e.message); }
+  } catch (e) { toast("could not load repos: " + e.message); }
 }
 async function syncRepo(id) {
   try { await api(`/repos/${id}/sync`, { method: "POST", headers: {"content-type": "application/json"}, body: "{}" }); loadRepos(); }
   catch (e) { toast(e.message); }
 }
 async function removeRepo(id) {
-  if (!confirm(`${id} kaldırılsın mı? Index'i ve klonu silinir.`)) return;
+  if (!confirm(`Remove ${id}? Its index and its clone are deleted.`)) return;
   try { await api(`/repos/${id}`, { method: "DELETE" }); loadRepos(); } catch (e) { toast(e.message); }
 }
 
-// ── kimlikler + repo seçici ─────────────────────────────────────────────
+// ── credentials + repo picker ────────────────────────────────────────────
 let credState = null;
 async function loadCredState() {
   try { credState = await api("/settings/credentials?probe=1"); } catch { credState = null; }
   renderCredZone();
 }
 async function saveCreds(fields, btn) {
-  btn.disabled = true; btn.textContent = "doğrulanıyor…";
+  btn.disabled = true; btn.textContent = "verifying…";
   try {
     const r = await api("/settings/credentials", {
       method: "PUT", headers: {"content-type": "application/json"},
       body: JSON.stringify({ ...fields, verify: true }),
     });
-    if (r.github) toast(r.github.ok ? `GitHub bağlandı: ${r.github.login} ✓` : "GitHub: " + r.github.detail, r.github.ok);
-    if (r.azure) toast(r.azure.ok ? `Azure bağlandı: ${r.azure.projects} proje ✓` : "Azure: " + r.azure.detail, r.azure.ok);
-    if (r.llm) toast(r.llm.ok ? `LLM bağlandı: ${r.llm.model} ✓` : "LLM: " + r.llm.detail, r.llm.ok);
+    if (r.github) toast(r.github.ok ? `GitHub connected: ${r.github.login} ✓` : "GitHub: " + r.github.detail, r.github.ok);
+    if (r.azure) toast(r.azure.ok ? `Azure connected: ${r.azure.projects} projects ✓` : "Azure: " + r.azure.detail, r.azure.ok);
+    if (r.llm) toast(r.llm.ok ? `LLM connected: ${r.llm.model} ✓` : "LLM: " + r.llm.detail, r.llm.ok);
     if (!r.github && !r.azure && !r.llm) toast("Kaydedildi", true);
     await loadCredState(); await loadHealth();
-    if (!$("tab-baglan").hidden) renderConnect();
+    if (!$("tab-connect").hidden) renderConnect();
   } catch (e) { toast(e.message); }
   finally { btn.disabled = false; btn.textContent = btn.dataset.label; }
 }
@@ -715,27 +714,27 @@ function renderCredZone() {
   if (v === "github") {
     const g = credState?.github;
     const browse = `<div class="minigrid">
-      <div><label>Repoları listele — kullanıcı ya da org</label><input id="ghOwner" placeholder="örn: fport"></div>
-      <div style="flex:0 0 auto"><button data-label="Listele" onclick="listGithub(this)">Listele</button></div>
+      <div><label>List repos — a user or an org</label><input id="ghOwner" placeholder="e.g. sindresorhus"></div>
+      <div style="flex:0 0 auto"><button data-label="List" onclick="listGithub(this)">List</button></div>
     </div>`;
     zone.innerHTML = (g?.token_set
-      ? `<div class="credline"><span class="okmark">●</span> GitHub token kayıtlı (${g.source === "ui" ? "arayüzden" : "env"}) — private repolar da görünür.
-           <button class="quiet" onclick="toggleGhToken()">değiştir</button></div>`
-      : `<div class="credline">Token yok — public repolar yine bağlanır. Private için:
-           <button class="quiet" onclick="toggleGhToken()">token ekle</button></div>`)
+      ? `<div class="credline"><span class="okmark">●</span> GitHub token saved (${g.source === "ui" ? "from the UI" : "env"}) — private repos are visible too.
+           <button class="quiet" onclick="toggleGhToken()">change</button></div>`
+      : `<div class="credline">No token — public repos still connect. For private ones:
+           <button class="quiet" onclick="toggleGhToken()">add a token</button></div>`)
       + `<div class="minigrid" id="ghTokenForm" hidden></div>` + browse;
   } else if (v === "azure") {
     const a = credState?.azure;
     zone.innerHTML = a?.configured
-      ? `<div class="credline"><span class="okmark">●</span> Azure bağlı: ${esc(a.org_url)} (${a.source === "ui" ? "arayüzden" : "env"})
-           <button class="quiet" onclick="toggleAzForm()">değiştir</button>
-           <button data-label="Projeleri listele" onclick="listAzure(this)">Projeleri listele</button></div>
+      ? `<div class="credline"><span class="okmark">●</span> Azure connected: ${esc(a.org_url)} (${a.source === "ui" ? "from the UI" : "env"})
+           <button class="quiet" onclick="toggleAzForm()">change</button>
+           <button data-label="List projects" onclick="listAzure(this)">List projects</button></div>
          <div class="minigrid" id="azForm" hidden></div>`
-      : `<div class="credline">Azure bağlı değil — organizasyon adresi ve PAT gerekli (kapsam: Code → Read).</div>
+      : `<div class="credline">Azure is not connected — the organization URL and a PAT are needed (scope: Code → Read).</div>
          <div class="minigrid" id="azForm">
-           <div><label>Organizasyon URL</label><input id="azOrg" placeholder="https://dev.azure.com/sirket" value="${esc(a?.org_url || "")}"></div>
+           <div><label>Organization URL</label><input id="azOrg" placeholder="https://dev.azure.com/your-org" value="${esc(a?.org_url || "")}"></div>
            <div><label>Personal Access Token</label><input id="azPat" type="password" placeholder="PAT"></div>
-           <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet & doğrula" onclick="saveAzure(this)">Kaydet & doğrula</button></div>
+           <div style="flex:0 0 auto"><button class="primary" data-label="Save &amp; verify" onclick="saveAzure(this)">Save &amp; verify</button></div>
          </div>`;
   } else {
     zone.innerHTML = "";
@@ -745,24 +744,24 @@ function toggleGhToken() {
   const form = $("ghTokenForm");
   form.hidden = !form.hidden;
   if (!form.hidden) form.innerHTML = `
-    <div><label>GitHub token (fine-grained, Contents: Read)</label><input id="ghTok" type="password" placeholder="github_pat_… ya da ghp_…"></div>
-    <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet & doğrula" onclick="saveCreds({ github_token: $('ghTok').value }, this)">Kaydet & doğrula</button></div>
-    <div style="flex:0 0 auto"><button class="quiet" data-label="Sil" onclick="saveCreds({ github_token: '' }, this)">Sil</button></div>`;
+    <div><label>GitHub token (fine-grained, Contents: Read)</label><input id="ghTok" type="password" placeholder="github_pat_… or ghp_…"></div>
+    <div style="flex:0 0 auto"><button class="primary" data-label="Save &amp; verify" onclick="saveCreds({ github_token: $('ghTok').value }, this)">Save &amp; verify</button></div>
+    <div style="flex:0 0 auto"><button class="quiet" data-label="Delete" onclick="saveCreds({ github_token: '' }, this)">Delete</button></div>`;
 }
 function toggleAzForm() {
   const form = $("azForm");
   form.hidden = !form.hidden;
   if (!form.hidden) form.innerHTML = `
-    <div><label>Organizasyon URL</label><input id="azOrg" placeholder="https://dev.azure.com/sirket" value="${esc(credState?.azure?.org_url || "")}"></div>
+    <div><label>Organization URL</label><input id="azOrg" placeholder="https://dev.azure.com/your-org" value="${esc(credState?.azure?.org_url || "")}"></div>
     <div><label>Personal Access Token</label><input id="azPat" type="password" placeholder="PAT"></div>
-    <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet & doğrula" onclick="saveAzure(this)">Kaydet & doğrula</button></div>
-    <div style="flex:0 0 auto"><button class="quiet" data-label="Sil" onclick="saveCreds({ azure_org_url: '', azure_pat: '' }, this)">Sil</button></div>`;
+    <div style="flex:0 0 auto"><button class="primary" data-label="Save &amp; verify" onclick="saveAzure(this)">Save &amp; verify</button></div>
+    <div style="flex:0 0 auto"><button class="quiet" data-label="Delete" onclick="saveCreds({ azure_org_url: '', azure_pat: '' }, this)">Delete</button></div>`;
 }
 function saveAzure(btn) { saveCreds({ azure_org_url: $("azOrg").value, azure_pat: $("azPat").value }, btn); }
 async function listGithub(btn) {
   const owner = $("ghOwner").value.trim();
   if (!owner) { $("ghOwner").focus(); return; }
-  btn.disabled = true; btn.textContent = "yükleniyor…";
+  btn.disabled = true; btn.textContent = "loading…";
   try {
     const rows = await api(`/github/${encodeURIComponent(owner)}/repos`);
     renderPicks(rows.map(r => ({
@@ -773,10 +772,10 @@ async function listGithub(btn) {
   finally { btn.disabled = false; btn.textContent = btn.dataset.label; }
 }
 async function listAzure(btn) {
-  btn.disabled = true; btn.textContent = "yükleniyor…";
+  btn.disabled = true; btn.textContent = "loading…";
   try {
     const projects = await api("/azure/projects");
-    renderPicks(projects.map(pr => ({ title: pr.name, sub: "proje", right: "repoları aç →", fill: () => listAzureRepos(pr.name) })));
+    renderPicks(projects.map(pr => ({ title: pr.name, sub: "project", right: "open repos →", fill: () => listAzureRepos(pr.name) })));
   } catch (e) { toast(e.message); }
   finally { btn.disabled = false; btn.textContent = btn.dataset.label; }
 }
@@ -793,11 +792,11 @@ function renderPicks(items) {
   window._picks = items;
   $("pickZone").innerHTML = items.length
     ? `<div class="pick">` + items.map((it, i) => `
-        <div class="pickrow${it.taken ? " taken" : ""}" onclick="pickItem(${i})" title="${it.taken ? "zaten bağlı: " + esc(it.taken) : "Seç"}">
+        <div class="pickrow${it.taken ? " taken" : ""}" onclick="pickItem(${i})" title="${it.taken ? "already connected: " + esc(it.taken) : "Select"}">
           <span>${esc(it.title)}</span><span class="dim2">${esc(it.sub)}</span>
-          <span class="right">${it.taken ? "bağlı ✓" : esc(it.right)}</span>
+          <span class="right">${it.taken ? "connected ✓" : esc(it.right)}</span>
         </div>`).join("") + `</div>`
-    : `<div class="empty">Liste boş.</div>`;
+    : `<div class="empty">The list is empty.</div>`;
 }
 function pickItem(i) { const it = window._picks[i]; if (!it.taken) it.fill(); }
 
@@ -846,8 +845,8 @@ function scoreBadges(scores) {
 async function doSearch() {
   const body = searchBody();
   if (!body.q) { $("q").focus(); return; }
-  showTab("ara"); closeDrawer();
-  $("spaceHint").textContent = "taranıyor…";
+  showTab("search"); closeDrawer();
+  $("spaceHint").textContent = "searching…";
   $("out").innerHTML = "";
   try {
     const d = await api("/search", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body) });
@@ -855,41 +854,41 @@ async function doSearch() {
     viz.anim0 = performance.now();
     vizPlaceResults(); if (REDUCED) vizDraw(0);
     $("spaceHint").textContent = d.hits.length
-      ? "düğüme tıkla → kod sağdan açılır · çekirdeğe yakın = daha alakalı"
-      : d.dropped ? "eşleşme yok — en yakın parçalar bile skor tabanının altında" : "eşleşme yok — sorguyu değiştirip tekrar dene";
+      ? "click a node → the code opens on the right · closer to the core = more relevant"
+      : d.dropped ? "no match — even the nearest chunks are below the score floor" : "no match — reword the query and try again";
     const t = Object.entries(d.timings_ms).map(([k, v]) => `${k} ${Math.round(v)}ms`).join(" · ");
     const docs = d.hits.filter(h => h.category === "doc").length;
-    const head = `<div class="timing">${d.hits.length} sonuç${docs ? ` · ${docs} doküman` : ""}${d.dropped ? ` · ${d.dropped} elendi (skor tabanı)` : ""} · mod <b>${esc(d.mode)}</b>${d.reranked ? " + rerank" : ""} · ${t}${d.cached ? " · önbellek" : ""}</div>`;
-    // Sinyaller sonuçların ÜSTÜNDE: sonuç gelmesi cevabın var olduğu anlamına gelmez.
+    const head = `<div class="timing">${d.hits.length} results${docs ? ` · ${docs} document` : ""}${d.dropped ? ` · ${d.dropped} dropped (score floor)` : ""} · mode <b>${esc(d.mode)}</b>${d.reranked ? " + rerank" : ""} · ${t}${d.cached ? " · cached" : ""}</div>`;
+    // The signals sit ABOVE the results: getting results does not mean an answer exists.
     const best = Math.max(0, ...d.hits.map(h => h.scores.dense ?? 0));
     const notes =
-      (d.weak_match ? `<div class="note">⚠ zayıf eşleşme — en iyi dense ${best.toFixed(3)}. Bu seviyedeki sonuçlar çoğu zaman alakasız; sorduğun şey bu kod tabanında olmayabilir.</div>` : "") +
-      (docs ? `<div class="note">DOKÜMAN işaretli sonuçlar plan/tasarım metni; içinde geçen dosya ve fonksiyonlar kodda var olmayabilir.</div>` : "");
+      (d.weak_match ? `<div class="note">⚠ weak match — best dense ${best.toFixed(3)}. Results at this level are usually unrelated; what you asked for may not be in this codebase.</div>` : "") +
+      (docs ? `<div class="note">Results marked DOCUMENT are plan/design text; the files and functions in them may not exist in the code.</div>` : "");
     const empty = d.dropped
-      ? `<div class="empty">En yakın ${d.dropped} parça da skor tabanının altında kaldı — bu konu büyük ihtimalle bağlı kod tabanlarında yok.</div>`
-      : `<div class="empty">Eşleşme yok — sorguyu değiştirip tekrar dene.</div>`;
+      ? `<div class="empty">The nearest ${d.dropped} chunks also fell below the score floor — this topic is most likely not in the connected codebases.</div>`
+      : `<div class="empty">No match — reword the query and try again.</div>`;
     $("out").innerHTML = head + notes + (d.hits.length ? d.hits.map((h, i) => `
-      <div class="hit" onclick="openDrawer(${i})" title="Detayı aç">
+      <div class="hit" onclick="openDrawer(${i})" title="Open the detail">
         <div class="head">
           <span class="path">${esc(h.path)}:${h.start_line}-${h.end_line}</span>
-          ${h.category === "doc" ? `<span class="badge doc">DOKÜMAN</span>` : ""}
+          ${h.category === "doc" ? `<span class="badge doc">DOCUMENT</span>` : ""}
           ${h.symbol ? `<span class="sym">${esc(h.kind)} <b>${esc(h.symbol)}</b>${h.parent_symbol ? " · " + esc(h.parent_symbol) : ""}</span>` : ""}
           <span class="badge">${esc(h.repo_id)}</span> ${scoreBadges(h.scores)}
         </div>
         <pre>${esc(h.content.split("\n").slice(0, 5).join("\n"))}</pre>
       </div>`).join("") : empty);
-  } catch (e) { $("spaceHint").textContent = "vektör uzayı — bağlı repoların ve aramanın canlı haritası"; toast(e.message); }
+  } catch (e) { $("spaceHint").textContent = "vector space — a live map of the connected repos and the search"; toast(e.message); }
 }
 async function doAsk() {
   const body = searchBody();
   if (!body.q) { $("q").focus(); return; }
-  showTab("ara"); closeDrawer();
-  $("out").innerHTML = `<div class="empty">AI okuyor… birkaç saniye</div>`;
+  showTab("search"); closeDrawer();
+  $("out").innerHTML = `<div class="empty">The AI is reading… a few seconds</div>`;
   try {
     const d = await api("/ask", { method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body) });
     $("out").innerHTML =
       `<div class="timing">${esc(d.model)} · ${Math.round(d.elapsed_ms)}ms</div>` +
-      (d.search?.weak_match ? `<div class="note">⚠ zayıf eşleşme — modelin önündeki parçalar soruyla alakasız olabilir; "bulamadım" diyorsa doğrudur.</div>` : "") +
+      (d.search?.weak_match ? `<div class="note">⚠ weak match — the chunks in front of the model may be unrelated to the question; if it says it could not find anything, believe it.</div>` : "") +
       `<div class="answer">${esc(d.answer)}</div>` +
       `<div class="srcs">${d.sources.map(s => `[${s.n}] ${esc(s.path)}:${s.start_line}-${s.end_line}`).join("<br>")}</div>`;
   } catch (e) { $("out").innerHTML = ""; toast(e.message); }
@@ -898,21 +897,21 @@ $("btnSearch").onclick = doSearch;
 $("btnAsk").onclick = doAsk;
 $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
 
-// ── görünümler ───────────────────────────────────────────────────────────
+// ── views ────────────────────────────────────────────────────────────────
 function showTab(name) {
-  for (const tab of ["ara", "repolar", "isler", "baglan"]) {
+  for (const tab of ["search", "repos", "jobs", "connect"]) {
     $("tab-" + tab).hidden = tab !== name;
     $("tabbtn-" + tab).classList.toggle("active", tab === name);
   }
   clearInterval(window._jobsTimer);
   cancelAnimationFrame(viz.raf);
-  if (name === "ara") { requestAnimationFrame(() => { vizSize(); vizStart(); }); }
-  if (name === "isler") { loadJobs(); window._jobsTimer = setInterval(loadJobs, 4000); }
-  if (name === "baglan") { renderConnect(); loadCredState().then(renderConnect); }
-  if (name === "repolar") loadRepos();
+  if (name === "search") { requestAnimationFrame(() => { vizSize(); vizStart(); }); }
+  if (name === "jobs") { loadJobs(); window._jobsTimer = setInterval(loadJobs, 4000); }
+  if (name === "connect") { renderConnect(); loadCredState().then(renderConnect); }
+  if (name === "repos") loadRepos();
 }
 
-// ── işler ────────────────────────────────────────────────────────────────
+// ── jobs ─────────────────────────────────────────────────────────────────
 function step(title, main, sub) {
   return `<div class="step"><small>${esc(title)}</small><b>${esc(main)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div>`;
 }
@@ -923,20 +922,20 @@ function jobCard(j) {
   if (j.status === "running" || j.status === "queued") {
     const pct = p.files_total ? Math.round(100 * p.files_done / p.files_total) : 5;
     body = `<div class="bar" style="margin-top:9px"><div style="width:${pct}%"></div></div>
-      <div class="meta" style="margin-top:5px">${p.files_total ? `${p.files_done}/${p.files_total} dosya` : "başlıyor…"} · ${s.chunks_written ?? 0} chunk yazıldı</div>`;
+      <div class="meta" style="margin-top:5px">${p.files_total ? `${p.files_done}/${p.files_total} files` : "starting…"} · ${s.chunks_written ?? 0} chunks written</div>`;
   } else if (j.status === "failed") {
     body = `<div class="errtxt" style="margin-top:8px">${esc(j.error)}</div>`;
   } else if (j.status === "done") {
     body = `<div class="flow">
-      ${step("kaynak", s.commit ? s.commit.slice(0, 8) : "yerel", s.forced ? "tam yeniden index" : "artımlı")}
+      ${step("source", s.commit ? s.commit.slice(0, 8) : "local", s.forced ? "full re-index" : "incremental")}
       <span class="arrow">→</span>
-      ${step("fark", `+${s.added ?? 0} ~${s.modified ?? 0} −${s.deleted ?? 0}`, `${s.unchanged ?? 0} aynı · ${s.skipped ?? 0} atlandı`)}
+      ${step("diff", `+${s.added ?? 0} ~${s.modified ?? 0} −${s.deleted ?? 0}`, `${s.unchanged ?? 0} same · ${s.skipped ?? 0} skipped`)}
       <span class="arrow">→</span>
-      ${step("chunk", `${s.chunks_written ?? 0} yazıldı`, s.redactions ? `${s.redactions} karartma` : " ")}
+      ${step("chunk", `${s.chunks_written ?? 0} written`, s.redactions ? `${s.redactions} redactions` : " ")}
       <span class="arrow">→</span>
-      ${step("embed", `${s.embed_seconds ?? 0} sn`, " ")}
+      ${step("embed", `${s.embed_seconds ?? 0} s`, " ")}
       <span class="arrow">→</span>
-      ${step("Milvus", "✓", `toplam ${s.total_seconds ?? 0} sn`)}
+      ${step("Milvus", "✓", `${s.total_seconds ?? 0} s total`)}
     </div>`;
   }
   const when = (j.created_at || "").slice(5, 16).replace("T", " ");
@@ -946,18 +945,18 @@ function jobCard(j) {
       <span class="badge trigger-${esc(j.trigger)}">${esc(j.trigger)}</span>
       <span class="when">${esc(when)}</span></div>
     ${body}
-    <details><summary>ham istatistik</summary><pre>${esc(JSON.stringify(j, null, 2))}</pre></details>
+    <details><summary>raw stats</summary><pre>${esc(JSON.stringify(j, null, 2))}</pre></details>
   </div>`;
 }
 async function loadJobs() {
   try {
     const repo = $("jobRepo").value;
     const jobs = await api("/jobs?limit=30" + (repo ? "&repo_id=" + encodeURIComponent(repo) : ""));
-    $("jobs").innerHTML = jobs.length ? jobs.map(jobCard).join("") : `<div class="empty">Henüz iş yok — bir repo bağlayınca ilk index çalışması burada akar.</div>`;
-  } catch (e) { toast("işler yüklenemedi: " + e.message); }
+    $("jobs").innerHTML = jobs.length ? jobs.map(jobCard).join("") : `<div class="empty">No jobs yet — connect a repo and the first index run streams here.</div>`;
+  } catch (e) { toast("could not load jobs: " + e.message); }
 }
 
-// ── bağlan: kompakt kartlar + ⓘ popover ─────────────────────────────────
+// ── connect: compact cards + an ⓘ popover ────────────────────────────────
 function copyText(btn) {
   navigator.clipboard.writeText(btn.dataset.copy).then(() => {
     const old = btn.textContent; btn.textContent = "✓"; setTimeout(() => (btn.textContent = old), 1200);
@@ -979,45 +978,45 @@ document.addEventListener("click", (e) => {
 });
 function ccard(title, popHtml, bodyHtml) {
   return `<div class="ccard"><h3>${title}<span class="spacer"></span>
-    <button class="info" onclick="togglePop(this)" aria-label="Ayrıntı" title="Ayrıntı">i</button></h3>
+    <button class="info" onclick="togglePop(this)" aria-label="Details" title="Details">i</button></h3>
     <div class="pop" hidden>${popHtml}</div>${bodyHtml}</div>`;
 }
-// Sırlar arayüzden: girilen değer .env'i ezer, silinince .env'e dönülür. Değerin kendisi
-// asla geri gelmez (GET yalnızca "kayıtlı mı, nereden" der).
+// Secrets from the UI: what you enter overrides .env, and deleting it falls back to .env.
+// The value itself never comes back (GET only says "is it set, and from where").
 function keysCard() {
   const c = credState || {};
   const w = c.webhook || {}, l = c.llm || {};
-  // Kaynak yoksa ama kuruluysa: Anthropic SDK kimliği `ant auth login` profilinden çözmüş.
-  const src = (x) => x === "ui" ? "arayüzden" : x === "env" ? "env" : "SDK profili";
+  // Set but with no source: the Anthropic SDK resolved the credential from a local profile.
+  const src = (x) => x === "ui" ? "from the UI" : x === "env" ? "env" : "an SDK profile";
   const line = (ok, what, from, missing) => ok
-    ? `<div class="credline"><span class="okmark">●</span> ${what} kayıtlı (${src(from)})</div>`
+    ? `<div class="credline"><span class="okmark">●</span> ${what} saved (${src(from)})</div>`
     : `<div class="credline">${missing}</div>`;
-  return ccard("Anahtarlar",
-    `Arayüzden girilen değer <code>.env</code>'i ezer; <i>Sil</i> deyince env'e dönülür.
-     Sırlar <code>data/rag.db</code>'de durur — servis iç ağ içindir.`,
-    line(w.secret_set, "Webhook sırrı", w.source, "Webhook sırrı yok — GitHub/Azure hook'larına yazacağın paylaşılan sır.") +
+  return ccard("Keys",
+    `A value entered here overrides <code>.env</code>; <i>Delete</i> falls back to the env.
+     The secrets sit in <code>data/rag.db</code> — the service belongs on an internal network.`,
+    line(w.secret_set, "Webhook secret", w.source, "No webhook secret — the shared secret you put into the GitHub/Azure hooks.") +
     `<div class="minigrid">
-       <div><label>Webhook sırrı (RAG_WEBHOOK_SECRET)</label><input id="kWebhook" type="password" placeholder="uzun, rastgele bir sır"></div>
-       <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet" onclick="saveCreds({ webhook_secret: $('kWebhook').value }, this)">Kaydet</button></div>
-       ${w.source === "ui" ? `<div style="flex:0 0 auto"><button class="quiet" data-label="Sil" onclick="saveCreds({ webhook_secret: '' }, this)">Sil</button></div>` : ""}
+       <div><label>Webhook secret (RAG_WEBHOOK_SECRET)</label><input id="kWebhook" type="password" placeholder="a long, random secret"></div>
+       <div style="flex:0 0 auto"><button class="primary" data-label="Save" onclick="saveCreds({ webhook_secret: $('kWebhook').value }, this)">Save</button></div>
+       ${w.source === "ui" ? `<div style="flex:0 0 auto"><button class="quiet" data-label="Delete" onclick="saveCreds({ webhook_secret: '' }, this)">Delete</button></div>` : ""}
      </div>` +
     llmLine(l) +
     (l.provider === "ollama" ? copyRow(`ollama pull ${l.model || ""}`) : "") +
     `<div class="minigrid">
-       <div><label>Anthropic API anahtarı (ANTHROPIC_API_KEY)${l.mode === "auto" ? " — girersen Claude'a geçer" : ""}</label><input id="kAnthropic" type="password" placeholder="sk-ant-…"></div>
-       <div style="flex:0 0 auto"><button class="primary" data-label="Kaydet & doğrula" onclick="saveCreds({ anthropic_api_key: $('kAnthropic').value }, this)">Kaydet & doğrula</button></div>
-       ${l.source === "ui" ? `<div style="flex:0 0 auto"><button class="quiet" data-label="Sil" onclick="saveCreds({ anthropic_api_key: '' }, this)">Sil</button></div>` : ""}
+       <div><label>Anthropic API key (ANTHROPIC_API_KEY)${l.mode === "auto" ? " — entering one switches to Claude" : ""}</label><input id="kAnthropic" type="password" placeholder="sk-ant-…"></div>
+       <div style="flex:0 0 auto"><button class="primary" data-label="Save &amp; verify" onclick="saveCreds({ anthropic_api_key: $('kAnthropic').value }, this)">Save &amp; verify</button></div>
+       ${l.source === "ui" ? `<div style="flex:0 0 auto"><button class="quiet" data-label="Delete" onclick="saveCreds({ anthropic_api_key: '' }, this)">Delete</button></div>` : ""}
      </div>` +
-    `<div class="mini">Model <code>RAG_LLM_MODEL</code>, sağlayıcı <code>RAG_LLM_PROVIDER</code> (auto · anthropic · openai · ollama).
-     GitHub token ve Azure PAT: <b>Repolar › Repo bağla</b> panelinden.</div>`);
+    `<div class="mini">Model <code>RAG_LLM_MODEL</code>, provider <code>RAG_LLM_PROVIDER</code> (auto · anthropic · openai · ollama).
+     The GitHub token and the Azure PAT live in the <b>Repos › Connect repo</b> panel.</div>`);
 }
-// LLM durumu: sağlayıcı + model + canlı ping. Ollama kapalıysa ya da model inmemişse
-// hata metni tam komutu söyler; auto modda Anthropic anahtarı girmek Claude'a geçirir.
+// LLM status: provider + model + a live ping. If Ollama is down or the model is not pulled,
+// the error text prints the exact command; in auto mode, an Anthropic key switches to Claude.
 function llmLine(l) {
   const st = l.status || {};
-  const who = `LLM: <b>${esc(l.provider || "?")}</b> · ${esc(l.model || "")}${l.host ? ` · ${esc(l.host)}` : ""}${l.mode === "auto" ? ` <span class="dim2">(otomatik)</span>` : ""}`;
-  if (st.ok) return `<div class="credline"><span class="okmark">●</span> ${who}${l.source ? ` — anahtar ${l.source === "ui" ? "arayüzden" : "env"}` : ""} — çalışıyor</div>`;
-  return `<div class="credline">${who}</div><div class="warnbox">⚠ ${esc(st.detail || "yapılandırılmamış")}</div>`;
+  const who = `LLM: <b>${esc(l.provider || "?")}</b> · ${esc(l.model || "")}${l.host ? ` · ${esc(l.host)}` : ""}${l.mode === "auto" ? ` <span class="dim2">(automatic)</span>` : ""}`;
+  if (st.ok) return `<div class="credline"><span class="okmark">●</span> ${who}${l.source ? ` — key ${l.source === "ui" ? "from the UI" : "env"}` : ""} — working</div>`;
+  return `<div class="credline">${who}</div><div class="warnbox">⚠ ${esc(st.detail || "not configured")}</div>`;
 }
 function renderConnect() {
   const h = window._health || {};
@@ -1026,53 +1025,52 @@ function renderConnect() {
   const az = repos.filter(r => r.provider === "azure" && r.web_url);
   const parts = [];
   if (h.webhook_secret_set === false) {
-    parts.push(`<div class="warnbox">⚠ <b>Webhook sırrı yok</b> — push webhook'ları reddedilir. Aşağıdaki <i>Anahtarlar</i> kartından gir (ya da <code>.env</code>'e <code>RAG_WEBHOOK_SECRET</code>).</div>`);
+    parts.push(`<div class="warnbox">⚠ <b>No webhook secret</b> — push webhooks are rejected. Enter one in the <i>Keys</i> card below (or set <code>RAG_WEBHOOK_SECRET</code> in <code>.env</code>).</div>`);
   }
   parts.push(`<div class="cgrid">`);
   parts.push(keysCard());
   parts.push(ccard("GitHub webhook",
     `repo → Settings → Webhooks → <i>Add webhook</i>. Content type <code>application/json</code>,
-     Secret = <code>RAG_WEBHOOK_SECRET</code> (HMAC-SHA256 doğrulanır), olay: yalnızca <i>push</i>.
-     Teslimatlar repo'daki <i>Recent Deliveries</i>'te; ping'e servis <code>pong</code> döner.
-     Aynı commit iki kez gelirse ikinci iş açılmaz.`,
+     Secret = <code>RAG_WEBHOOK_SECRET</code> (HMAC-SHA256 is verified), event: <i>push</i> only.
+     Deliveries show up under <i>Recent Deliveries</i> on the repo; the service answers a ping
+     with <code>pong</code>. The same commit arriving twice opens no second job.`,
     copyRow(origin + "/webhooks/github/push") +
-    `<div class="mini">Push gelince değişen dosyalar otomatik indexlenir.${gh.length ? " Hook sayfaları: " + gh.map(r => `<a href="${esc(r.web_url)}/settings/hooks" target="_blank" rel="noopener">${esc(r.name)} ↗</a>`).join(" · ") : ""}</div>`));
+    `<div class="mini">On a push the changed files are indexed automatically.${gh.length ? " Hook pages: " + gh.map(r => `<a href="${esc(r.web_url)}/settings/hooks" target="_blank" rel="noopener">${esc(r.name)} ↗</a>`).join(" · ") : ""}</div>`));
   parts.push(ccard("Azure DevOps webhook",
-    `Project Settings → Service Hooks → <i>Web Hooks</i> → olay <i>Code pushed</i>.
-     "Basic authentication password" ya da <code>X-RAG-Webhook-Secret</code> header'ı =
-     <code>RAG_WEBHOOK_SECRET</code>. Aynı commit iki kez gelirse ikinci iş açılmaz.`,
+    `Project Settings → Service Hooks → <i>Web Hooks</i> → event <i>Code pushed</i>.
+     The "Basic authentication password", or the <code>X-RAG-Webhook-Secret</code> header, =
+     <code>RAG_WEBHOOK_SECRET</code>. The same commit arriving twice opens no second job.`,
     copyRow(origin + "/webhooks/azure/push") +
-    `<div class="mini">Push gelince değişen dosyalar otomatik indexlenir.${az.length ? " Hook sayfaları: " + az.map(r => `<a href="${esc(r.web_url.split("/_git/")[0])}/_settings/serviceHooks" target="_blank" rel="noopener">${esc(r.name)} ↗</a>`).join(" · ") : ""}</div>`));
+    `<div class="mini">On a push the changed files are indexed automatically.${az.length ? " Hook pages: " + az.map(r => `<a href="${esc(r.web_url.split("/_git/")[0])}/_settings/serviceHooks" target="_blank" rel="noopener">${esc(r.name)} ↗</a>`).join(" · ") : ""}</div>`));
   parts.push(ccard("HTTP API",
-    `Tüm uçlar ve şemalar <a href="/docs" target="_blank">/docs</a>'ta (OpenAPI). İkinci sık uç:
-     <code>GET /repos/{id}/file?path=&start=&end=</code> dosyadan satır aralığı okur.
-     Her arama sonucu kanal skorlarını taşır (dense/bm25/rrf/rerank).`,
-    copyRow(`curl -X POST ${origin}/search -H 'content-type: application/json' -d '{"q":"jwt nerede üretiliyor","k":8}'`) +
-    `<div class="mini">Arama, dosya okuma, repo/iş yönetimi — hepsi düz HTTP.</div>`));
-  parts.push(ccard("MCP — ajanı bağla",
-    `Servis MCP konuşur (streamable HTTP, uç: <code>${esc(origin)}/mcp</code>). Araçlar:
-     <code>search_code</code>, <code>read_code</code>, <code>list_repos</code> — hepsi salt okuma.
-     Cursor/VS Code gibi istemcilere aynı URL'i MCP sunucusu olarak ver.
-     Kendi MCP sunucusu olan bir servisi bu RAG'a bağlamak için o servis tarafında
-     <code>RAG_SERVICE_URL=${esc(origin)}</code> yeter.
-     Dönen kod ajana <i>veri</i> olarak işaretlenir (prompt-injection koruması).
-     Uç, DNS rebinding'e karşı yalnızca localhost'u kabul eder; başka bir adresten
-     bağlanılacaksa <code>RAG_MCP_ALLOWED_HOSTS</code>'a host ekle.`,
+    `Every endpoint and schema is in <a href="/docs" target="_blank">/docs</a> (OpenAPI). The
+     second most used one: <code>GET /repos/{id}/file?path=&start=&end=</code> reads a line
+     range from a file. Every search result carries its channel scores (dense/bm25/rrf/rerank).`,
+    copyRow(`curl -X POST ${origin}/search -H 'content-type: application/json' -d '{"q":"where is the jwt issued","k":8}'`) +
+    `<div class="mini">Search, reading files, managing repos and jobs — all plain HTTP.</div>`));
+  parts.push(ccard("MCP — connect an agent",
+    `The service speaks MCP (streamable HTTP, endpoint: <code>${esc(origin)}/mcp</code>). The
+     tools: <code>search_code</code>, <code>read_code</code>, <code>list_repos</code> — all
+     read-only. Give the same URL to clients like Cursor/VS Code as an MCP server. To connect
+     a service that has its own MCP server to this RAG, <code>RAG_SERVICE_URL=${esc(origin)}</code>
+     on that side is enough. Returned code is marked to the agent as <i>data</i>
+     (prompt-injection guard). Against DNS rebinding the endpoint accepts only localhost; to
+     connect from another address, add the host to <code>RAG_MCP_ALLOWED_HOSTS</code>.`,
     copyRow(`claude mcp add --transport http milvus-rag ${origin}/mcp`) +
     copyRow(origin + "/mcp") +
-    `<div class="mini">Claude Code, Cursor ve MCP konuşan her ajan buradan bağlanır.</div>`));
+    `<div class="mini">Claude Code, Cursor and any agent that speaks MCP connects here.</div>`));
   parts.push(`</div>`);
   parts.push(`<p class="mini" style="margin-top:14px">Poller: ${h.poll_interval_seconds
-    ? `webhook kurulmasa bile her <b>${h.poll_interval_seconds} sn</b>'de bir uzak head karşılaştırılır — index en geç bu aralıkta tazelenir.`
-    : `kapalı (<code>RAG_POLL_INTERVAL_SECONDS=0</code>) — webhook yoksa tazeleme yalnızca <i>Güncelle</i> ile.`}</p>`);
+    ? `even with no webhook, the remote head is compared every <b>${h.poll_interval_seconds} s</b> — the index refreshes within that window at worst.`
+    : `off (<code>RAG_POLL_INTERVAL_SECONDS=0</code>) — with no webhook, refreshing happens only via <i>Refresh</i>.`}</p>`);
   $("connect").innerHTML = parts.join("");
 }
 
 loadHealth(); loadRepos();
 const params = new URLSearchParams(location.search);
 const startTab = params.get("tab");
-showTab(["repolar", "isler", "baglan"].includes(startTab) ? startTab : "ara");
-if (params.get("add")) { showTab("repolar"); $("btnAddRepo").click(); }
+showTab(["repos", "jobs", "connect"].includes(startTab) ? startTab : "search");
+if (params.get("add")) { showTab("repos"); $("btnAddRepo").click(); }
 if (params.get("q")) {
   $("q").value = params.get("q");
   if (params.get("mode")) $("mode").value = params.get("mode");

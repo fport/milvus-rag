@@ -1,7 +1,8 @@
-"""HTTP katmanı + iş kuyruğu, sahte embedder/store ile uçtan uca.
+"""The HTTP layer + the job queue, end to end with a fake embedder/store.
 
-Gerçek Milvus ve model olmadan: repo kaydı → kuyruk → worker → manifest →
-/search şekli → webhook doğrulama ve tekrar koruması → dosya okuma sınırı.
+Without a real Milvus or model: registering a repo → the queue → the worker → the
+manifest → the shape of /search → webhook verification and replay protection → the
+limits on reading a file.
 """
 
 import base64
@@ -139,7 +140,7 @@ def _wait_job(client: TestClient, job_id: str, timeout: float = 10.0) -> dict:
         if job["status"] in ("done", "failed", "skipped"):
             return job
         time.sleep(0.05)
-    raise AssertionError("iş bitmedi")
+    raise AssertionError("the job never finished")
 
 
 def test_register_index_search_and_sync(client: TestClient):
@@ -168,7 +169,7 @@ def test_register_index_search_and_sync(client: TestClient):
     fused = client.post("/search", json={"q": "how does auth work", "mode": "hybrid"}).json()
     assert fused["mode"] == "hybrid" and "rrf" in fused["hits"][0]["scores"]
 
-    # Dosya okuma: aralık ve dizin dışına çıkma.
+    # Reading a file: the range, and escaping the directory.
     piece = client.get(
         "/repos/demo-repo/file", params={"path": "src/auth.ts", "start": 1, "end": 2}
     )
@@ -177,7 +178,7 @@ def test_register_index_search_and_sync(client: TestClient):
         client.get("/repos/demo-repo/file", params={"path": "../../etc/passwd"}).status_code == 404
     )
 
-    # İkinci sync: değişiklik yok; aynı anda ikinci istek aynı işi döndürür.
+    # A second sync: nothing changed; a concurrent second request returns the same job.
     first = client.post("/repos/demo-repo/sync", json={"force": False})
     second = client.post("/repos/demo-repo/sync", json={"force": True})
     assert first.status_code == 202
@@ -204,7 +205,7 @@ def test_webhook_auth_and_dedupe(client: TestClient):
     unknown = client.post("/webhooks/azure/push", json=payload, headers={"Authorization": basic})
     assert unknown.status_code == 200 and unknown.json()["results"][0]["ignored"]
 
-    # Repo kayıtlıysa iş açılır; aynı commit ikinci kez iş açmaz.
+    # A registered repo opens a job; the same commit does not open a second one.
     services = client.app.state.services
     from milvus_rag.models import Repo
 
@@ -243,7 +244,7 @@ def test_github_webhook(client: TestClient):
     }
     body = jsonlib.dumps(payload).encode()
 
-    # İmzasız / yanlış imzalı → 401
+    # Unsigned / wrongly signed → 401
     assert client.post("/webhooks/github/push", content=body).status_code == 401
     bad = client.post(
         "/webhooks/github/push",
@@ -264,11 +265,11 @@ def test_github_webhook(client: TestClient):
     )
     assert ping.json() == {"accepted": True, "pong": True}
 
-    # Kayıtlı olmayan repo → ignored
+    # An unregistered repo → ignored
     unknown = client.post("/webhooks/github/push", content=body, headers=headers)
     assert unknown.json()["results"][0]["ignored"]
 
-    # Kayıtlı github reposu → iş açılır; aynı commit ikinci kez açmaz
+    # A registered github repo → a job opens; the same commit does not open a second
     services = client.app.state.services
     services.db.upsert_repo(
         Repo(
@@ -292,20 +293,20 @@ def test_home_serves_ui(client: TestClient):
     assert response.status_code == 200
     assert "Milvus RAG" in response.text
     assert "text/html" in response.headers["content-type"]
-    # Sekmeler: pipeline görünümü ve entegrasyon rehberi arayüzde var.
-    assert "Index işleri" in response.text and "webhooks/github/push" in response.text
+    # The tabs: the pipeline view and the integration guide are in the UI.
+    assert "Index jobs" in response.text and "webhooks/github/push" in response.text
 
     health = client.get("/health").json()
-    assert health["webhook_secret_set"] is True  # conftest sırrı ayarlıyor
+    assert health["webhook_secret_set"] is True  # conftest sets the secret
     assert "poll_interval_seconds" in health
 
 
 def test_credentials_flow(client: TestClient):
-    # Başlangıç: hiçbir kimlik yok.
+    # Initially: no credentials at all.
     state = client.get("/settings/credentials").json()
     assert state["github"]["token_set"] is False and state["azure"]["configured"] is False
 
-    # Azure kimliği kaydet (doğrulama kapalı: ağ yok) → istemci canlı kurulur.
+    # Save the Azure credential (verification off: no network) → the client is built live.
     saved = client.put(
         "/settings/credentials",
         json={
@@ -319,17 +320,17 @@ def test_credentials_flow(client: TestClient):
     assert state["azure"]["configured"] is True and state["azure"]["source"] == "ui"
     assert "acme" in state["azure"]["org_url"]
 
-    # GitHub token'ı kaydet → /health canlı istemciyi yansıtır.
+    # Save the GitHub token → /health reflects the live client.
     client.put("/settings/credentials", json={"github_token": "ghp_x", "verify": False})
     assert client.get("/health").json()["github_token"] is True
 
-    # Gönderilmeyen alan korunur; boş string siler.
+    # A field that is not sent is preserved; an empty string deletes it.
     client.put("/settings/credentials", json={"github_token": "", "verify": False})
     state = client.get("/settings/credentials").json()
     assert state["github"]["token_set"] is False
-    assert state["azure"]["configured"] is True  # dokunulmadı
+    assert state["azure"]["configured"] is True  # untouched
 
-    # Webhook sırrı: env'den geliyor ("s3cret"); arayüzden girilen onu ezer, silinince döner.
+    # The webhook secret comes from the env ("s3cret"); a UI value overrides it, deleting reverts.
     assert state["webhook"] == {"secret_set": True, "source": "env"}
     push = {
         "eventType": "git.push",
@@ -354,10 +355,10 @@ def test_credentials_flow(client: TestClient):
     )
     assert client.get("/health").json()["webhook_secret_set"] is True
 
-    # Anthropic anahtarı: arayüzden girilen anahtar LLM'i canlı kurar, /health görür.
-    # (Başlangıç durumu makineye bağlı: SDK `ant auth login` profilini de çözebilir —
-    # o yüzden yalnızca "arayüzden mi" sorulur.)
-    # Sağlayıcı auto → anahtar yokken yerel Ollama: yukarıdaki PUT'lar istemciyi kurdu bile.
+    # The Anthropic key: a key entered from the UI builds the LLM live, and /health sees it.
+    # (The starting state depends on the machine: the SDK may resolve a local profile too —
+    # so only "did it come from the UI" is asserted.)
+    # Provider auto → local Ollama with no key: the PUTs above already built the client.
     assert state["llm"]["mode"] == "auto" and state["llm"]["provider"] == "ollama"
     assert state["llm"]["configured"] is True and state["llm"]["host"] == "http://localhost:11434"
     assert state["llm"]["status"]["ok"] is True and "probe" in state["llm"]["status"]["detail"]
@@ -366,7 +367,7 @@ def test_credentials_flow(client: TestClient):
     assert state["llm"]["provider"] == "anthropic" and state["llm"]["source"] == "ui"
     assert (
         state["llm"]["configured"] is True and "status" in state["llm"]
-    )  # probe yok: ping atılmaz
+    )  # no probe: nothing is pinged
     assert client.get("/health").json()["llm"] == "claude-opus-5"
     client.put("/settings/credentials", json={"anthropic_api_key": "", "verify": False})
     state = client.get("/settings/credentials").json()
@@ -384,27 +385,27 @@ MCP_INIT = {
     },
 }
 MCP_HEADERS = {
-    "host": "localhost:8090",  # DNS rebinding koruması: yalnızca localhost kabul edilir
+    "host": "localhost:8090",  # DNS-rebinding guard: only localhost is accepted
     "content-type": "application/json",
     "accept": "application/json, text/event-stream",
 }
 
 
 def test_mcp_endpoint(client: TestClient):
-    # Eğik çizgisiz /mcp yönlendirmesiz çalışmalı: bazı MCP istemcileri POST'ta
-    # 307'yi izlemez ve gövdeyi kaybeder.
+    # /mcp without a trailing slash must work without a redirect: some MCP clients lose
+    # the body when they do not follow the 307.
     response = client.post("/mcp", json=MCP_INIT, headers=MCP_HEADERS, follow_redirects=False)
     assert response.status_code == 200, response.text
-    assert '"name":"milvus-rag"' in response.text  # initialize sonucu SSE olarak akıyor
+    assert '"name":"milvus-rag"' in response.text  # the initialize result streams as SSE
     assert client.post("/mcp/", json=MCP_INIT, headers=MCP_HEADERS).status_code == 200
 
-    # Yanlış accept başlığı → transport reddeder (404 değil: uç gerçekten monte).
+    # A wrong accept header → the transport rejects it (not a 404: the endpoint is mounted).
     wrong = client.post(
         "/mcp", json=MCP_INIT, headers={**MCP_HEADERS, "accept": "application/json"}
     )
     assert wrong.status_code == 406
 
-    # Yabancı Host → DNS rebinding koruması.
+    # A foreign Host → the DNS-rebinding guard.
     foreign = client.post(
         "/mcp", json=MCP_INIT, headers={**MCP_HEADERS, "host": "evil.example.com"}
     )
@@ -412,15 +413,16 @@ def test_mcp_endpoint(client: TestClient):
 
 
 def test_search_signal_and_file_guard(client: TestClient):
-    """`/search` weak_match taşır; `/repos/{id}/file` yalnızca indexli dosyayı okur,
-    değişmişse `stale` der, sırrı karartır."""
+    """`/search` carries weak_match; `/repos/{id}/file` reads only an indexed file, says
+    `stale` when it changed, and redacts secrets."""
     repo_dir: Path = client.repo_dir  # type: ignore[attr-defined]
     (repo_dir / "node_modules").mkdir()
     (repo_dir / "node_modules" / "x.js").write_text("module.exports = 1\n")
     (repo_dir / ".env").write_text("DB_PASSWORD=hunter2hunter2x1\n")
     created = client.post("/repos", json={"provider": "local", "path": str(repo_dir)})
     job = _wait_job(client, created.json()["job"]["id"])
-    assert job["status"] == "done" and job["stats"]["added"] == 1  # .env ve node_modules index dışı
+    # .env and node_modules are outside the index.
+    assert job["status"] == "done" and job["stats"]["added"] == 1
 
     search = client.post("/search", json={"q": "how does auth work"}).json()
     assert search["weak_match"] is False and search["dropped"] == 0  # sahte store dense=1.0

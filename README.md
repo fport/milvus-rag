@@ -195,15 +195,16 @@ uv run rag poll                                   # check the Azure heads once
 The same operations are available over HTTP. There is also a small web UI at `/` with three
 tabs: **Search** (search with channel scores, ask the LLM), **Jobs** (the pipeline of every
 index run: source → diff → chunk → embed → Milvus, with live progress), and **Connect**
-(copyable webhook URLs, the poller, curl examples, MCP setup). The UI ships in Turkish:
+(copyable webhook URLs, the poller, curl examples, MCP setup):
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="The Milvus RAG UI — a Turkish question searching code, the vector-space view, channel scores and the connected repos" width="920">
+  <img src="docs/screenshot.png" alt="The Milvus RAG UI — a plain-language question searching code, the vector-space view, channel scores and the connected repos" width="920">
 </p>
 
-The search in that image runs against this repo itself: a plain Turkish sentence → the dense
-channel → `JobRunner` in `jobs.py`, 80 ms. The **DOCUMENT** badge separates hits
-that come from design notes from hits that come from code.
+The search in that image runs against this repo itself: a plain-language question → the dense
+channel → `JobRunner` in `jobs.py`, 62 ms. The **DOCUMENT** badge separates hits that come
+from design notes from hits that come from code — one of them here is `README.tr.md`, which
+a Turkish heading answers an English question from, because BGE-M3 is multilingual.
 
 | Endpoint | Job |
 |---|---|

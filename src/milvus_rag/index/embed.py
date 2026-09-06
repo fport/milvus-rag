@@ -1,4 +1,4 @@
-"""Metin → vektör.
+"""Text → vector.
 
 BGE-M3 by default (1024 dimensions, multilingual): a question in one language and
 code in another land in the same space. Vectors are L2-normalized on the way out and
@@ -88,12 +88,13 @@ class LocalEmbedder(Embedder):
             dimension = get_dimension()
             if dimension != self.expected_dimension:
                 msg = (
-                    f"{self.model_name} {dimension} boyutlu vektör üretiyor, ayarlarda "
-                    f"got {self.expected_dimension}; the Milvus schema and the embedder must agree"
+                    f"{self.model_name} produces {dimension}-dimensional vectors, but the "
+                    f"settings say {self.expected_dimension}; the Milvus schema and the "
+                    "embedder must agree"
                 )
                 raise ValueError(msg)
             log.info(
-                "embedding modeli yüklendi",
+                "embedding model loaded",
                 model=self.model_name,
                 device=str(model.device),
                 seconds=round(time.perf_counter() - started, 1),
@@ -170,7 +171,7 @@ class OpenAIEmbedder(Embedder):
                 continue
             msg = f"OpenAI embeddings {response.status_code}: {response.text[:300]}"
             raise httpx.HTTPStatusError(msg, request=response.request, response=response)
-        msg = "OpenAI embeddings: yeniden denemeler tükendi"
+        msg = "OpenAI embeddings: out of retries"
         raise RuntimeError(msg)
 
 

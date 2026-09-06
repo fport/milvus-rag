@@ -191,12 +191,13 @@ pipeline akışı: kaynak → fark → chunk → embed → Milvus, canlı ilerle
 **Bağlan** (kopyalanabilir webhook URL'leri, poller, curl örnekleri, MCP ayarı):
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Milvus RAG arayüzü — Türkçe soruyla kod araması, vektör uzayı görünümü, kanal skorları ve bağlı repolar" width="920">
+  <img src="docs/screenshot.png" alt="Milvus RAG arayüzü — düz cümleyle kod araması, vektör uzayı görünümü, kanal skorları ve bağlı repolar" width="920">
 </p>
 
-Görseldeki arama bu reponun kendisine karşı çalışıyor: Türkçe düz cümle → dense kanal →
-`jobs.py`'deki `JobRunner`, 80 ms. **DOCUMENT** rozeti plan/tasarım metninden gelen
-sonuçları koddan ayırır.
+Arayüz İngilizce. Görseldeki arama bu reponun kendisine karşı çalışıyor: düz cümle → dense
+kanal → `jobs.py`'deki `JobRunner`, 62 ms. **DOCUMENT** rozeti plan/tasarım metninden gelen
+sonuçları koddan ayırır — buradaki sonuçlardan biri `README.tr.md`, yani İngilizce soruya
+Türkçe bir başlık cevap veriyor: BGE-M3 çok dilli.
 
 | Uç | İş |
 |---|---|

@@ -25,7 +25,7 @@ _CHILD = """
 import random, sys
 from milvus_rag.index.chunk import _parser_for, chunk_file
 path, language = sys.argv[1], sys.argv[2]
-assert _parser_for(language) is not None, f"{language} yüklenemedi"
+assert _parser_for(language) is not None, f"{language} could not be loaded"
 random.seed(1)
 member = (
     "public static int Foo_{i}(int a, string b) "
@@ -33,7 +33,7 @@ member = (
 )
 samples = [
     "",
-    "merhaba dünya\\n" * 20,
+    "hello world\\n" * 20,
     "".join(member.format(i=i) for i in range(3000)),
     "{{{{ (( [[ <<\\n" * 500 + "}}}} \\n",
     "".join(chr(random.randint(32, 126)) for _ in range(50_000)),
