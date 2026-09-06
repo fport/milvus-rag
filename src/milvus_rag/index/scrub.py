@@ -4,9 +4,9 @@ Vektör geri döndürülemez ama yanındaki `content` alanı aynen saklanır ve 
 atıfta prompt'a geri gelir. Bir token bir kez indexlenince cache'te, logda ve
 modelin cevabında dolaşır.
 
-Kurallar bilerek tutucu. production-ready-rag-system'de gerçek bir repoya karşı
-ölçüldü: yalnızca isme bakan kural 78 dosyada 247 değeri kararttı ve neredeyse
-hiçbiri sır değildi (`token: text(` bir DB kolonu, `secret: string` bir tip).
+Kurallar bilerek tutucu. Gerçek bir repoya karşı ölçüldü: yalnızca isme bakan
+kural 78 dosyada 247 değeri kararttı ve neredeyse hiçbiri sır değildi
+(`token: text(` bir DB kolonu, `secret: string` bir tip).
 Bu sürüm aynı repoda 2 karartma yaptı, biri gerçek token.
 """
 

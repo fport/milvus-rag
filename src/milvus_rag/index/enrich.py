@@ -1,7 +1,7 @@
 """İsteğe bağlı: her chunk için LLM'den 2-3 cümlelik Türkçe açıklama.
 
 Bir kod parçasında doğal dil yok denecek kadar az; olanı da yazarının yorum
-dilinde. production-ready-rag-system'de ölçüldü: Türkçe düz sorular, İngilizce
+dilinde. Önceki bir denemede ölçüldü: Türkçe düz sorular, İngilizce
 kod üstünde recall@5 = 0.04. Çare daha iyi eşleştirici değil, eksik metni yazmak
 (Anthropic "contextual retrieval": retrieval hatasında %35 düşüş).
 

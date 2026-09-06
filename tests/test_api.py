@@ -337,14 +337,12 @@ def test_credentials_flow(client: TestClient):
     }
     hook = "/webhooks/azure/push"
     assert (
-        client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "s3cret"}).status_code
-        == 200
+        client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "s3cret"}).status_code == 200
     )
     client.put("/settings/credentials", json={"webhook_secret": "ui-secret", "verify": False})
     assert client.get("/settings/credentials").json()["webhook"]["source"] == "ui"
     assert (
-        client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "s3cret"}).status_code
-        == 401
+        client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "s3cret"}).status_code == 401
     )
     assert (
         client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "ui-secret"}).status_code
@@ -352,8 +350,7 @@ def test_credentials_flow(client: TestClient):
     )
     client.put("/settings/credentials", json={"webhook_secret": "", "verify": False})
     assert (
-        client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "s3cret"}).status_code
-        == 200
+        client.post(hook, json=push, headers={"X-RAG-Webhook-Secret": "s3cret"}).status_code == 200
     )
     assert client.get("/health").json()["webhook_secret_set"] is True
 

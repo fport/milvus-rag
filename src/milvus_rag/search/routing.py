@@ -1,6 +1,6 @@
 """Sorgunun biçiminden retriever seçimi.
 
-production-ready-rag-system'de ölçüldü (evals/retrieval.yaml, 30 soru):
+Önceki bir RAG denemesinde ölçüldü (30 soru):
 
 | recall@5      | sembol araması | düz cümle |
 |---------------|----------------|-----------|

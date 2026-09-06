@@ -90,7 +90,7 @@ güncelle → retriever cache'ini boşalt`.
 
 ## Kurallar
 
-- Türkçe yorum, İngilizce tanımlayıcı (api/ ile aynı). Yorum "neden"i anlatır.
+- Türkçe yorum, İngilizce tanımlayıcı. Yorum "neden"i anlatır.
 - Modül sınırlarını geçen her şey `models.py`'de tipli; çıplak dict dolaşmaz.
 - Her yeni modülün `tests/` altında karşılığı var. Milvus/model gerektiren testler
   `live` işaretli; birim testleri sahte embedder/store ile çalışır.

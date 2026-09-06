@@ -5,8 +5,8 @@
 #
 # Attu (Milvus arayüzü) isteğe bağlı:  docker compose -f infra/docker-compose.yml --profile ui up -d
 #
-# Portlar production-ready-rag-system'deki `rag` stack'i ile aynı (19530/9091);
-# ikisini aynı anda çalıştırma. Volume'lar ayrı, veri karışmaz.
+# Portlar Milvus'un varsayılanları (19530/9091): makinede başka bir Milvus varsa
+# ikisini aynı anda çalıştırma.
 
 name: milvus-rag
 

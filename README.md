@@ -81,11 +81,9 @@ ollama pull qwen3.5:9b                               # yerel LLM (6.6 GB) — /a
 cp .env.example .env                                 # aşağıdaki değerleri doldur (yerel deneme için hiçbiri şart değil)
 ```
 
-### NOT
-```bash
-brew install ollama
-brew services start ollama
-```
+Ollama kurulu değilse: macOS'ta `brew install ollama && brew services start ollama`,
+Linux'ta `curl -fsSL https://ollama.com/install.sh | sh`. Model seçenekleri ve
+ölçümler [Yerel LLM ile deneme](#yerel-llm-ile-deneme-varsayılan) başlığında.
 
 `.env`'de gerekenler — yerel bir dizin + yerel LLM ile denemek için **hiçbiri gerekmez**:
 
@@ -186,8 +184,7 @@ uv run rag poll                                   # Azure head'lerini bir kez ko
 Aynı işlemler HTTP'den. `/` altında basit bir web arayüzü de var — üç sekme:
 **Ara** (kanal skorlarıyla arama, LLM'e soru), **İşler** (her index çalışmasının
 pipeline akışı: kaynak → fark → chunk → embed → Milvus, canlı ilerleme),
-**Bağlan** (kopyalanabilir webhook URL'leri, poller, curl örnekleri, MCP ayarı):
-
+**Bağlan** (kopyalanabilir webhook URL'leri, poller, curl örnekleri, MCP ayarı).
 
 | Uç | İş |
 |---|---|
@@ -368,8 +365,8 @@ uv run rag eval $G -r my-api --tag rerank --mode auto   --rerank
 - **Neden tek Milvus collection?** `repo_id` partition key; `repo_id in [...]` filtresi
   yalnızca ilgili partition'lara iner. Repo başına collection açmak çapraz-repo aramayı
   zorlaştırır ve collection sayısını sınırlar.
-- **Neden sembol sorguları BM25'e gidiyor?** Önceki deney (production-ready-rag-system,
-  ADR-0002) aynı korpusta ölçtü: sembol aramasında BM25 0.80, dense 0.60, ikisinin RRF'i
+- **Neden sembol sorguları BM25'e gidiyor?** Önceki bir RAG denemesi aynı korpusta
+  ölçtü: sembol aramasında BM25 0.80, dense 0.60, ikisinin RRF'i
   0.60 — bulamayan kanal da tam güçle terfi ediyor. Bir regex bunu bedavaya çözer.
 - **Neden reranker kapalı?** Ölçüldü: bge-reranker-v2-m3 bu korpusta hem recall hem MRR
   düşürdü (özellikle Türkçe'de) ve p50'yi 2-4 sn yaptı. Açıksa 40 aday alır — 8 adayı
@@ -437,6 +434,8 @@ kabul eder; başka bir adresten bağlanılacaksa host'u `RAG_MCP_ALLOWED_HOSTS`'
 Dönen kod parçaları ajana **veri** olarak işaretlenir (talimat değil).
 
 MCP konuşmayan bir uygulama aynı işi düz HTTP ile yapar: `POST /search` ve
-`GET /repos/{id}/file` (`stale` alanı ve 404 = indexli değil). Kendi MCP sunucusu olan bir servisi bu RAG'a bağlamak için o servis tarafında tek ayar yeter: `RAG_SERVICE_URL=http://<host>:8090`.
+`GET /repos/{id}/file` (`stale` alanı ve 404 = indexli değil). Kendi MCP sunucusu olan
+bir servisi bu RAG'a bağlamak için o servis tarafında tek ayar yeter:
+`RAG_SERVICE_URL=http://<host>:8090`.
 
 Sunucuya kurulum için `DEPLOYMENT.md`. Lisans: MIT.
