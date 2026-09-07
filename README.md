@@ -21,7 +21,8 @@
 </p>
 
 <p align="center">
-  <a href="https://fport.github.io/milvus-rag/"><strong>Documentation — what was built, and why</strong></a>
+  <a href="https://fport.github.io/milvus-rag/"><strong>Documentation — what was built, and why</strong></a> ·
+  <a href="https://fport.github.io/milvus-rag/rag/">The RAG ladder</a>
 </p>
 
 ---

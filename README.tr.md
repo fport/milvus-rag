@@ -21,7 +21,8 @@
 </p>
 
 <p align="center">
-  <a href="https://fport.github.io/milvus-rag/tr/"><strong>Dokümantasyon — ne yapıldı, neden</strong></a>
+  <a href="https://fport.github.io/milvus-rag/tr/"><strong>Dokümantasyon — ne yapıldı, neden</strong></a> ·
+  <a href="https://fport.github.io/milvus-rag/tr/rag/">RAG merdiveni</a>
 </p>
 
 ---

@@ -155,3 +155,31 @@
 .mermaid {
   background: transparent !important;
 }
+
+/* The ladder table: the rung number is the anchor of the row, so it reads as a
+   climb rather than as another six-column table. */
+.rag-ladder table {
+  font-size: 0.76rem;
+}
+
+.rag-ladder td:first-child,
+.rag-ladder th:first-child {
+  text-align: center;
+  width: 4.5rem;
+}
+
+.rag-ladder td:first-child strong {
+  display: inline-block;
+  min-width: 1.9rem;
+  padding: 0.05rem 0;
+  border-radius: 4px;
+  color: var(--rag-ink);
+  background: var(--rag-green);
+  font-variant-numeric: tabular-nums;
+}
+
+.rag-ladder tr:first-child td:first-child strong {
+  color: var(--rag-mist);
+  background: transparent;
+  border: 1px solid var(--md-default-fg-color--lighter);
+}

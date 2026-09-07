@@ -36,6 +36,13 @@ projedeki her karar onlara karşı verildi:
     bayrak varsayılanı değişmiyor. "Daha iyi hissettiriyor" bir sonuç değil — ve aşağıdaki
     kararların ikisi beklenenin tam tersi çıktı.
 
+!!! done "Yeniysen önce merdivene çık"
+
+    **[RAG merdiveni](rag/index.md)** bu hikâyenin genel hâli: altı basamak, her biri bir
+    alttakinde bozulan bir şeyin tamiri; en altta çalıştırılabilir bir naif RAG, en üstte
+    GraphRAG. Hangi basamağın sana gerçekten lazım olduğunu söylüyor — ve 0. basamak
+    "hiç RAG kurma", ki bu söylendiğinden çok daha sık doğru cevap.
+
 ---
 
 ## Hat, beş aşamada

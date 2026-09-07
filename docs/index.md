@@ -36,6 +36,14 @@ every decision in this project was made against them:
     under `evals/results/`. "It feels better" is not a result — and two of the decisions
     below went the opposite way from what was expected.
 
+!!! done "New to this? Take the ladder first"
+
+    **[The RAG ladder](rag/index.md)** is the general version of this story: six rungs,
+    each one a repair to a failure on the rung below, with a runnable naive RAG at the
+    bottom and GraphRAG at the top. It tells you which rung you actually need — and rung
+    0 is "don't build a RAG at all", which is the right answer more often than it gets
+    said.
+
 ---
 
 ## The pipeline, in five stages
