@@ -5,17 +5,17 @@ olmadığında ne döndüğüyle ilgili.
 
 kNN araması "en yakın `k`" demektir. *Yakında hiçbir şey yok*'u ifade etmenin bir yolu
 yoktur. Bir TypeScript kod tabanına beş yıldızlı bir tatil köyünde bulunup bulunmadığını
-sor — sıralanmış sekiz parça alırsın, skorları gerçek cevaplarla aynı aralıkta. Bunları
+sor — sıralanmış sekiz chunk alırsın, skorları gerçek cevaplarla aynı aralıkta. Bunları
 bir LLM'e "bağlamdan cevapla" diye ver, boş bir sonuçtan halüsinasyon imal etmiş olursun.
 
-Bunun düzeltileceği yer erişim katmanı, çünkü skorları görebilen tek katman o.
+Bunun düzeltileceği yer retrieval katmanı, çünkü skorları görebilen tek katman o.
 
 ## Önce eval kümesi
 
-Bu basamağa akıl yürüterek çıkamazsın. Dağılımlar korpusa özgü ve sezgisel cevaplar
+Bu basamağa akıl yürüterek çıkamazsın. Dağılımlar corpus'a özgü ve sezgisel cevaplar
 yanlış. O yüzden her şeyden önce:
 
-**Yirmi ilâ kırk soru, korpusu okuyarak elle etiketlenmiş.** Asla sistemi çalıştırıp
+**Yirmi ilâ kırk soru, corpus'u okuyarak elle etiketlenmiş.** Asla sistemi çalıştırıp
 döndürdüğünü kabul ederek değil — bu hiçbir şey ölçmez, yalnızca sistemin zaten yaptığını
 kayda geçirir.
 
@@ -31,7 +31,7 @@ Sonra — ve bu kısım tam olarak bu basamağa özgü — **negatif sorular**:
 {"q": "hiç beş yıldızlı bir tatil köyünde bulundun mu?", "expect": []}
 ```
 
-Yalnızca cevaplanabilir sorulardan oluşan bir altın küme, bu basamağın var olma sebebi
+Yalnızca cevaplanabilir sorulardan oluşan bir golden set, bu basamağın var olma sebebi
 olan arızayı göremez. On on iki negatif yeterli.
 
 İki sayı, ve hiçbiri tek başına bir şey ifade etmiyor:
@@ -39,24 +39,24 @@ olan arızayı göremez. On on iki negatif yeterli.
 - **`abstain_rate`** — negatiflerde sistem ne sıklıkla "cevap yok" dedi
 - **`false_weak_rate`** — pozitiflerde aynı sinyal ne sıklıkla yanlış tetiklendi
 
-Her şeye çekimser kalan bir kapı kusursuz bir abstain oranı alır. Her zaman çifti oku.
+Her şeye abstain diyen bir kapı kusursuz bir abstain oranı alır. Her zaman çifti oku.
 
-Format, metrikler ve koşucu: **[Ölçüm](../05-measurement.md)**.
+Format, metrikler ve runner: **[Ölçüm](../05-measurement.md)**.
 
-## Biçim: bir filtre hunisi
+## Biçim: bir filter funnel
 
 Bu basamaktaki her şey tek bir yapı — **geniş getir, sonra aşama aşama daralt**.
 
 ```mermaid
 flowchart LR
-    Q["sorgu"] --> BASE["temel erişimci<br><b>k = 40</b><br>hızlı, yaklaşık"]
-    BASE --> S1["1. aşama · üstveri<br>repo, dil, yol"]
+    Q["sorgu"] --> BASE["temel retriever<br><b>k = 40</b><br>hızlı, yaklaşık"]
+    BASE --> S1["1. aşama · metadata<br>repo, dil, yol"]
     S1 --> S2["2. aşama · reranker<br>yavaş, isabetli<br>40 → 8"]
     S2 --> S3["3. aşama · skor bantları<br>düşür · işaretle · geçir"]
     S3 --> OUT["<b>8 sonuç</b><br>+ zayıf eşleşme notu<br>+ kaç tanesi düşürüldü"]
 ```
 
-Bütün fikir ekonomide. Temel erişimci belge başına ucuz, dolayısıyla her şeye bakmayı ve
+Bütün fikir ekonomide. Temel retriever belge başına ucuz, dolayısıyla her şeye bakmayı ve
 biraz özensiz olmayı göze alabiliyor; sonraki her aşama belge başına daha pahalı ve daha
 azını görüyor. `k = 40` aralarındaki ayar düğmesi — fazla küçükse isabetli aşamalar doğru
 cevabı hiç görmüyor, fazla büyükse hiçbir zaman aday olmayan belgeler için isabet parası
@@ -64,13 +64,13 @@ cevabı hiç görmüyor, fazla büyükse hiçbir zaman aday olmayan belgeler iç
 
 !!! done "Aşamaları tek bir nesnede birleştir"
 
-    Huni tek bir erişimci biçimli arayüzün arkasında durmalı: çağıran bir sorgu veriyor,
+    Huni tek bir retriever biçimli arayüzün arkasında durmalı: çağıran bir sorgu veriyor,
     sonuç alıyor ve iki aşama mı beş aşama mı olduğunu bilmiyor.
 
     Bu bir düzen takıntısı değil. `k`'yı, reranker'ı ve eşikleri her çağrı yerine
     dağıtmak yerine tek yerde tutan şey bu — ve bir aşamayı çıkarıp
     [eval'i](../05-measurement.md) aynı sorulara karşı yeniden koşabilmenin sebebi bu.
-    Tek satırda yeniden yapılandıramadığın bir huni, hiçbir zaman ölçmeyeceğin bir hunidir.
+    Tek satırda yeniden yapılandıramadığın bir funnel, hiçbir zaman ölçmeyeceğin bir funnel'dır.
 
 ## Akla ilk gelen orta aşama, ve ne yaptığı
 
@@ -79,16 +79,16 @@ bir model her birini sorunun yanında okusun, en iyi 8'i tut.
 
 Herkesin neden kazanmasını beklediğini tam olarak söylemeye değer:
 
-| | bi-encoder (temel erişimci) | cross-encoder (reranker) |
+| | bi-encoder (temel retriever) | cross-encoder (reranker) |
 |---|---|---|
 | Nasıl puanlıyor | sorgu ile belgeyi **ayrı ayrı** embed'leyip vektörleri karşılaştırıyor | sorgu **ve** belgeyi tek geçişte birlikte okuyor |
 | Belge ne zaman kodlanıyor | indeksleme anında, bir kez | sorgu anında, her seferinde |
-| Maliyet | tüm korpus için tek bir vektör araması | **aday başına** bir ileri geçiş |
+| Maliyet | tüm corpus için tek bir vektör araması | **aday başına** bir forward pass |
 | Kelime düzeyi etkileşimi görüyor mu | hayır | evet |
 
 Bir bi-encoder, sorguyu hiç görmeden önce belgeyi tek bir vektöre sıkıştırmak zorunda. Bir
 cross-encoder ikisini birden alıyor, ki bu kesinlikle daha fazla bilgi — beklentinin
-sebebi bu, bedelinin sebebi de: 40 aday, istek içinde 40 ileri geçiş demek.
+sebebi bu, bedelinin sebebi de: 40 aday, istek içinde 40 forward pass demek.
 
 Cross-encoder'lar sıralamada bi-encoder'ları güvenilir biçimde yener ve buradaki pay
 gerçekti — Recall@40 0.95, Recall@8 ise 0.786.
@@ -97,7 +97,7 @@ gerçekti — Recall@40 0.95, Recall@8 ise 0.786.
 
     | Ayar | Recall@8 | MRR | p50 |
     |---|---|---|---|
-    | auto + yoğun | 0.786 | **0.690** | 34 ms |
+    | auto + dense | 0.786 | **0.690** | 34 ms |
     | auto + rerank (`bge-reranker-v2-m3`) | 0.762 | **0.514** | 2050 ms |
 
     MRR'ın dörtte biri, ve 34 ms saniyelere çıktı. `RAG_RERANK_ENABLED` varsayılanı
@@ -109,8 +109,8 @@ iyi bir reranker onu kapatırsa, bu satırın yerini almak yerine aynı sorulara
 bir satır olarak giriyor.
 
 **Bunu "reranker'lar işe yaramaz" diye okuma.** Şöyle oku: reranker bir varsayılan değil,
-bir ölçümdür. Başka bir modelle başka bir korpusta satır ters yöne gidebilir. Bayrak,
-kendi korpusunda öğrenebilesin diye orada.
+bir ölçümdür. Başka bir modelle başka bir corpus'ta satır ters yöne gidebilir. Bayrak,
+kendi corpus'unda öğrenebilesin diye orada.
 
 ## Sonra: eşik de işe yaramıyor
 
@@ -118,8 +118,8 @@ Sezgisel çözüm bir kosinüs tabanı. Önce veriye bak.
 
 !!! measured "Dağılımlar örtüşüyor"
 
-    Gerçek cevaplar, en iyi yoğun skor: medyan 0.636, **min 0.526**.
-    Alakasız sorular, en iyi yoğun skor: medyan 0.531, **maks 0.598**.
+    Gerçek cevaplar, en iyi dense skor: medyan 0.636, **min 0.526**.
+    Alakasız sorular, en iyi dense skor: medyan 0.531, **maks 0.598**.
 
 Tek bir eşik ya gerçek cevapları keser ya da çöpü içeri alır. Onları ayıran bir sayı yok
 ve bu embedding uzayının bir özelliği, bir ayar başarısızlığı değil.
@@ -134,11 +134,11 @@ ve bu embedding uzayının bir özelliği, bir ayar başarısızlığı değil.
 | 0.45 – 0.55 | döner, `weak_match: true` işaretiyle |
 | ≥ 0.55 | normal |
 
-Taban altın kümedeki en düşük gerçek cevabın epey altında, yani yalnızca saçma kuyruğu
+Taban golden set'teki en düşük gerçek cevabın epey altında, yani yalnızca saçma kuyruğu
 temizliyor. Gerisi **bir notla birlikte** dönüyor.
 
-Çalınmaya değer tasarım kararı bu: erişimci karar vermiyor. Gördüğünü bildiriyor — skoru,
-notu, kaç tane düşürüldüğünü — ve kararı tüketen veriyor. Tüketen, erişimcinin bilmediği
+Çalınmaya değer tasarım kararı bu: retriever karar vermiyor. Gördüğünü bildiriyor — skoru,
+notu, kaç tane düşürüldüğünü — ve kararı tüketen veriyor. Tüketen, retriever'ın bilmediği
 şeyleri biliyor: bunun bir sohbet arayüzü mü yoksa otonom bir ajan mı olduğunu, yanılmanın
 pahalı olup olmadığını, bir insanın izleyip izlemediğini.
 
@@ -158,7 +158,7 @@ pahalı olup olmadığını, bir insanın izleyip izlemediğini.
 
 ## Model değişince yeniden kalibre et
 
-`0.45` ve `0.55` sabit değil. **Bu korpusta BGE-M3 için** ölçüldüler. Aynı iş Mistral'ın
+`0.45` ve `0.55` sabit değil. **Bu corpus'ta BGE-M3 için** ölçüldüler. Aynı iş Mistral'ın
 embedding'lerinde 0.73 civarına, Gemini'de 0.46 civarına düşüyor. Bir eşiği modeller arası
 kopyalamak, her şeyi geçiren ya da her şeyi engelleyen bir kapı üretir.
 

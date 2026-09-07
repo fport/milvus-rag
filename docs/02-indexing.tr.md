@@ -9,25 +9,25 @@ olabileceğini belirliyor.
     `index/embed.py` (BGE-M3), `index/enrich.py` (isteğe bağlı açıklamalar) ve
     `index/store.py` (tek Milvus koleksiyonu).
 
-## Bir parça, bir kod birimidir
+## Bir chunk, bir kod birimidir
 
-Çoğu RAG yığınının varsayılan parçalayıcısı bir karakter penceresidir. Düz metinde bu
+Çoğu RAG yığınının varsayılan chunker'ı bir karakter penceresidir. Düz metinde bu
 savunulabilir. Kodda bir fonksiyonu ortasından keser — ve yarım bir fonksiyon, kimsenin
 bir soruyu cevaplayabileceği bir şey değildir.
 
-Bu yüzden sınırlar gerçek bir ayrıştırıcıdan geliyor: tree-sitter, süslü parantez
+Bu yüzden sınırlar gerçek bir parserdan geliyor: tree-sitter, süslü parantez
 sayarak değil — çünkü bir string literal içindeki `}`, bunu içeren ilk dosyada parantez
 saymayı bozar.
 
 Dört kural:
 
 1. **Büyük bir sınıf ya da namespace üyelerine bölünüyor.** Başlık ve alanlar kendi
-   parçası oluyor.
+   chunk'ı oluyor.
 2. **Küçük şeyler bir komşusuyla birleştiriliyor.** Tek satırlık bir tip, kısa bir
    const, bir import bloğu, bir JSDoc yorumu — hiçbir şey `RAG_CHUNK_MIN_BYTES`'ın
    altına inmiyor.
-3. **Hiçbir parça `RAG_CHUNK_MAX_BYTES`'ı aşmıyor** (2000 B, kabaca 500 token). BGE-M3
-   8192 token kabul ediyor ve tuzak tam olarak bu: uzun bir parçanın embedding'i bir
+3. **Hiçbir chunk `RAG_CHUNK_MAX_BYTES`'ı aşmıyor** (2000 B, kabaca 500 token). BGE-M3
+   8192 token kabul ediyor ve tuzak tam olarak bu: uzun bir chunk'ın embedding'i bir
    *ortalamaya* dönüşür ve hiçbir şeyi iyi temsil etmez. Tek başına tavanı aşan bir
    fonksiyon, sembol adını koruyan satır pencerelerine bölünüyor.
 4. **`text` temiz kalıyor.** LLM'e ve atıfa giden şey o. "Ben neyim, nerede
@@ -35,7 +35,7 @@ Dört kural:
    BM25 ile indekslenen alana, `indexed_text`'e giriyor.
 
 Yanlış yapılması kolay olan kural 4. Başlığı `text`'e koymak her atıfı üç satır
-üstveriyle başlatır; `indexed_text`'ten çıkarmak ise `handle` adlı bir metodu diğer kırk
+metadata ile başlatır; `indexed_text`'ten çıkarmak ise `handle` adlı bir metodu diğer kırk
 tanesinden ayırt edilemez kılar.
 
 ### Dil kapsamı bir tablo değil, bir kuraldır
@@ -51,15 +51,15 @@ CODE_WITHOUT_GRAMMAR: dict[str, str] = {".sql": "sql", ".cob": "cobol", ".cbl": 
 girdiyi bakımda tutup 372'ncisi konusunda yanılmak demekti; grameri uzantıdan türetmek
 ise yeni bir dilin, paket onu desteklediği gün çalışması demek.
 
-İki gramer adıyla dışlanmış durumda, çünkü ayrıştırıcıyı çökertiyor ya da kilitliyorlar:
+İki gramer adıyla dışlanmış durumda, çünkü parser'ı çökertiyor ya da kilitliyorlar:
 `sql` ve `cobol`. Yine de satır pencereleriyle indeksleniyorlar.
 
-!!! measured "AST parçalama gerçekte ne kazandırıyor"
+!!! measured "AST chunking gerçekte ne kazandırıyor"
 
-    Aynı korpus iki kez indekslendi — bir kez tree-sitter'la, bir kez düz pencerelerle;
-    aynı altın küme, k=8:
+    Aynı corpus iki kez indekslendi — bir kez tree-sitter'la, bir kez düz pencerelerle;
+    aynı golden set, k=8:
 
-    | Parçalayıcı | parça | Recall@8 | MRR | sembol R@8 / MRR | TR metin MRR |
+    | Chunker | chunk | Recall@8 | MRR | sembol R@8 / MRR | TR metin MRR |
     |---|---|---|---|---|---|
     | **AST** ✓ | 2761 | **0.786** | **0.690** | 1.0 / **1.0** | 0.570 |
     | düz pencere | 2100 | 0.762 | 0.598 | 0.75 / 0.321 | 0.518 |
@@ -68,7 +68,7 @@ ise yeni bir dilin, paket onu desteklediği gün çalışması demek.
     sorgularında** (MRR 0.321 → 1.0). İngilizce düz metinde düz pencere başabaş, hatta
     bir soru önde.
 
-    AST parçalama daha fazlasını bulmuyor. Doğru parçayı en üste koyuyor ve adını
+    AST chunking daha fazlasını bulmuyor. Doğru chunk'ı en üste koyuyor ve adını
     söylüyor. Gramersiz kalan bir dilde kaybedilen şey sıralama ve atıf kalitesi, recall
     değil — eksik bir gramerin acil durum olmamasının sebebi de bu.
 
@@ -86,7 +86,7 @@ Kurallar kasıtlı olarak muhafazakâr ve bu kelimenin arkasında bir sayı var:
     üretti ve neredeyse hiçbiri sır değildi: `token: text(` bir veritabanı kolonu,
     `secret: string` bir tip bildirimi.
 
-    Yayınlanan kurallar aynı repoda **2 karartma** yaptı. Biri gerçek bir jetondu.
+    Yayınlanan kurallar aynı repoda **2 karartma** yaptı. Biri gerçek bir token'dı.
 
 Desenler adları değil biçimleri yakalıyor — `sk-`, `ghp_`, `xox[baprs]-`, `AKIA…`,
 JWT'ler, e-postalar, telefon numaraları — artı yalnızca değer atanmış BÜYÜK_YILAN
@@ -140,12 +140,12 @@ yardım mesajı basmak için derin öğrenme yığını çekmiyor.
 
 Kod neredeyse hiç doğal dil içermez; içerdiği kadarı da yazarının yorumları hangi dilde
 yazdıysa o dildedir. Çare daha iyi bir eşleştirici değil; eksik olan düzyazıyı yazmak.
-Bu, Anthropic'in bağlamsal erişim fikri: LLM'e dosyanın tamamını verip her parça için
+Bu, Anthropic'in contextual retrieval fikri: LLM'e dosyanın tamamını verip her chunk için
 iki üç cümle istemek, sonra bunları da yanına embed'lemek.
 
 !!! measured "Zenginleştirme ne kazandırıyor, neye mal oluyor"
 
-    46 dosya / 423 parça, aynı korpus iki kez indekslendi, açıklamalar yerel bir
+    46 dosya / 423 chunk, aynı corpus iki kez indekslendi, açıklamalar yerel bir
     `qwen3.5:9b`'den:
 
     | Kol | Recall@8 | MRR | TR metin R@8 / MRR | false_weak |
@@ -154,12 +154,12 @@ iki üç cümle istemek, sonra bunları da yanına embed'lemek.
     | **zenginleştirilmiş** | **1.000** | **0.912** | **1.000 / 0.932** | **0.048** |
 
     Kazanç tam olarak öngörülen yere düşüyor: **Türkçe düz metinde +0.15 MRR**,
-    İngilizcede +0.01. `false_weak` yarıya indi, çünkü gerçek cevapların yoğun skorları
-    yükseliyor ve 0.55 notu daha az yanlış tetikleniyor. Negatiflerde çekimserlik
+    İngilizcede +0.01. `false_weak` yarıya indi, çünkü gerçek cevapların dense skorları
+    yükseliyor ve 0.55 notu daha az yanlış tetikleniyor. Negatiflerde abstain
     kımıldamadı — açıklamalar alakasız bir soru için güven imal etmedi.
 
-    Maliyet: yerel bir 9B'de dakikada ~11 açıklama, yani 2.8k parçalık bir repo ilk
-    seferde yaklaşık dört saat. Sonrası artımlı (parça özeti + modele göre önbellekli),
+    Maliyet: yerel bir 9B'de dakikada ~11 açıklama, yani 2.8k chunk'lık bir repo ilk
+    seferde yaklaşık dört saat. Sonrası artımlı (chunk özeti + modele göre önbellekli),
     bulut modeliyle dakikalar.
 
 Varsayılanı **kapalı**, çünkü anahtarsız bir kurulumda her `add-*` saatlerce Ollama
@@ -169,7 +169,7 @@ döndürürdü. Soru trafiğin İngilizce değilse aç ve `RAG_ENRICH_LANGUAGE`'
 İki koruma, ikisi de bir 7B modelin başarısızlığını izlemekten çıktı:
 
 - **Kapsam kontrolü.** Küçük bir model seve seve tek bir nesne döndürüp gerisini sessizce
-  düşürür. Cevap, parça listesine karşı kontrol ediliyor.
+  düşürür. Cevap, chunk listesine karşı kontrol ediliyor.
 - **Alfabe kontrolü.** `qwen2.5:7b` yük altında cümle ortasında Çinceye kayıyor ve bunu
   söylemiyor. Yanlış alfabedeki bir açıklama reddediliyor.
 
@@ -196,5 +196,5 @@ hiçbir şeyin orada işi yok.
 ```bash
 # Dizinden aranabilir koleksiyona, indeksleme yolunun tamamı
 uv run rag add-local ~/code/my-api --name my-api
-uv run rag sync my-api --force     # her şeyi yeniden parçala ve yeniden embed'le
+uv run rag sync my-api --force     # her şeyi yeniden chunk'la ve yeniden embed'le
 ```

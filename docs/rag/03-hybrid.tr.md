@@ -1,4 +1,4 @@
-# 3. basamak — Sözcüksel arama ve yönlendirme
+# 3. basamak — Lexical arama ve yönlendirme
 
 Bir embedding "bu neyle ilgili" sorusunu cevaplar. Gerçek sorguların çok büyük bir kısmı
 hiçbir şeyle ilgili değildir — bir isimdir.
@@ -14,17 +14,17 @@ birebir terim eşleşmesi.
 
 ## İki kanal
 
-Vektör indeksinin yanına bir sözcüksel indeks ekle. Her parça ikisine birden giriyor.
+Vektör indeksinin yanına bir lexical indeks ekle. Her chunk ikisine birden giriyor.
 
 | Kanal | İyi olduğu şey | Kör olduğu şey |
 |---|---|---|
-| yoğun (embedding) | başka sözcüklerle ifade, diller arası, "bu neyle ilgili" | birebir kimlik, nadir jetonlar |
-| BM25 (sözcüksel) | tanımlayıcılar, hata kodları, yapılandırma anahtarları, tırnak içi metinler | eş anlamlılar, başka bir dil, yeniden ifade edilmiş her şey |
+| dense (embedding) | başka sözcüklerle ifade, diller arası, "bu neyle ilgili" | birebir eşleşme, nadir token'lar |
+| BM25 (lexical) | tanımlayıcılar, hata kodları, yapılandırma anahtarları, tırnak içi metinler | eş anlamlılar, başka bir dil, yeniden ifade edilmiş her şey |
 
-Bu projede ikisi de **tek bir Milvus koleksiyonunda**: seyrek alanı kimse yazmıyor,
+Bu projede ikisi de **tek bir Milvus koleksiyonunda**: sparse alanı kimse yazmıyor,
 Milvus'un kendi BM25 Function'ı onu `indexed_text`'ten türetiyor. Bu, basamağın alışılmış
 maliyetini — tutarlı tutulması gereken iki indeks — ortadan kaldırıyor ve Milvus'un burada
-olmasının büyük sebebi. Deposun bunu yapamıyorsa bu basamak, ikinci bir indeks çalıştırmak
+olmasının büyük sebebi. Kullandığın store bunu yapamıyorsa bu basamak, ikinci bir indeks çalıştırmak
 ve ikisine de yazmak demek.
 
 ## Karşılaştırılamayan iki skorlama sistemi
@@ -43,17 +43,17 @@ aynı dünyada yaşamıyor:
 |---|---|---|
 | Aralık | −1 ile 1 arası, sınırlı | 0'dan sınırsıza |
 | Onu oynatan şey | iki vektör arasındaki açı | terim nadirliği, terim sıklığı, belge uzunluğu |
-| Korpusa bağlı mı | hayır | **evet** — `idf` senin korpusundan hesaplanıyor |
+| Corpusa bağlı mı | hayır | **evet** — `idf` senin corpus'undan hesaplanıyor |
 | Sorguya bağlı mı | hayır | **evet** — nadir bir terim tüm skoru şişiriyor |
 
-Öldüren son iki satır. 12.00'lık bir BM25 skoru iki farklı korpusta aynı şeyi ifade
-etmiyor; hatta *aynı* korpusta iki farklı sorgu için bile. Herhangi bir
+Öldüren son iki satır. 12.00'lık bir BM25 skoru iki farklı corpus'ta aynı şeyi ifade
+etmiyor; hatta *aynı* corpus'ta iki farklı sorgu için bile. Herhangi bir
 `0.7 × kosinüs + 0.3 × normalize_bm25` bir normalizasyon sabiti gerektiriyor ve o sabit,
-korpus büyüdüğü anda kayıyor.
+corpus büyüdüğü anda kayıyor.
 
 Yani: **skorları at, sıraları tut.**
 
-Sıranın birimi yoktur. "BM25 listesinde birinci" her korpusta, her dilde, her sorguda aynı
+Sıranın birimi yoktur. "BM25 listesinde birinci" her corpus'ta, her dilde, her sorguda aynı
 şeyi ifade eder. Skordan daha az bilgi taşır — #1 ile #2 arasındaki farkı kaybedersin — ve
 karşılaştırılabilirliğin bedeli tam olarak budur.
 
@@ -119,7 +119,7 @@ tesadüf değil ve anlaşılması gereken bir sonraki şey.
 
 ### `k` gerçekte ne yapıyor
 
-`k`, listenin tepesinin ne kadar baskın olacağını kısan bir amortisör. Bir belgenin
+`k`, listenin tepesinin ne kadar baskın olacağını kısan bir katsayı. Bir belgenin
 birincilik katkısının, beşincilik katkısına oranına bak:
 
 | `k` | sıra #1 | sıra #5 | oran |
@@ -130,7 +130,7 @@ birincilik katkısının, beşincilik katkısına oranına bak:
 
 `k=0`'da birinci olmak beşinci olmaktan beş kat iyi. `k=60`'ta %6 iyi.
 
-Bu da kaynaştırmanın neyi ödüllendirdiğine dair somut bir kurala dönüşüyor. İki belge:
+Bu da birleştirmenin neyi ödüllendirdiğine dair somut bir kurala dönüşüyor. İki belge:
 
 - **D** — BM25'te #1, vektör listesinde **hiç yok**
 - **E** — *her iki* listede de #5
@@ -149,24 +149,24 @@ Bu da kaynaştırmanın neyi ödüllendirdiğine dair somut bir kurala dönüş�
     önemli kılıyor. `k = 60`, orijinal RRF makalesindeki değer ve uzlaşıya kuvvetli bir
     tercih.
 
-Genelde istediğin de bu. Birbirinden bağımsız iki erişim yönteminin aynı belgeyi
+Genelde istediğin de bu. Birbirinden bağımsız iki retrieval yönteminin aynı belgeyi
 beğenmesi gerçek bir kanıt; tek bir yöntemin ona bayılması o yöntemin bir garipliği
 olabilir.
 
-## Ve her zaman kaynaştırmanın kaybetme sebebi tam olarak bu
+## Ve her zaman birleştirmenin kaybetme sebebi tam olarak bu
 
 Ölçülen sonuç artık farklı okunuyor.
 
-!!! measured "Her zaman hybrid, tek başına yoğundan daha kötü"
+!!! measured "Her zaman hybrid, tek başına dense'ten daha kötü"
 
     | Mod | Recall@8 | MRR | İngilizce dışı R@8 | p50 |
     |---|---|---|---|---|
     | yalnızca BM25 | 0.405 | 0.240 | 0.263 | 2 ms |
-    | yalnızca yoğun | 0.786 | 0.678 | 0.684 | 32 ms |
+    | yalnızca dense | 0.786 | 0.678 | 0.684 | 32 ms |
     | hybrid (hep RRF) | 0.786 | **0.604** | 0.684 | 40 ms |
     | **auto** (biçime göre yönlendir) ✓ | **0.786** | **0.690** | 0.684 | 34 ms |
 
-    Her zaman kaynaştırmak, yalnızca yoğun kanalı kullanmaya karşı **0.074 MRR'a mal oldu**.
+    Her zaman birleştirmek, yalnızca dense kanalı kullanmaya karşı **0.074 MRR'a mal oldu**.
 
 RRF, iki listenin de birer *görüş* olduğunu varsayıyor. Düz dille sorulmuş bir soruda
 BM25'in listesi bir görüş değil — sadece ortak bir kelimeyi paylaşan belgeler. Ama RRF
@@ -179,7 +179,7 @@ olmayacaksa bir hata.
 
 ```mermaid
 flowchart LR
-    Q2["‘webhook olayları nasıl kuyruğa alınıyor?’"] --> D["yoğun<br>doğru dosyayı #1'de buluyor"]
+    Q2["‘webhook olayları nasıl kuyruğa alınıyor?’"] --> D["dense<br>doğru dosyayı #1'de buluyor"]
     Q2 --> B["BM25<br>‘olay’, ‘kuyruk’ üzerinden eşleşiyor"]
     D --> R["RRF"]
     B --> R
@@ -205,27 +205,27 @@ def looks_like_symbol(query: str) -> bool:
 O docstring tasarımın kendisi. İki hata simetrik değil:
 
 - **yanlış pozitif** (gerçek bir soru BM25'e yönlendirilir) → kötü bir cevap
-- **yanlış negatif** (bir sembol yoğun kanala yönlendirilir) → kaçırılmış bir iyileştirme
+- **yanlış negatif** (bir sembol dense kanala yönlendirilir) → kaçırılmış bir iyileştirme
 
-Bu yüzden desen kasıtlı olarak dar: tek jeton, boşluk yok, içeride bir sınır. Gerisi düz
+Bu yüzden desen kasıtlı olarak dar: tek token, boşluk yok, içeride bir sınır. Gerisi düz
 metin.
 
-Bir regex, ve yalnız yoğun kanala karşı 0.012 MRR kazandırırken sembol sorgularını kusursuz
+Bir regex, ve yalnız dense kanala karşı 0.012 MRR kazandırırken sembol sorgularını kusursuz
 yapıyor (BM25 onlarda 1.0/1.0 alıyor). Bir LLM yönlendirici aynı şeyi bir ağ çağrısı ve bir
 belirsizlik kaynağı karşılığında verirdi.
 
 !!! done "Hybrid'in doğru varsayılan *olduğu* yer"
 
     Yönlendirme burada işe yarıyor, çünkü kod sorguları temiz biçimde iki şekle ayrılıyor.
-    Ayrılmadığı bir korpusta — içinde ürün adları, SKU'lar ya da parça numaraları da geçen
+    Ayrılmadığı bir corpus'ta — içinde ürün adları, SKU'lar ya da chunk numaraları da geçen
     karışık doğal dil sorguları — temiz bir kural yok ve dürüst varsayılan her zaman RRF.
 
     Basamak "iki kanalı da bulundur ve bilinçli kullan". `RAG_PROSE_MODE=hybrid` burada
-    kaynaştırmayı geri açıyor; bu tabloyu devralmak yerine kendi korpusunda ölç.
+    birleştirmeyi geri açıyor; bu tabloyu devralmak yerine kendi corpus'unda ölç.
 
 ## Neyi düzeltmiyor
 
-Erişimci artık iki sorgu biçimi için de doğru şeyi buluyor. Aynı güvenle, beş yıldızlı bir
-tatil köyü sorusuna da sekiz parça döndürecek.
+Retriever artık iki sorgu biçimi için de doğru şeyi buluyor. Aynı güvenle, beş yıldızlı bir
+tatil köyü sorusuna da sekiz chunk döndürecek.
 
 O, **[5. basamak](05-honesty.md)**.

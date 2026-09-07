@@ -90,16 +90,16 @@ plugins:
             RAG, step by step: RAG, adım adım
             The ladder: Merdiven
             1. Naive RAG: 1. Naif RAG
-            2. Chunks that are units: 2. Birim olan parçalar
-            3. Lexical search and routing: 3. Sözcüksel arama ve yönlendirme
+            2. Chunks that are units: 2. Birim olan chunk'lar
+            3. Lexical search and routing: 3. Lexical arama ve yönlendirme
             4. Query transformation: 4. Sorgu dönüşümü
             5. Knowing when you don't know: 5. Bilmediğini bilmek
-            6. Agentic retrieval: 6. Ajanlı erişim
+            6. Agentic retrieval: 6. Agentic retrieval
             7. GraphRAG: 7. GraphRAG
             The pipeline: Hat
             1. Sources and sync: 1. Kaynaklar ve senkronizasyon
             2. Indexing: 2. İndeksleme
-            3. Retrieval: 3. Erişim
+            3. Retrieval: 3. Retrieval
             4. Answers and agents: 4. Cevaplar ve ajanlar
             5. Measurement: 5. Ölçüm
             Operations: İşletim

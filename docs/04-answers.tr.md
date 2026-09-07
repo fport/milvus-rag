@@ -1,7 +1,7 @@
 # 4. Cevaplar ve ajanlar
 
-Erişim hiç LLM olmadan çalışıyor. `POST /search` ve MCP araçları asla bir tanesini
-çağırmıyor. LLM tam olarak iki isteğe bağlı yerde yaşıyor: bir cevap yazmak ve parça
+Retrieval hiç LLM olmadan çalışıyor. `POST /search` ve MCP araçları asla bir tanesini
+çağırmıyor. LLM tam olarak iki isteğe bağlı yerde yaşıyor: bir cevap yazmak ve chunk
 açıklamaları yazmak.
 
 Bu ayrımı baştan söylemeye değer, çünkü servisi sıfır kimlik bilgisiyle kullanılabilir
@@ -38,11 +38,11 @@ RAG_LLM_PROVIDER=openai RAG_OPENAI_BASE_URL=http://localhost:8000/v1 \
 RAG_LLM_MODEL=Qwen/Qwen3.5-9B OPENAI_API_KEY=local uv run rag serve
 ```
 
-!!! measured "Yerel modeller, aynı 6 parçalık prompt, 3 soru"
+!!! measured "Yerel modeller, aynı 6 chunk'lık prompt, 3 soru"
 
     | Model | cevap başına süre | Kalite | "Cevap yok" davranışı |
     |---|---|---|---|
-    | **qwen3.5:9b, düşünme kapalı** ✓ | 12–17 sn | `[1][2][4]` atıflı, doğru parça | doğru, 2 sn |
+    | **qwen3.5:9b, düşünme kapalı** ✓ | 12–17 sn | `[1][2][4]` atıflı, doğru chunk | doğru, 2 sn |
     | qwen3.5:9b, düşünme açık | 48–51 sn | **3 sorunun 2'sinde boş cevap** | — |
     | qwen2.5:7b | 22–32 sn | iyi, dosya + fonksiyon veriyor | doğru, 4 sn |
     | qwen3:1.7b, düşünme kapalı | 11–15 sn | bozuk kelimeler, uydurma terimler | kararsız |
@@ -51,7 +51,7 @@ RAG_LLM_MODEL=Qwen/Qwen3.5-9B OPENAI_API_KEY=local uv run rag serve
     O tablodan iki ayar çıktı. Düşünen modeller düşünme **kapalı** çağrılıyor: atıflı bir
     cevabın buna ihtiyacı yok ve açıkken akıl yürütme 1024 token'lık bütçenin tamamını
     yiyip hiçbir şey döndürmedi. Bir de `RAG_OLLAMA_NUM_CTX=16384`, çünkü Ollama'nın 4k
-    varsayılanı 8 parçalık bir prompt'u sessizce kırpıyordu — hata yok, sadece daha kötü
+    varsayılanı 8 chunk'lık bir prompt'u sessizce kırpıyordu — hata yok, sadece daha kötü
     bir cevap.
 
 ## Atıflar uydurmayı görünür kılıyor
@@ -71,7 +71,7 @@ SYSTEM_PROMPT = """...
 """
 ```
 
-Satır numaraları parçalarla birlikte prompt'a giriyor, yani bir atıf dosyaya değil
+Satır numaraları chunk'larla birlikte prompt'a giriyor, yani bir atıf dosyaya değil
 `dosya:satır — fonksiyon`'a çözülüyor. 3. kural en az 2. kadar önemli: başarısız olmak
 için açık bir izin verilmezse, bağlamının cevaplayamayacağı bir soru sorulan model onu
 yine de cevaplar.
@@ -82,7 +82,7 @@ uv run rag ask "iyimser kilit nasıl çalışıyor?" -r my-api
 
 ## MCP: karar verici ajandır
 
-MCP sunucusu HTTP API ile aynı süreçte, aynı erişimci üzerinde, `/mcp` altında
+MCP sunucusu HTTP API ile aynı süreçte, aynı retriever üzerinde, `/mcp` altında
 streamable HTTP olarak çalışıyor:
 
 ```bash
@@ -107,11 +107,11 @@ the retriever's job is to offer candidates, the decision is the agent's."""
 
 ### Kendinden emin bir tahmin yerine dürüst sinyaller
 
-Erişimci her sorguya bir şey döndürüyor, saçma bir soruya bile. Kosinüs gri bölgeyi
-ayıramadığına göre ([Erişim](03-retrieval.md)), cevap daha akıllı bir kapı değil —
+Retriever her sorguya bir şey döndürüyor, saçma bir soruya bile. Kosinüs gri bölgeyi
+ayıramadığına göre ([Retrieval](03-retrieval.md)), cevap daha akıllı bir kapı değil —
 ajana neyi bilip neyi bilmediğini söylemek:
 
-- **zayıf eşleşme notu**, en iyi yoğun skor 0.55'in altındaysa
+- **zayıf eşleşme notu**, en iyi dense skor 0.55'in altındaysa
 - **`DOCUMENT` etiketi**, böylece bir tasarım dokümanının içinde alıntılanan kod gerçek
   kod sanılmıyor
 - **indeks tazeliği**, böylece bir ajan bayat bir indeksi eksik bir dosyadan ayırabiliyor
@@ -151,7 +151,7 @@ Her şeye aynı kod yolu üzerinden üç şekilde erişiliyor.
     }' | jq '.hits[0] | {path, symbol, start_line, scores}'
     ```
 
-    `/docs` OpenAPI sayfasını sunuyor. Repolar, işler, dosyalar ve parçaların hepsinin
+    `/docs` OpenAPI sayfasını sunuyor. Repolar, işler, dosyalar ve chunk'ların hepsinin
     uçları var; webhook'lar `/webhooks/azure/push` ve `/webhooks/github/push` altında.
 
 === "CLI"
@@ -169,12 +169,12 @@ Her şeye aynı kod yolu üzerinden üç şekilde erişiliyor.
     `/` altında üç sekme:
 
     - **Arama** — kanal skorlarıyla sonuçlar ve yanlarında LLM cevabı
-    - **İşler** — her indeks koşusu bir hat olarak: kaynak → fark → parçalama → embedding
+    - **İşler** — her indeks koşusu bir hat olarak: kaynak → fark → chunking → embedding
       → Milvus, canlı ilerlemeyle
-    - **Bağlan** — kopyalanabilir webhook URL'leri, yoklayıcı durumu, curl örnekleri, MCP
+    - **Bağlan** — kopyalanabilir webhook URL'leri, poller durumu, curl örnekleri, MCP
       kurulumu ve Ollama ayakta mı, model çekilmiş mi diye canlı bir kontrol
 
-Kimlik bilgileri `.env` kadar arayüzden de girilebiliyor: GitHub jetonu ile Azure org+PAT
+Kimlik bilgileri `.env` kadar arayüzden de girilebiliyor: GitHub token'ı ile Azure org+PAT
 **Repolar › Repo bağla** altında, webhook sırrı ve Anthropic anahtarı **Bağlan ›
 Anahtarlar** altında. Girdiğin şey doğrulanıyor, `data/rag.db`'ye yazılıyor, ortamı
 geçersiz kılıyor ve yeniden başlatma gerektirmiyor.

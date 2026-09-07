@@ -1,6 +1,6 @@
 # 4. basamak — Sorgu dönüşümü
 
-Şimdiye kadarki her basamak korpus üzerinde çalıştı. Bu basamak soru üzerinde çalışıyor.
+Şimdiye kadarki her basamak corpus üzerinde çalıştı. Bu basamak soru üzerinde çalışıyor.
 
 Düzelttiği arıza bir *biçim* uyuşmazlığı. Soru kısa, gayriresmî ve soranın sözcükleriyle
 yazılmış. Belge uzun, resmî ve yazarın sözcükleriyle yazılmış. Bir embedding modelinden,
@@ -16,7 +16,7 @@ flowchart LR
 ```
 
 Cevap `SessionManager`'da, tam orada — ve sorudaki hiçbir şey ona benzemiyor. Daha iyi
-parçalama ya da ikinci bir sözcüksel kanal bu boşluğu kapatmıyor, çünkü boşluk sorgu
+chunking ya da ikinci bir lexical kanal bu boşluğu kapatmıyor, çünkü boşluk sorgu
 tarafında.
 
 Yani: **aramadan önce sorguyu yeniden yaz.**
@@ -32,7 +32,7 @@ En ucuzu ve bir sohbet ürününde kimsenin atlamaması gereken.
 ```text
 kullanıcı: kuyruk nasıl boşaltılıyor?
 asistan:   … QueueWorker.drain() …
-kullanıcı: peki ya yeniden denemeler?      ← erişimciye giden sorgu
+kullanıcı: peki ya yeniden denemeler?      ← retriever'a giden sorgu
 ```
 
 `"peki ya yeniden denemeler?"` işe yarar hiçbir şeye embed olmuyor. Yeniden yazma, sorgu
@@ -53,9 +53,9 @@ cevabı yazmasını* iste ve **onu** embed'le.
 ```mermaid
 flowchart LR
     Q["orijinal sorgu<br>‘neden rastgele çıkış yapıyor?’"] --> LLM["LLM<br>‘bunu cevaplayacak<br>pasajı yaz’"]
-    LLM --> HYDE["hipotetik belge<br>‘Oturumlar, yenileme jetonunun<br>düzenlenme zamanı sunucu saatinin<br>ilerisindeyse sona erer. SessionManager…’"]
+    LLM --> HYDE["hipotetik belge<br>‘Oturumlar, refresh token'ının<br>düzenlenme zamanı sunucu saatinin<br>ilerisindeyse sona erer. SessionManager…’"]
     HYDE --> EMB["embed"]
-    EMB --> RET["erişimci"]
+    EMB --> RET["retriever"]
     RET --> HITS["gerçek belgeler"]
 ```
 
@@ -69,14 +69,14 @@ embedding modellerinin gerçekten iyi olduğu şey bu. Hipotetik cevap atılıyo
 gösterilmiyor.
 
 LLM'in tahmini olgusal olarak yanlış olsa bile işe yarıyor — tahminin yalnızca doğru
-*sözcüklerle* yanlış olması yeterli. "oturum jetonu süresi, yenileme, saat kayması" yazan
+*sözcüklerle* yanlış olması yeterli. "oturum token'ı süresi, yenileme, saat kayması" yazan
 bir model işini çoktan yapmıştır; uygulaman gerçekten o yüzden çıkış yapıyor olsun ya da
 olmasın.
 
-**Nerede başarısız oluyor:** modelin hiç bilmediği bir korpusta. Kendi iç
+**Nerede başarısız oluyor:** modelin hiç bilmediği bir corpus'ta. Kendi iç
 `BillingReconciler`'ını sor, model makul görünen genel faturalama metni uydursun, sen de
 genel faturalama kodu getir. HyDE modelin önyargısını büyütüyor; bu, kamuya açık
-sözcüklerden oluşan bir korpusta kazanç, özel bir korpusta yük.
+sözcüklerden oluşan bir corpus'ta kazanç, özel bir corpus'ta yük.
 
 ### 3. Step-back — önce genel soruyu sor
 
@@ -91,9 +91,9 @@ step-back:  "iyimser kilit nasıl uygulanmış?"
 Step-back sorgusu mekanizmayı buluyor; orijinal sorgu özel noktayı. Birleşim genelde
 cevabın iki yarısını da içeriyor — özel sorgu tek başına hiçbirini içermiyordu.
 
-### 4. Çoklu sorgu yelpazesi
+### 4. Çoklu sorgu — fan-out
 
-Üç dört farklı ifade üret, her biriyle ara ve sonuç listelerini kaynaştır.
+Üç dört farklı ifade üret, her biriyle ara ve sonuç listelerini birleştir.
 
 ```mermaid
 flowchart LR
@@ -102,20 +102,20 @@ flowchart LR
     LLM --> Q2["varyant 2"]
     LLM --> Q3["varyant 3"]
     LLM --> Q4["varyant 4"]
-    Q1 --> R["erişimci"]
+    Q1 --> R["retriever"]
     Q2 --> R
     Q3 --> R
     Q4 --> R
     R --> RRF["RRF<br>k = 60"]
-    RRF --> OUT["kaynaştırılmış top-k"]
+    RRF --> OUT["birleştirilmiş top-k"]
 ```
 
 Kaynaştırıcı [3. basamaktaki RRF](03-hybrid.md#reciprocal-rank-fusion-adm-adm) ve burada
 tam olarak tasarlandığı işi yapıyor.
 
-Yoğun kanalla BM25'i her zaman kaynaştırmanın neden *zarar verdiğini* hatırla: RRF
+Dense kanalla BM25'i her zaman birleştirmenin neden *zarar verdiğini* hatırla: RRF
 uzlaşıyı ödüllendiriyor ve o iki listeden biri bir görüş değildi. Burada her liste aynı
-yetkin erişimciden geliyor, dört farklı biçimde sorulmuş hâlde. Dört ifadenin hepsinde
+yetkin retriever'dan geliyor, dört farklı biçimde sorulmuş hâlde. Dört ifadenin hepsinde
 yüzeye çıkan bir belge gerçekten sağlam; yalnızca tek bir ifadede çıkan büyük ihtimalle
 bir kelime tesadüfüne takılmıştı. **Aynı algoritma, ve bu sefer arkasındaki varsayım
 tutuyor.**
@@ -133,7 +133,7 @@ bağımlı hâle geldiği anda bir sorguyu dönüştürmüyorsun, bir döngü ç
 |---|---|---|---|---|
 | Sohbet için yeniden yazma | 1, minik | ~200 ms | ortada bir sohbet varsa | asla — her zaman yap |
 | HyDE | 1, bir paragraf üretir | 0.5–2 sn | kamuya açık sözcükler, soru ≠ belge ifadesi | modelin uydurması gereken özel jargon |
-| Step-back | 1, minik | ~300 ms | soru fazla özel | korpus zaten genel |
+| Step-back | 1, minik | ~300 ms | soru fazla özel | corpus zaten genel |
 | Çoklu sorgu | 1 + **N arama** | 1 sn + N × arama | ifade oynak, recall gecikmeden önemli | gecikme bütçesi dar |
 | Yönlendirme (3. basamak) | **0** | ~0 ms | sorgular temiz biçimlere ayrılıyor | ayrılmıyor |
 
@@ -145,13 +145,13 @@ Yönlendirme o tabloda bilerek var. O da bir sorgu dönüşümü — sadece yeni
 
 Kullanıcı ile arama indeksi arasına giren bir LLM aynı anda üç şeyi bozuyor:
 
-1. **Gecikme.** Erişimin önüne bir üretim koydun. Paragraf yazan HyDE, aksi hâlde 34 ms
+1. **Gecikme.** Retrievalin önüne bir üretim koydun. Paragraf yazan HyDE, aksi hâlde 34 ms
    olan bir hattaki en yavaş adım.
-2. **Belirlenimlilik.** Aynı soru artık aynı aramayı üretmiyor. Sıcaklığı 0'a sabitle,
+2. **Determinizm.** Aynı soru artık aynı aramayı üretmiyor. Sıcaklığı 0'a sabitle,
    *yeniden üretilebilir* olur ama *kararlı* olmaz — bir model güncellemesi sistemindeki
    her sorguyu sessizce değiştirir.
-3. **Eval'in.** Sivri olan bu. Ölçtüğün erişim, artık çalışan erişim değil. Ham
-   sorgulara karşı puanlanmış bir altın küme, onları yeniden yazan bir sistem hakkında
+3. **Eval'in.** Sivri olan bu. Ölçtüğün retrieval, artık çalışan retrieval değil. Ham
+   sorgulara karşı puanlanmış bir golden set, onları yeniden yazan bir sistem hakkında
    hiçbir şey söylemiyor; dolayısıyla dönüşümün, ölçtüğün kolun **içinde** olması
    gerekiyor, sonradan takılmış hâlde değil.
 
@@ -167,7 +167,7 @@ uv run rag eval $G -r my-api --tag hyde --transform hyde     # aynı küme, ayn�
 `milvus-rag`'de sorgu dönüşümü yok. İki sebebi var ve ilginç olan ikincisi.
 
 **Birincisi**, yönlendirme kod sorguları için biçim problemini zaten sıfır maliyetle
-çözüyor ve korpus sözcükleri özel — HyDE'nin önyargısının varlık değil yük olduğu durumun
+çözüyor ve corpus sözcükleri özel — HyDE'nin önyargısının varlık değil yük olduğu durumun
 tam kendisi.
 
 **İkincisi, ve daha kullanışlısı: aynı boşluk indeksleme anında da kapatılabiliyor.**
@@ -180,16 +180,16 @@ flowchart LR
     end
     subgraph IT["indeksleme anında · bu proje"]
         direction TB
-        CB["parça"] --> LB["LLM tarif eder<br>bir kez, önbellekli"] --> EB["yanına embed'lenir"]
+        CB["chunk"] --> LB["LLM tarif eder<br>bir kez, önbellekli"] --> EB["yanına embed'lenir"]
         QB["soru"] --> SB["arama"]
     end
 ```
 
-Her soruyu korpusun diline çevirmek yerine, *her parça hakkında* birkaç cümle doğal dil
-yaz ve onları parçanın yanına embed'le — Anthropic'in bağlamsal erişimi. Sözcük boşluğu
+Her soruyu corpus'un diline çevirmek yerine, *her chunk hakkında* birkaç cümle doğal dil
+yaz ve onları chunk'ın yanına embed'le — Anthropic'in contextual retrieval'ı. Kelime farkı
 diğer taraftan, bir kez, derleme zamanında kapanıyor.
 
-!!! measured "İndeksleme anında açıklamalar, 46 dosya / 423 parça, iki kez indekslendi"
+!!! measured "İndeksleme anında açıklamalar, 46 dosya / 423 chunk, iki kez indekslendi"
 
     | Kol | Recall@8 | MRR | İngilizce dışı R@8 / MRR | false_weak |
     |---|---|---|---|---|
@@ -203,21 +203,21 @@ Takas temiz:
 
 | | Sorgu anında (4. basamak) | İndeksleme anında (zenginleştirme) |
 |---|---|---|
-| Maliyet | her sorguda, sonsuza kadar | parça başına bir kez, özete göre önbellekli |
+| Maliyet | her sorguda, sonsuza kadar | chunk başına bir kez, özete göre önbellekli |
 | Sorgu gecikmesi | +0.5–2 sn | **0** |
-| Belirlenimlilik | istek yolunda bir model | istekten önce çözülmüş |
+| Determinizm | istek yolunda bir model | istekten önce çözülmüş |
 | Soruya uyarlanıyor mu | **evet** | hayır — sorudan bağımsız |
-| Değişen korpusa uyarlanıyor mu | otomatik | yalnızca değişen parçalarda yeniden koşuyor |
+| Değişen corpus'a uyarlanıyor mu | otomatik | yalnızca değişen chunk'larda yeniden koşuyor |
 | Anahtarsız kurulumu engelliyor mu | hayır | **evet** — kapalı yayınlanmasının sebebi bu |
 
 Hiçbiri kesin olarak daha iyi değil. Sorgu anında dönüşüm gerçekten sorulana tepki
 veriyor; indeksleme anında zenginleştirme bir kez ödeyip istek yoluna hiçbir şey
-eklemiyor. Sorgu hacmin yüksek ve korpusun durağansa, indeksleme anı sırf aritmetikle
+eklemiyor. Sorgu hacmin yüksek ve corpus'un durağansa, indeksleme anı sırf aritmetikle
 kazanıyor.
 
 ## Neyi düzeltmiyor
 
-Sorgu artık korpusun dilinde ve erişimci doğru şeyleri buluyor. Yine de korpusun hiç
+Sorgu artık corpus'un dilinde ve retriever doğru şeyleri buluyor. Yine de corpus'un hiç
 cevaplayamayacağı bir soru için kendinden emin biçimde sekiz sonuç döndürecek — üstelik
 şimdi ona yardım eden halüsinasyonlu bir hipotetik belgeyle birlikte.
 

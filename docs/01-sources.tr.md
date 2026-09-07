@@ -1,7 +1,7 @@
 # 1. Kaynaklar ve senkronizasyon
 
 Bir repoyu içeri almak ve güncel tutmak, kod RAG'inin önemsiz görünen ama olmayan
-kısmıdır. Bayat bir indeksin erişim kalitesi, embedding'ler ne kadar iyi olursa olsun
+kısmıdır. Bayat bir indeksin retrieval kalitesi, embedding'ler ne kadar iyi olursa olsun
 sıfırdır.
 
 !!! done "Bu aşamanın sahibi olduğu yerler"
@@ -29,7 +29,7 @@ uv run rag add-local ~/code/my-api --name my-api   # git reposu bile olması ger
 
 ### PAT hiçbir yere yazılmaz
 
-Uzak URL'in içindeki bir kişisel erişim jetonu `.git/config`'e, `git remote -v`
+Uzak URL'in içindeki bir kişisel erişim token'ı `.git/config`'e, `git remote -v`
 çıktısına ve bir sonraki hata mesajının metnine düşer. Bu yüzden oraya konmuyor:
 
 ```python
@@ -43,7 +43,7 @@ _SECRET = re.compile(r"(Basic|Bearer)\s+[A-Za-z0-9+/=_\-]+", re.IGNORECASE)
 Hata çıktısı loglanmadan ya da döndürülmeden önce bu desenden geçiriliyor, çünkü
 başarısız bir `git fetch` denediği komutu ekrana basar.
 
-## Tazelik: arkasında yoklayıcı olan bir webhook
+## Tazelik: arkasında poller olan bir webhook
 
 İki sağlayıcı da aynı `PushEvent`'e indirgeniyor ve her biri farklı doğrulanıyor,
 çünkü her biri farklı bir şey sunuyor:
@@ -54,7 +54,7 @@ başarısız bir `git fetch` denediği komutu ekrana basar.
 | GitHub | gövdenin HMAC-SHA256'sı (`X-Hub-Signature-256`), aynı sırra karşı |
 
 Tek başına webhook bir tazelik garantisi değil: kaçan bir teslimat kalıcı bir boşluktur
-ve sistemde bunu fark edecek hiçbir şey yoktur. Bu yüzden yoklayıcı her
+ve sistemde bunu fark edecek hiçbir şey yoktur. Bu yüzden poller her
 `RAG_POLL_INTERVAL_SECONDS` aralığında uzak daldaki başı en son indekslenen commit ile
 karşılaştırıyor. Tek başına cron bayat bir pencere demek olurdu; tek başına webhook
 sessiz boşluklar. İkisi birlikte, aralık başına bir fazladan HTTP çağrısına mal oluyor.
@@ -62,7 +62,7 @@ sessiz boşluklar. İkisi birlikte, aralık başına bir fazladan HTTP çağrıs
 Yalnızca izlenen dala gelen bir push iş açıyor; tekrarlanan bir `(repo, commit)` —
 Azure yeniden dener — hiçbir şey açmıyor.
 
-## Tek işçi, repo başına tek bekleyen iş
+## Tek worker, repo başına tek bekleyen iş
 
 ```python
 # jobs.py
@@ -94,8 +94,8 @@ senkronizasyon çalışma kopyasını hash'liyor ve karşılaştırıyor:
 
 | Sonuç | Ne oluyor |
 |---|---|
-| eklenmiş | parçala, embed'le, ekle |
-| değişmiş | o yoldaki parçaları sil, sonra yenilerini ekle |
+| eklenmiş | chunkla, embed'le, ekle |
+| değişmiş | o yoldaki chunk'ları sil, sonra yenilerini ekle |
 | silinmiş | yalnızca sil |
 | değişmemiş | **bir daha asla embed'lenmez** |
 
@@ -109,7 +109,7 @@ Buradaki sıralama kasıtlı ve söylenmeye değer, çünkü akla ilk gelen sır
 bırakıyor:
 
 ```
-manifest satırını kaldır  →  eski parçaları sil  →  yenilerini yaz  →  satırı geri koy
+manifest satırını kaldır  →  eski chunk'ları sil  →  yenilerini yaz  →  satırı geri koy
 ```
 
 Süreç ortada bir yerde ölürse dosya manifestte *yok* olur, bu yüzden bir sonraki
@@ -126,21 +126,21 @@ boyuta göre filtreliyor:
 - `IGNORED_SUFFIXES` — ikili dosyalar, görseller, arşivler, kilit dosyaları
 - `MAX_JSON_BYTES = 64_000` — büyük bir JSON dosyası kod değil, veridir
 
-Kalan her dosya bir `lang` ve bir `category` (code, document, config) alıyor; erişimci
+Kalan her dosya bir `lang` ve bir `category` (code, document, config) alıyor; retriever
 bunu sonradan `DOCUMENT` rozeti olarak gösteriyor — böylece bir ajan, bir tasarım
-dokümanının içindeki kod parçasını gerçek koddan ayırabiliyor.
+dokümanının içindeki kod chunk'ını gerçek koddan ayırabiliyor.
 
 ## Yazımdan sonra
 
 Bir iş bittiğinde iki şey oluyor:
 
 **Arama önbelleği temizleniyor.** Aksi hâlde önbellekten cevaplanan bir sorgu önceki
-commit'in satır numaralarını göstermeye devam eder — erişim hatası gibi görünen ama
+commit'in satır numaralarını göstermeye devam eder — retrieval hatası gibi görünen ama
 olmayan bir arıza.
 
-**`index_version` kontrol ediliyor.** Bir `RAG_*` parçalama ya da embedding ayarı
+**`index_version` kontrol ediliyor.** Bir `RAG_*` chunking ya da embedding ayarı
 değiştiyse versiyon da onunla değişiyor ve bir sonraki senkronizasyon artımlı yerine
-tam yeniden indeksleme yapıyor. Farklı ayarlarla üretilmiş bir parça, mevcut ayarlarla
+tam yeniden indeksleme yapıyor. Farklı ayarlarla üretilmiş bir chunk, mevcut ayarlarla
 üretilmiş olanla kıyaslanabilir değildir; ikisini karıştırmak her sonucu sessizce
 bozar.
 

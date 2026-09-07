@@ -62,8 +62,8 @@ karar aşağıda "ölçüldü" diye işaretli ve rakamı [Ölçüm defteri](#öl
 | **BGE-M3** (yerel, 1024d) | Düz cümleyi vektöre çevirir; Türkçe soru ile İngilizce kod aynı uzayda | Çok dilli: TR düz cümlede R@8 0.684 — MiniLM'de 0.04'tü (ölçüldü); kod makineden çıkmaz; 8192 token pencere | **OpenAI text-embedding-3**: iyi ama kod dışarı gider, ücret (`RAG_EMBEDDING_BACKEND=openai` ile açılır) · **MiniLM**: Türkçede çöktü (ölçüldü) · **Voyage-code**: API, aynı sebep |
 | **BM25** (Milvus sparse) | `handleAuthCallback`, `QUEUE_NAMES` gibi sembolleri tam bulur | Embedding sembolde kördür; BM25 sembollerde 1.0 / 1.0 (ölçüldü) | **Yalnız dense**: sembolde MRR 0.875 · **grep**: canlı ama anlam/sıralama yok — o zaten ajanın kendi aracı |
 | **Sorgu yönlendirme** (regex) | Sembol biçimli sorgu → BM25, düz cümle → dense | Bedava MRR: 0.678 → 0.690; hybrid'i hep açmak bulamayan kanalı da terfi ettiriyor (MRR 0.604) (ölçüldü) | **Her zaman hybrid RRF**: daha kötü (ölçüldü) · **LLM router**: gecikme + maliyet, bir regex yetiyor |
-| **RRF** (bayrak) | dense + BM25 listelerini *sırayla* birleştirir | cosine (0–1) ile BM25 (0–30) toplanamaz; RRF skora değil sıraya bakar | **Ağırlıklı toplam / Milvus WeightedRanker**: normalize etsen de korpusa göre kayar |
-| **Cross-encoder rerank** bge-reranker-v2-m3 (bayrak, kapalı) | 40 adayı soruyla yan yana okuyup yeniden sıralar | Ölçüldü: bu korpusta sıralamayı bozdu (MRR 0.690 → 0.514), p50 2–4 sn → kapalı. recall@40 = 0.95 boşluğu duruyor, daha iyi bir reranker tabloya satır olarak girer | **Cohere / Voyage rerank**: API; denenmedi |
+| **RRF** (bayrak) | dense + BM25 listelerini *sırayla* birleştirir | cosine (0–1) ile BM25 (0–30) toplanamaz; RRF skora değil sıraya bakar | **Ağırlıklı toplam / Milvus WeightedRanker**: normalize etsen de corpus'a göre kayar |
+| **Cross-encoder rerank** bge-reranker-v2-m3 (bayrak, kapalı) | 40 adayı soruyla yan yana okuyup yeniden sıralar | Ölçüldü: bu corpus'ta sıralamayı bozdu (MRR 0.690 → 0.514), p50 2–4 sn → kapalı. recall@40 = 0.95 boşluğu duruyor, daha iyi bir reranker tabloya satır olarak girer | **Cohere / Voyage rerank**: API; denenmedi |
 | **tree-sitter** chunking | Dosyayı fonksiyon / sınıf / metod sınırından böler, sembol adını taşır; dil kapsamı elle tablo değil, pack'in 371 grammar'ı (uzantı adı = grammar adı kuralı + küçük takma ad tablosu) | Chunk = kod birimi: atıf "dosya:satır — fonksiyon" olur, embedding tek bir şeyi temsil eder | **Sabit pencere / RecursiveCharacterTextSplitter**: fonksiyonu ortadan keser · **LLM chunking**: pahalı · `.sql` tree-sitter dışı: grammar segfault veriyor (ölçüldü), satır pencereleriyle bölünür |
 | **sha256 manifest** ile artımlı sync | Push gelince yalnız değişen dosya yeniden indexlenir | İçerik hash'i: rename / mod / submodule kenar durumu yok, yerel dizin de aynı yoldan; yarıda kesilen iş eksik bırakmaz | **git diff**: kenar durumları · **Tam yeniden index**: 300 dosya ≈ dakikalar |
 | **Webhook + poller** | Azure "Code pushed", GitHub push (HMAC); kaçarsa poller yakalar | Push anında tazelik, poller güvenlik ağı | **Yalnız cron**: bayat pencere · **Yalnız webhook**: kaçan event kalıcı boşluk |
@@ -271,7 +271,7 @@ ablation için tasarlandı.
 `rag eval` her çalışmada `evals/results/<tarih>_<etiket>.json` yazar. Golden set
 şablonu `evals/golden.example.jsonl`; kendi repon için kopyalayıp doldur (repo'ya
 özel setler gitignore'da — iç dosya yollarını yayınlama). Aşağıdaki rakamlar örnek
-bir korpus üzerinde (318 dosyalık TypeScript API monorepo'su, 42 soru: 19 EN düz,
+bir corpus üzerinde (318 dosyalık TypeScript API monorepo'su, 42 soru: 19 EN düz,
 19 TR düz, 4 sembol; etiketler repo okunarak yazıldı), k=8:
 
 İlk ölçüm (2026-08-31, BGE-M3, chunk 200–2000B):
@@ -310,7 +310,7 @@ eşleşme" notuyla** (`RAG_WEAK_DENSE_SCORE`), **≥ 0.55 → normal**. Karar t�
 | rerank < 0.05 (bge-reranker-v2-m3, yalnız top-8) | 12/12 | 12/42 = 0.286 | — | +550 ms p50 |
 | rerank < 0.5 | 12/12 | 25/42 | — | +550 ms |
 
-Eşikler resmi değil, **bu model + bu korpus için ölçülmüş**: cosine dağılımı embedding
+Eşikler resmi değil, **bu model + bu corpus için ölçülmüş**: cosine dağılımı embedding
 modeline göre kayar (aynı iş için Mistral ~0.73, Gemini ~0.46 çıkabiliyor). Model değişince
 yeniden kalibre et: `rag eval` raporundaki `calibration` bloğu bulunan pozitiflerin en düşük
 top-dense'ini ve negatiflerin en yükseğini verir; taban ilkinin altına, not eşiği ikisinin
@@ -325,7 +325,7 @@ sorular (0.598 / 0.544); orada karar ajanın. Sinyalin nasıl sunulduğu: MCP b�
 arayüz (zayıf eşleşme notu, DOCUMENT rozeti, "N elendi").
 
 **Chunk ablasyonu (2026-09-01).** Soru: tree-sitter (AST) chunk'ı düz pencereye göre ne
-kazandırıyor? Aynı korpus iki kez indexlendi: `ast` (mevcut chunker) ve `plain` (kod dosyaları
+kazandırıyor? Aynı corpus iki kez indexlendi: `ast` (mevcut chunker) ve `plain` (kod dosyaları
 boş satırdan bölünen ≤ 2000 B pencereler — bugün grammar'sız uzantıların, ör. `.vue`/`.razor`,
 gördüğü yol; `chunk_file`'ı `_chunk_plain`'e yönlendiren tek seferlik betik). Aynı golden,
 auto+dense, k=8. Golden'daki `expect`'ler yalnız dosya yolu (sembolsüz) → bu ölçüm atıf
@@ -343,12 +343,12 @@ grammar'sız kalan bir dil için kayıp yıkıcı değil, sıralama + atıf kayb
 genişletirken beklenti bu ölçekte tutulmalı.
 
 **Enrichment ölçümü (2026-09-01).** Soru: chunk başına LLM açıklaması (`RAG_ENRICH_ENABLED`,
-dil bağımsız — Anthropic "contextual retrieval") ne kazandırıyor? Tam korpusta yerel modelle
+dil bağımsız — Anthropic "contextual retrieval") ne kazandırıyor? Tam corpus'ta yerel modelle
 ~3,5 saat sürdüğü için küçük ve adil bir düzenek: golden'ın beklediği 21 dosya + rastgele 25 kod
-dosyası (46 dosya / 423 chunk) **aynı korpus iki kez** indexlendi — enrichment kapalı ve açık
+dosyası (46 dosya / 423 chunk) **aynı corpus iki kez** indexlendi — enrichment kapalı ve açık
 (Ollama `qwen3.5:9b`, açıklamalar Türkçe — bu ölçüm `RAG_ENRICH_LANGUAGE` ayarından
 önce yapıldı, ayarın varsayılanı artık `English`, 21 dk, 0 ret). Aynı golden, auto+dense, k=8. Mutlak
-sayılar küçük korpusta (az dikkat dağıtıcı) tam korpustan yüksek; okunacak şey iki kol arasındaki fark.
+sayılar küçük corpus'ta (az dikkat dağıtıcı) tam corpus'tan yüksek; okunacak şey iki kol arasındaki fark.
 
 | Etiket | Recall@8 | MRR | EN-prose R@8 / MRR | TR-prose R@8 / MRR | sembol | abstain / false_weak |
 |---|---|---|---|---|---|---|
@@ -385,13 +385,13 @@ uv run rag eval $G -r my-api --tag rerank --mode auto   --rerank
 - **Neden tek Milvus collection?** `repo_id` partition key; `repo_id in [...]` filtresi
   yalnızca ilgili partition'lara iner. Repo başına collection açmak çapraz-repo aramayı
   zorlaştırır ve collection sayısını sınırlar.
-- **Neden sembol sorguları BM25'e gidiyor?** Önceki bir RAG denemesi aynı korpusta
+- **Neden sembol sorguları BM25'e gidiyor?** Önceki bir RAG denemesi aynı corpus'ta
   ölçtü: sembol aramasında BM25 0.80, dense 0.60, ikisinin RRF'i
   0.60 — bulamayan kanal da tam güçle terfi ediyor. Bir regex bunu bedavaya çözer.
-- **Neden reranker kapalı?** Ölçüldü: bge-reranker-v2-m3 bu korpusta hem recall hem MRR
+- **Neden reranker kapalı?** Ölçüldü: bge-reranker-v2-m3 bu corpus'ta hem recall hem MRR
   düşürdü (özellikle Türkçe'de) ve p50'yi 2-4 sn yaptı. Açıksa 40 aday alır — 8 adayı
   yeniden sıralamak recall'a dokunamaz; Recall@40 − Recall@8 farkı reranker'ın çalışma
-  alanıdır. Fark bu korpusta var (0.95 − 0.79); onu kapatan bir model bulunursa tabloya
+  alanıdır. Fark bu corpus'ta var (0.95 − 0.79); onu kapatan bir model bulunursa tabloya
   satır olarak girer.
 - **Neden enrichment kapalı?** Deneyde İngilizce kod üstünde Türkçe soru recall@5 = 0.04
   çıktı ve LLM açıklamaları çare oldu; ama o deney İngilizce-only MiniLM iledi. BGE-M3 çok
