@@ -6,6 +6,26 @@ Three steps, and they genuinely work:
 2. embed each window, keep the vectors
 3. embed the question, return the nearest `k`
 
+```mermaid
+flowchart LR
+    subgraph IDX["step 1-2 · once"]
+        direction LR
+        F["file<br>4200 chars"] --> W["cut every 1000<br>overlap 200"]
+        W --> W1["window @0"]
+        W --> W2["window @800"]
+        W --> W3["window @1600"]
+        W1 --> E["embedding model"]
+        W2 --> E
+        W3 --> E
+        E --> M[("vectors<br>in a numpy array")]
+    end
+    subgraph ASK["step 3 · per question"]
+        direction LR
+        Q["question"] --> QE["embedding model"] --> DOT["dot product<br>against every row"] --> K["argsort → top k"]
+    end
+    M -.-> DOT
+```
+
 That is the whole thing. It is worth building exactly as described, once, because
 every rung above it is a repair to a failure you should have watched happen.
 
@@ -105,7 +125,7 @@ scoring **0.558** and **0.554** — the same band the *real* answers above score
 those three chunks were handed to an LLM with "answer from the context", it would write
 something about a five-star resort using code from `test_signals.py`.
 
-kNN means "the nearest k". There is no such thing as "nothing is near". → **[Rung 4](04-honesty.md)**
+kNN means "the nearest k". There is no such thing as "nothing is near". → **[Rung 5](05-honesty.md)**
 
 !!! done "Read the top hit again"
 

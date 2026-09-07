@@ -1,8 +1,8 @@
-# Rung 6 — GraphRAG
+# Rung 7 — GraphRAG
 
 !!! done "Not built here"
 
-    This project stops at rung 5. This page is what rung 6 is, when it is worth it, and
+    This project stops at rung 6. This page is what rung 7 is, when it is worth it, and
     what would be built first if it were — written to the same standard as the rest,
     which means the numbers below are other people's, and labelled as such.
 
@@ -48,7 +48,7 @@ type references, definitions and their uses. tree-sitter is already parsing ever
 in this project — the same pass that produces chunks can produce edges, deterministically
 and for free.
 
-That matters because it removes rung 6's main cost. In text GraphRAG the extraction is
+That matters because it removes rung 7's main cost. In text GraphRAG the extraction is
 an LLM pass over the whole corpus, it costs real money, it is *probabilistic* (the same
 document extracted twice gives different entities), and it has to be re-run when the
 corpus changes. A call graph is none of those things: it is exact, it is cheap, and it
@@ -87,7 +87,7 @@ with a clustering pass on top.
 **Evaluation.** This is the real reason to be slow about it. A global answer has no
 gold passage, so Recall@k does not apply and the honest methods are LLM-as-judge on
 comprehensiveness and diversity, or human rating. Both are weaker instruments than the
-ones on [rung 4](04-honesty.md). It is entirely possible to build rung 6 and be unable
+ones on [rung 5](05-honesty.md). It is entirely possible to build rung 7 and be unable
 to demonstrate that it helped — which, by this project's one rule, means you should not
 ship it.
 
@@ -103,13 +103,13 @@ Climb when:
 
 Do not climb when the failures you actually see are "it did not find the function" or
 "it answered a question it should have refused". Those are rungs 3 and 4, they are far
-cheaper, and rung 6 does not fix them.
+cheaper, and rung 7 does not fix them.
 
 !!! measured "The honest status of this rung"
 
     Nothing on this page has been measured on this corpus. The rungs below it have, and
     two of them came out against expectation.
 
-    That is the argument for the ladder, not against rung 6: the reason to know what
+    That is the argument for the ladder, not against rung 7: the reason to know what
     the top rung costs is so you can tell whether you have actually run out of cheaper
     ones. Most systems have not.

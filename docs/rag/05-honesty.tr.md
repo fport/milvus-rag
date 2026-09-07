@@ -1,4 +1,4 @@
-# 4. basamak — Bilmediğini bilmek
+# 5. basamak — Bilmediğini bilmek
 
 Şimdiye kadarki her basamak dönen şeyi iyileştiriyor. Bu basamak, dönecek bir şey
 olmadığında ne döndüğüyle ilgili.
@@ -43,12 +43,55 @@ Her şeye çekimser kalan bir kapı kusursuz bir abstain oranı alır. Her zaman
 
 Format, metrikler ve koşucu: **[Ölçüm](../05-measurement.md)**.
 
-## Akla ilk gelen hamle, ve ne yaptığı
+## Biçim: bir filtre hunisi
 
-Standart 4. basamak yükseltmesi bir **cross-encoder reranker**: 40 aday getir, bir model
-her birini sorunun yanında okusun, en iyi 8'i tut. Cross-encoder'lar sıralamada
-bi-encoder'ları güvenilir biçimde yener ve buradaki pay gerçekti — Recall@40 0.95,
-Recall@8 ise 0.786.
+Bu basamaktaki her şey tek bir yapı — **geniş getir, sonra aşama aşama daralt**.
+
+```mermaid
+flowchart LR
+    Q["sorgu"] --> BASE["temel erişimci<br><b>k = 40</b><br>hızlı, yaklaşık"]
+    BASE --> S1["1. aşama · üstveri<br>repo, dil, yol"]
+    S1 --> S2["2. aşama · reranker<br>yavaş, isabetli<br>40 → 8"]
+    S2 --> S3["3. aşama · skor bantları<br>düşür · işaretle · geçir"]
+    S3 --> OUT["<b>8 sonuç</b><br>+ zayıf eşleşme notu<br>+ kaç tanesi düşürüldü"]
+```
+
+Bütün fikir ekonomide. Temel erişimci belge başına ucuz, dolayısıyla her şeye bakmayı ve
+biraz özensiz olmayı göze alabiliyor; sonraki her aşama belge başına daha pahalı ve daha
+azını görüyor. `k = 40` aralarındaki ayar düğmesi — fazla küçükse isabetli aşamalar doğru
+cevabı hiç görmüyor, fazla büyükse hiçbir zaman aday olmayan belgeler için isabet parası
+ödüyorsun.
+
+!!! done "Aşamaları tek bir nesnede birleştir"
+
+    Huni tek bir erişimci biçimli arayüzün arkasında durmalı: çağıran bir sorgu veriyor,
+    sonuç alıyor ve iki aşama mı beş aşama mı olduğunu bilmiyor.
+
+    Bu bir düzen takıntısı değil. `k`'yı, reranker'ı ve eşikleri her çağrı yerine
+    dağıtmak yerine tek yerde tutan şey bu — ve bir aşamayı çıkarıp
+    [eval'i](../05-measurement.md) aynı sorulara karşı yeniden koşabilmenin sebebi bu.
+    Tek satırda yeniden yapılandıramadığın bir huni, hiçbir zaman ölçmeyeceğin bir hunidir.
+
+## Akla ilk gelen orta aşama, ve ne yaptığı
+
+Standart 5. basamak yükseltmesi 2. aşamadaki **cross-encoder reranker**: 40 aday getir,
+bir model her birini sorunun yanında okusun, en iyi 8'i tut.
+
+Herkesin neden kazanmasını beklediğini tam olarak söylemeye değer:
+
+| | bi-encoder (temel erişimci) | cross-encoder (reranker) |
+|---|---|---|
+| Nasıl puanlıyor | sorgu ile belgeyi **ayrı ayrı** embed'leyip vektörleri karşılaştırıyor | sorgu **ve** belgeyi tek geçişte birlikte okuyor |
+| Belge ne zaman kodlanıyor | indeksleme anında, bir kez | sorgu anında, her seferinde |
+| Maliyet | tüm korpus için tek bir vektör araması | **aday başına** bir ileri geçiş |
+| Kelime düzeyi etkileşimi görüyor mu | hayır | evet |
+
+Bir bi-encoder, sorguyu hiç görmeden önce belgeyi tek bir vektöre sıkıştırmak zorunda. Bir
+cross-encoder ikisini birden alıyor, ki bu kesinlikle daha fazla bilgi — beklentinin
+sebebi bu, bedelinin sebebi de: 40 aday, istek içinde 40 ileri geçiş demek.
+
+Cross-encoder'lar sıralamada bi-encoder'ları güvenilir biçimde yener ve buradaki pay
+gerçekti — Recall@40 0.95, Recall@8 ise 0.786.
 
 !!! measured "Sıralamayı kötüleştirdi"
 
@@ -134,4 +177,4 @@ Sistem artık iyi erişiyor ve yapamadığında kabul ediyor. Yine de her soruyu
 tek bir aramayla cevaplıyor — ve bazı sorularda ikincisinin ne olduğunu bilmek için
 birincinin cevabı gerekiyor.
 
-O, **[5. basamak](05-agentic.md)**.
+O, **[6. basamak](06-agentic.md)**.

@@ -1,4 +1,4 @@
-# Rung 4 — Knowing when you don't know
+# Rung 5 — Knowing when you don't know
 
 Every rung so far improves what comes back. This one is about what comes back when
 there is nothing to come back.
@@ -45,12 +45,55 @@ A gate that abstains on everything scores a perfect abstain rate. Always read th
 
 The full format, metrics and runner: **[Measurement](../05-measurement.md)**.
 
-## The obvious move, and what it did
+## The shape: a filter funnel
 
-The standard rung-4 upgrade is a **cross-encoder reranker**: retrieve 40 candidates,
-have a model read each one next to the question, keep the best 8. Cross-encoders
-reliably beat bi-encoders at ordering, and the headroom here was real — Recall@40 is
-0.95 against Recall@8 of 0.786.
+Everything on this rung is one structure — **retrieve wide, then narrow in stages**.
+
+```mermaid
+flowchart LR
+    Q["query"] --> BASE["base retriever<br><b>k = 40</b><br>fast, approximate"]
+    BASE --> S1["stage 1 · metadata<br>repo, language, path"]
+    S1 --> S2["stage 2 · reranker<br>slow, accurate<br>40 → 8"]
+    S2 --> S3["stage 3 · score bands<br>drop · flag · pass"]
+    S3 --> OUT["<b>8 hits</b><br>+ a weak-match note<br>+ how many were dropped"]
+```
+
+The economics are the whole idea. The base retriever is cheap per document, so it can
+afford to look at everything and be a little sloppy; each later stage is more expensive
+per document and sees fewer of them. `k = 40` is the dial between them — too small and
+the accurate stages never see the right answer, too large and you pay for accuracy on
+documents that were never candidates.
+
+!!! done "Compose the stages into one object"
+
+    The funnel belongs behind a single retriever-shaped interface: the caller passes a
+    query and gets hits, and does not know whether there are two stages or five.
+
+    That is not tidiness. It is what keeps `k`, the reranker and the thresholds in one
+    place instead of spread across every call site, and it is why a stage can be swapped
+    out and the [eval](../05-measurement.md) re-run against the same questions. A funnel
+    you cannot reconfigure in one line is a funnel you will never measure.
+
+## The obvious middle stage, and what it did
+
+The standard rung-5 upgrade is the **cross-encoder reranker** at stage 2: retrieve 40
+candidates, have a model read each one next to the question, keep the best 8.
+
+Why everyone expects it to win is worth stating precisely:
+
+| | bi-encoder (the base retriever) | cross-encoder (the reranker) |
+|---|---|---|
+| How it scores | embeds query and document **separately**, then compares vectors | reads query **and** document together in one pass |
+| When the document is encoded | at index time, once | at query time, every time |
+| Cost | one vector lookup for the whole corpus | one forward pass **per candidate** |
+| Sees word-level interaction | no | yes |
+
+A bi-encoder has to compress a document into a single vector before it has ever seen the
+query. A cross-encoder gets both at once, which is strictly more information — hence the
+expectation, and hence the price: 40 candidates means 40 forward passes, in the request.
+
+Cross-encoders reliably beat bi-encoders at ordering, and the headroom here was real —
+Recall@40 is 0.95 against Recall@8 of 0.786.
 
 !!! measured "It made the ordering worse"
 
@@ -137,4 +180,4 @@ The system now retrieves well and admits when it cannot. It still answers every
 question with exactly one lookup — and some questions need the answer to the first
 lookup before you know what the second one is.
 
-That is **[rung 5](05-agentic.md)**.
+That is **[rung 6](06-agentic.md)**.

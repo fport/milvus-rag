@@ -6,6 +6,26 @@
 2. her pencereyi embed'le, vektörleri sakla
 3. soruyu embed'le, en yakın `k` taneyi döndür
 
+```mermaid
+flowchart LR
+    subgraph IDX["1-2. adım · bir kez"]
+        direction LR
+        F["dosya<br>4200 karakter"] --> W["her 1000'de kes<br>200 örtüşme"]
+        W --> W1["pencere @0"]
+        W --> W2["pencere @800"]
+        W --> W3["pencere @1600"]
+        W1 --> E["embedding modeli"]
+        W2 --> E
+        W3 --> E
+        E --> M[("numpy dizisinde<br>vektörler")]
+    end
+    subgraph ASK["3. adım · soru başına"]
+        direction LR
+        Q["soru"] --> QE["embedding modeli"] --> DOT["her satırla<br>iç çarpım"] --> K["argsort → top k"]
+    end
+    M -.-> DOT
+```
+
 Hepsi bu. Tam olarak tarif edildiği gibi bir kez kurmaya değer, çünkü üstündeki her
 basamak, olurken izlemen gereken bir arızanın tamiri.
 
@@ -106,7 +126,7 @@ O üç parça bir LLM'e "bağlamdan cevapla" diye verilseydi, `test_signals.py`'
 kullanarak beş yıldızlı bir tatil köyü hakkında bir şeyler yazardı.
 
 kNN "en yakın k" demektir. "Yakında hiçbir şey yok" diye bir şey yoktur.
-→ **[4. basamak](04-honesty.md)**
+→ **[5. basamak](05-honesty.md)**
 
 !!! done "En üstteki sonuca bir daha bak"
 

@@ -1,6 +1,6 @@
-# 5. basamak — Ajanlı erişim
+# 6. basamak — Ajanlı erişim
 
-1–4 basamakları bir hat kuruyor: soru girer, `k` parça çıkar, tek atış. O biçimin sert
+1–5 basamakları bir hat kuruyor: soru girer, `k` parça çıkar, tek atış. O biçimin sert
 bir tavanı var ve bu bir sıralama problemi değil.
 
 > *"Hangi uçlara kimlik doğrulaması olmadan erişilebiliyor?"*
@@ -9,12 +9,12 @@ Hiçbir `k` parça bunu cevaplamaz. Auth middleware'ini bulman, nereye takıldı
 sonra onun altında olmayan rotaları saymanız gerekir. Üç arama — ve **birincinin cevabını
 almadan ikinci sorguyu yazamazsın**.
 
-5. basamak bunu düzelten kayma: erişim bir hat aşaması olmayı bırakıp **başka bir şeyin
+6. basamak bunu düzelten kayma: erişim bir hat aşaması olmayı bırakıp **başka bir şeyin
 döngü içinde çağırdığı bir araca** dönüşüyor.
 
 ## Gerçekte ne değişiyor
 
-| | 1–4 basamakları | 5. basamak |
+| | 1–5 basamakları | 6. basamak |
 |---|---|---|
 | Sorguyu kim yazıyor | senin kodun, bir kez | model, tekrar tekrar |
 | Kaç arama | bir | ne kadar gerekiyorsa |
@@ -52,13 +52,13 @@ doğru vermesi gereken bir karar — ve menü büyüdükçe modeller seçmekte k
 Basamağın özü bu. Dört şey, altındaki erişim kalitesinden daha önemli.
 
 **Dürüst sinyalleri geçir.** Karar veren ajan olduğuna göre, erişimcinin bildiklerine
-ihtiyacı var: [4. basamaktan](04-honesty.md) gelen zayıf eşleşme notu, kanal başına
+ihtiyacı var: [5. basamaktan](05-honesty.md) gelen zayıf eşleşme notu, kanal başına
 skorlar, bir tasarım dokümanının içinde alıntılanan kodun gerçek kod sanılmaması için bir
 `DOCUMENT` etiketi ve indeksin ne kadar bayat olduğu — indeksin dört günlük olduğunu bilen
 bir ajan, "bu dosya yok" ile "bu dosya henüz indekslenmedi"yi ayırabilir.
 
 **Başarısız olmanın serbest olduğunu söyle.** Sunucu talimatlarında, açıkça. Onsuz,
-araçlarının cevaplayamayacağı bir soru sorulan bir model yine de cevaplar — 4. basamaktaki
+araçlarının cevaplayamayacağı bir soru sorulan bir model yine de cevaplar — 5. basamaktaki
 arızanın aynısı, bir seviye yukarıda.
 
 **Araçların erişebileceği alanı sınırla.** `read_code` yalnızca indekslenmiş dosyaları
@@ -91,7 +91,7 @@ Bu basamak konusunda açık ol; iyileştirdiği kadar kötüleştiren ilk basama
 
 - **Gecikme ve token.** Üç araç çağrısı ve bir okuma, 34 ms'lik tek bir aramaya karşı
   birkaç saniye ve birkaç bin token.
-- **Belirsizlik.** Aynı soru iki kez aynı yolu izlemiyor; bu da 4. basamaktaki eval'ini
+- **Belirsizlik.** Aynı soru iki kez aynı yolu izlemiyor; bu da 5. basamaktaki eval'ini
   uygulamayı epey zorlaştırıyor. Recall@k bir ajanı tarif etmiyor. Sonunda sonuçları
   ölçüyorsun — doğru cevapladı mı, kaç çağrıda — daha küçük bir küme üzerinde, elle.
 - **Yeni arıza biçimleri.** Hiçbir şey döndürmeyen bir sorguda döngüye girmek; ilk sonuç
@@ -110,4 +110,4 @@ Bazı soruların, kaç arama izin verirsen ver, hiçbir parça kümesinde cevab�
 Bunların cevabı korpusun *içinde* değil, korpusun bir *özelliği* — parçaların birbirleriyle
 nasıl ilişkilendiğinin.
 
-O, **[6. basamak](06-graph.md)**.
+O, **[7. basamak](07-graph.md)**.

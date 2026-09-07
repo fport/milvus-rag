@@ -27,14 +27,135 @@ maliyetini — tutarlı tutulması gereken iki indeks — ortadan kaldırıyor v
 olmasının büyük sebebi. Deposun bunu yapamıyorsa bu basamak, ikinci bir indeks çalıştırmak
 ve ikisine de yazmak demek.
 
-## Sonra: varsayılan olarak birleştirme
+## Karşılaştırılamayan iki skorlama sistemi
 
-İnsanları şaşırtan kısım burası ve ölçüldü.
+Bir sorguyu iki kanaldan da geçir, aynı belge için iki sayı alırsın:
 
-Akla ilk gelen tasarım "her zaman ikisini de koştur, sonuçları kaynaştır". Alışılmış
-kaynaştırıcı Reciprocal Rank Fusion: `Σ 1/(k + rank)`; skorlar yerine sıralar, çünkü
-kosinüs 0–1 arasında, BM25 kabaca 0–30 arasında yaşıyor ve ikisinin ağırlıklı toplamı,
-korpusla birlikte kayan bir normalizasyon sabiti gerektiriyor.
+```text
+BM25    →  12.00     "search score"
+vektör  →   0.86     "search score"
+```
+
+Akla ilk gelen hamle onları toplamak ya da ağırlıklandırıp toplamak. Yapma — o sayılar
+aynı dünyada yaşamıyor:
+
+| | kosinüs | BM25 |
+|---|---|---|
+| Aralık | −1 ile 1 arası, sınırlı | 0'dan sınırsıza |
+| Onu oynatan şey | iki vektör arasındaki açı | terim nadirliği, terim sıklığı, belge uzunluğu |
+| Korpusa bağlı mı | hayır | **evet** — `idf` senin korpusundan hesaplanıyor |
+| Sorguya bağlı mı | hayır | **evet** — nadir bir terim tüm skoru şişiriyor |
+
+Öldüren son iki satır. 12.00'lık bir BM25 skoru iki farklı korpusta aynı şeyi ifade
+etmiyor; hatta *aynı* korpusta iki farklı sorgu için bile. Herhangi bir
+`0.7 × kosinüs + 0.3 × normalize_bm25` bir normalizasyon sabiti gerektiriyor ve o sabit,
+korpus büyüdüğü anda kayıyor.
+
+Yani: **skorları at, sıraları tut.**
+
+Sıranın birimi yoktur. "BM25 listesinde birinci" her korpusta, her dilde, her sorguda aynı
+şeyi ifade eder. Skordan daha az bilgi taşır — #1 ile #2 arasındaki farkı kaybedersin — ve
+karşılaştırılabilirliğin bedeli tam olarak budur.
+
+## Reciprocal Rank Fusion, adım adım
+
+```text
+                              1
+RRF(d)  =   Σ    ─────────────────────────
+          listeler  k  +  rank_liste(d)
+```
+
+Bir belgenin göründüğü her liste `1/(k + oradaki sırası)` kadar katkı veriyor. Daha
+yüksek sıra → daha büyük katkı. Listeler boyunca topla. Toplama göre sırala.
+
+Algoritmanın tamamı bu. Bir örnek üzerinden gidelim.
+
+```mermaid
+flowchart LR
+    Q["sorgu"] --> BM25["BM25 listesi"]
+    Q --> VEC["vektör listesi"]
+
+    BM25 --> B1["1. &nbsp;A"]
+    BM25 --> B2["2. &nbsp;B"]
+    BM25 --> B3["3. &nbsp;C"]
+
+    VEC --> V1["1. &nbsp;C"]
+    VEC --> V2["2. &nbsp;A"]
+    VEC --> V3["3. &nbsp;B"]
+
+    B1 --> F["RRF<br>k = 60"]
+    B2 --> F
+    B3 --> F
+    V1 --> F
+    V2 --> F
+    V3 --> F
+
+    F --> OUT["A &nbsp;0.03252<br>C &nbsp;0.03227<br>B &nbsp;0.03200"]
+```
+
+Adım adım, **A belgesi** için:
+
+```text
+BM25   →  sıra #1  →  1 / (60 + 1)  =  0.016393
+vektör →  sıra #2  →  1 / (60 + 2)  =  0.016129
+                                       ─────────
+                            RRF(A) =    0.032522
+```
+
+Üçü birden:
+
+| Belge | BM25 sırası | katkısı | vektör sırası | katkısı | RRF | sonuç |
+|---|---|---|---|---|---|---|
+| **A** | #1 | 1/61 = 0.016393 | #2 | 1/62 = 0.016129 | **0.032522** | 1. |
+| **C** | #3 | 1/63 = 0.015873 | #1 | 1/61 = 0.016393 | **0.032266** | 2. |
+| **B** | #2 | 1/62 = 0.016129 | #3 | 1/63 = 0.015873 | **0.032002** | 3. |
+
+**A > C > B.** Bu sıra iki kanalda da yoktu. A kazanıyor çünkü ikisinin de üstlerine
+yakın; C ise B'yi geçiyor çünkü bir listedeki birincilik, bir ikinciliği kıl payı
+aşıyor.
+
+O üç sayının ne kadar *yakın* olduğuna dikkat et — 0.0325, 0.0323, 0.0320. Bu bir
+tesadüf değil ve anlaşılması gereken bir sonraki şey.
+
+### `k` gerçekte ne yapıyor
+
+`k`, listenin tepesinin ne kadar baskın olacağını kısan bir amortisör. Bir belgenin
+birincilik katkısının, beşincilik katkısına oranına bak:
+
+| `k` | sıra #1 | sıra #5 | oran |
+|---|---|---|---|
+| 0 | 1.000 | 0.200 | **5.0×** |
+| 10 | 0.0909 | 0.0667 | 1.4× |
+| 60 | 0.0164 | 0.0154 | **1.06×** |
+
+`k=0`'da birinci olmak beşinci olmaktan beş kat iyi. `k=60`'ta %6 iyi.
+
+Bu da kaynaştırmanın neyi ödüllendirdiğine dair somut bir kurala dönüşüyor. İki belge:
+
+- **D** — BM25'te #1, vektör listesinde **hiç yok**
+- **E** — *her iki* listede de #5
+
+| `k` | D (bir listenin tepesi) | E (ikisinde de vasat) | kazanan |
+|---|---|---|---|
+| 0 | 1.000 | 0.400 | **D** |
+| 1 | 0.500 | 0.333 | **D** |
+| 3 | 0.250 | 0.250 | berabere |
+| 10 | 0.0909 | 0.1333 | **E** |
+| **60** | 0.0164 | **0.0308** | **E**, 1.9 kat |
+
+!!! done "Akılda tutulacak tek cümle"
+
+    Büyük bir `k`, **kanalların hemfikir olmasını**, **birinde birinci olmaktan** daha
+    önemli kılıyor. `k = 60`, orijinal RRF makalesindeki değer ve uzlaşıya kuvvetli bir
+    tercih.
+
+Genelde istediğin de bu. Birbirinden bağımsız iki erişim yönteminin aynı belgeyi
+beğenmesi gerçek bir kanıt; tek bir yöntemin ona bayılması o yöntemin bir garipliği
+olabilir.
+
+## Ve her zaman kaynaştırmanın kaybetme sebebi tam olarak bu
+
+Ölçülen sonuç artık farklı okunuyor.
 
 !!! measured "Her zaman hybrid, tek başına yoğundan daha kötü"
 
@@ -47,12 +168,23 @@ korpusla birlikte kayan bir normalizasyon sabiti gerektiriyor.
 
     Her zaman kaynaştırmak, yalnızca yoğun kanalı kullanmaya karşı **0.074 MRR'a mal oldu**.
 
-Mekanizma bir kez görülünce şaşırtıcı değil: düz metin bir soruda BM25'in ilk sonucu bir
-anahtar kelime tesadüfüdür. RRF bunu bilmez. Başarısız olan kanalın en iyi tahminini yukarı
-taşır ve o tahmin gerçek bir cevabın yerini alır.
+RRF, iki listenin de birer *görüş* olduğunu varsayıyor. Düz dille sorulmuş bir soruda
+BM25'in listesi bir görüş değil — sadece ortak bir kelimeyi paylaşan belgeler. Ama RRF
+farkı göremiyor: o belgeler bir listede, dolayısıyla tam oy alıyorlar ve `k=60` ile
+gürültülü kanalın ortalarında duran bir belge, iyi kanalın birinci koyduğu belgeyi
+geçiyor.
 
-Kaynaştırma, iki kanalın da sorguya adil bir şans bulduğunu varsayar. Yalnızca birinin
-hizmet edebileceği bir sorguda etkin biçimde zararlıdır.
+Uzlaşı ağırlıklandırması, iki kanal da yetkinken bir erdem. Biri hiçbir zaman yetkin
+olmayacaksa bir hata.
+
+```mermaid
+flowchart LR
+    Q2["‘webhook olayları nasıl kuyruğa alınıyor?’"] --> D["yoğun<br>doğru dosyayı #1'de buluyor"]
+    Q2 --> B["BM25<br>‘olay’, ‘kuyruk’ üzerinden eşleşiyor"]
+    D --> R["RRF"]
+    B --> R
+    R --> BAD["uzlaşıyla yukarı taşınmış<br>bir anahtar kelime tesadüfü,<br>gerçek cevabın üstünde"]
+```
 
 ## Onun yerine yönlendir
 
@@ -96,4 +228,4 @@ belirsizlik kaynağı karşılığında verirdi.
 Erişimci artık iki sorgu biçimi için de doğru şeyi buluyor. Aynı güvenle, beş yıldızlı bir
 tatil köyü sorusuna da sekiz parça döndürecek.
 
-O, **[4. basamak](04-honesty.md)**.
+O, **[5. basamak](05-honesty.md)**.

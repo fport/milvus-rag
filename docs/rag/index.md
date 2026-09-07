@@ -4,8 +4,8 @@ RAG is not one architecture. It is a ladder, and every rung exists because a spe
 thing broke on the rung below it.
 
 That order matters more than it sounds. The usual failure is not building a bad RAG —
-it is building rung 4 on day one, never seeing the failures that motivated rungs 2 and
-3, and being unable to tell which of the six moving parts is the one hurting you.
+it is building rung 5 on day one, never seeing the failures that motivated rungs 2 and
+3, and being unable to tell which of the seven moving parts is the one hurting you.
 
 So: climb one rung at a time, and only when something is actually broken.
 
@@ -17,9 +17,10 @@ So: climb one rung at a time, and only when something is actually broken.
 | **1** | [Windows, embeddings, top-k](01-naive.md) | you cannot fit the corpus in a prompt | an embedding model |
 | **2** | [Chunks that are units](02-chunking.md) | half a function, a citation nobody can follow | a parser, per language |
 | **3** | [Lexical search and routing](03-hybrid.md) | `handleAuthCallback` is invisible to a vector | a second index, or a store that has one |
-| **4** | [Knowing when you don't know](04-honesty.md) | confident answers to unanswerable questions | a hand-labelled eval set |
-| **5** | [Agentic retrieval](05-agentic.md) | one lookup cannot answer a two-hop question | latency, tokens, non-determinism |
-| **6** | [GraphRAG](06-graph.md) | "what are the main themes", "what breaks if I change this" | an extraction pass, and re-running it |
+| **4** | [Query transformation](04-query.md) | the question and the answer use different words | an LLM call before every search |
+| **5** | [Knowing when you don't know](05-honesty.md) | confident answers to unanswerable questions | a hand-labelled eval set |
+| **6** | [Agentic retrieval](06-agentic.md) | one lookup cannot answer a two-hop question | latency, tokens, non-determinism |
+| **7** | [GraphRAG](07-graph.md) | "what are the main themes", "what breaks if I change this" | an extraction pass, and re-running it |
 
 </div>
 
@@ -56,7 +57,7 @@ opinion in retrieval is reliably wrong: three of this project's decisions came o
 opposite of the intuition that motivated them.
 
 The set-up, the metrics and what to do about negative questions are on
-**[Measurement](../05-measurement.md)**. Build it before rung 2, not after rung 5.
+**[Measurement](../05-measurement.md)**. Build it before rung 2, not after rung 6.
 
 !!! measured "Three times intuition lost here"
 
@@ -77,17 +78,56 @@ Diagnose from the symptom, not from the architecture diagram.
 | The corpus is small and rarely changes | [0](#rung-0-dont) |
 | Results are cut mid-function, and citations point at an offset | [2](02-chunking.md) |
 | An exact identifier, error code or config key is not found | [3](03-hybrid.md) |
-| It answers questions the corpus cannot answer | [4](04-honesty.md) |
+| The answer is in there, but the question is not phrased the way the document is written | [4](04-query.md) |
+| It answers questions the corpus cannot answer | [5](05-honesty.md) |
 | You changed something and cannot say whether it helped | [the handrail](../05-measurement.md) |
-| The answer needs a lookup, then a second lookup based on the first | [5](05-agentic.md) |
-| "What are the main themes?" / "What depends on this?" | [6](06-graph.md) |
+| The answer needs a lookup, then a second lookup based on the first | [6](06-agentic.md) |
+| "What are the main themes?" / "What depends on this?" | [7](07-graph.md) |
+
+## How it gets assembled
+
+The rungs are an order of *problems*. The wiring is shorter than that, and above rung 1
+it is the same four objects every time:
+
+```mermaid
+flowchart LR
+    subgraph BUILD["once, at index time"]
+        direction LR
+        DOCS["documents"] --> CHUNK["chunker"] --> EMB["embedding model"] --> STORE[("vector store<br>+ lexical index")]
+    end
+
+    subgraph ASK["per question"]
+        direction LR
+        Q["question"] --> T["query transform<br>rung 4 · optional"] --> RET["base retriever<br>k = 40"]
+        RET --> FUNNEL["filter funnel<br>rerank · score bands<br>rung 5"]
+        FUNNEL --> LLM["LLM"] --> ANS["cited answer"]
+    end
+
+    STORE -.-> RET
+    EMB -.-> T
+```
+
+1. **Set up the embedding model.** The same model at index time and at query time,
+   always. Two models means two spaces, and every cosine number after that is noise.
+2. **Connect the store.** One collection, dense and lexical side by side if it supports
+   that ([rung 3](03-hybrid.md)).
+3. **Build the filter funnel.** A base retriever with a wide `k`, then whatever narrows
+   it — reranker, score bands, metadata filters — composed into **one object** that the
+   caller uses like a plain retriever. That composition is the point: it keeps `k` and
+   the narrowing rules in one place instead of spread across call sites, and it is what
+   lets you swap a stage out and re-run the eval. [Rung 5](05-honesty.md) is where the
+   funnel's stages get chosen, and measured.
+4. **Set up the LLM.** Last, and optional — everything above answers a search request
+   with no model involved at all.
 
 ## Where this project sits
 
-`milvus-rag` is rungs 1 to 5, built in that order, with the measurements from each step
-kept. Rung 6 is deliberately not built — [that page](06-graph.md) says what it would
-take and why the answer for a codebase is different from the answer for prose.
+`milvus-rag` is rungs 1, 2, 3, 5 and 6, built in that order, with the measurements from
+each step kept. Rung 4 has a page but is not in the service —
+[it explains why](04-query.md), and what this project does at index time instead. Rung 7
+is deliberately not built; [that page](07-graph.md) says what it would take and why the
+answer for a codebase is different from the answer for prose.
 
 The five chapters under **[The pipeline](../01-sources.md)** are the same story told
-concretely: this is what rungs 1–5 look like when they are one running service instead
-of six ideas.
+concretely: this is what those rungs look like as one running service instead of a list
+of ideas.

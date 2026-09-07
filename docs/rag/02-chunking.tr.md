@@ -44,6 +44,20 @@ O başlığı `text`'in içine kat, insana gösterdiğin her atıf üç satır �
 `indexed_text`'ten çıkar, `handle` adlı bir metot repodaki diğer kırk `handle`'dan ayırt
 edilemez olsun.
 
+```mermaid
+flowchart LR
+    SRC["kaynak dosya"] --> P["ayrıştırıcı"]
+    P --> C["bir parça<br>= bir kod birimi"]
+    C --> T["<b>text</b><br>yalnızca gövde"]
+    C --> H["<b>header</b><br>dosya · sınıf · metot<br>import'lar · dil"]
+    T --> CITE["insana gösterilen<br>atıf"]
+    T --> PROMPT["LLM'in okuduğu şey"]
+    T --> IX["<b>indexed_text</b><br>header + text"]
+    H --> IX
+    IX --> EMB["embedding"]
+    IX --> BM["BM25"]
+```
+
 Bu basamaktan tek bir şey alacaksan şunu al: **gösterdiğinden fazlasını embed et.**
 Hiçbir maliyeti yok ve bir parçanın, içinde yaşadığı sınıfın adıyla bulunabilmesinin
 sebebi bu.

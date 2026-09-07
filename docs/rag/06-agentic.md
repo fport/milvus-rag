@@ -1,6 +1,6 @@
-# Rung 5 — Agentic retrieval
+# Rung 6 — Agentic retrieval
 
-Rungs 1–4 build a pipeline: question in, `k` chunks out, one shot. That shape has a
+Rungs 1–5 build a pipeline: question in, `k` chunks out, one shot. That shape has a
 hard ceiling, and it is not a ranking problem.
 
 > *"Which endpoints can be reached without authentication?"*
@@ -9,12 +9,12 @@ No `k` chunks answer that. You have to find the auth middleware, find where it i
 mounted, then enumerate the routes that are not under it. Three lookups, and **you
 cannot write the second query until you have the answer to the first**.
 
-Rung 5 is the shift that fixes it: retrieval stops being a pipeline stage and becomes
+Rung 6 is the shift that fixes it: retrieval stops being a pipeline stage and becomes
 **a tool that something else calls in a loop**.
 
 ## What actually changes
 
-| | Rungs 1–4 | Rung 5 |
+| | Rungs 1–5 | Rung 6 |
 |---|---|---|
 | Who writes the query | your code, once | the model, repeatedly |
 | How many lookups | one | as many as it takes |
@@ -53,14 +53,14 @@ This is the substance of the rung. Four things matter more than the retrieval qu
 underneath.
 
 **Pass the honest signals through.** The agent is the one deciding, so it needs what
-the retriever knows: the weak-match note from [rung 4](04-honesty.md), the per-channel
+the retriever knows: the weak-match note from [rung 5](05-honesty.md), the per-channel
 scores, a `DOCUMENT` label so code quoted inside a design doc is not mistaken for real
 code, and how stale the index is — an agent that knows the index is four days old can
 tell "this file does not exist" from "this file is not indexed yet".
 
 **Say that failing is allowed.** In the server instructions, explicitly. Without it a
 model asked a question its tools cannot answer will answer anyway — the same failure as
-rung 4, one level up.
+rung 5, one level up.
 
 **Bound what the tools can reach.** `read_code` opens indexed files only. That
 restriction is what makes "it is not there" trustworthy, and it is also the security
@@ -95,7 +95,7 @@ better.
 - **Latency and tokens.** Three tool calls and a read is several seconds and several
   thousand tokens against one 34 ms search.
 - **Non-determinism.** The same question does not take the same path twice, which makes
-  your rung-4 eval much harder to apply. Recall@k does not describe an agent. You end up
+  your rung-5 eval much harder to apply. Recall@k does not describe an agent. You end up
   measuring outcomes — did it answer correctly, in how many calls — over a smaller set,
   by hand.
 - **New failure modes.** Looping on a query that returns nothing; stopping after one
@@ -114,4 +114,4 @@ Some questions have no answer in any set of chunks, however many lookups you all
 The answer to those is not *in* the corpus, it is a property *of* the corpus — of how
 the pieces relate to each other.
 
-That is **[rung 6](06-graph.md)**.
+That is **[rung 7](07-graph.md)**.

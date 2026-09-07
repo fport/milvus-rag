@@ -27,14 +27,133 @@ this rung — two indexes that must be kept consistent — and is most of why Mi
 here. If your store cannot do that, this rung means running a second index and writing
 to both, transactionally-ish.
 
-## Then: do not merge them by default
+## Two scoring systems that cannot be compared
 
-This is the part that surprises people, and it is measured.
+Run a query through both channels and you get two numbers for the same document:
 
-The obvious design is "always run both, fuse the results". Reciprocal Rank Fusion is the
-usual fuser: `Σ 1/(k + rank)`, ranks rather than scores because cosine lives in 0–1 and
-BM25 in roughly 0–30, and any weighted sum of the two needs a normalization constant
-that drifts with the corpus.
+```text
+BM25    →  12.00     "search score"
+vector  →   0.86     "search score"
+```
+
+The obvious move is to add them, or to weight and add them. Do not — those numbers do
+not live in the same world:
+
+| | cosine | BM25 |
+|---|---|---|
+| Range | −1 to 1, bounded | 0 to unbounded |
+| What moves it | the angle between two vectors | term rarity, term frequency, document length |
+| Depends on the corpus | no | **yes** — `idf` is computed from your corpus |
+| Depends on the query | no | **yes** — a rare term inflates the whole score |
+
+The last two rows are the killers. A BM25 score of 12.00 does not mean the same thing on
+two different corpora, or even for two different queries on the *same* corpus. Any
+`0.7 × cosine + 0.3 × normalized_bm25` needs a normalization constant, and that constant
+drifts the moment the corpus grows.
+
+So: **throw the scores away and keep the ranks.**
+
+A rank has no units. "First in the BM25 list" means the same thing on every corpus, in
+every language, for every query. It carries less information than the score — you lose
+the gap between #1 and #2 — and that is exactly the price of comparability.
+
+## Reciprocal Rank Fusion, worked
+
+```text
+                              1
+RRF(d)  =   Σ    ─────────────────────────
+           lists   k  +  rank_list(d)
+```
+
+Each list a document appears in contributes `1/(k + its rank there)`. Higher rank →
+larger contributor. Sum across lists. Sort by the sum.
+
+That is the whole algorithm. Work an example.
+
+```mermaid
+flowchart LR
+    Q["query"] --> BM25["BM25 list"]
+    Q --> VEC["vector list"]
+
+    BM25 --> B1["1st &nbsp;A"]
+    BM25 --> B2["2nd &nbsp;B"]
+    BM25 --> B3["3rd &nbsp;C"]
+
+    VEC --> V1["1st &nbsp;C"]
+    VEC --> V2["2nd &nbsp;A"]
+    VEC --> V3["3rd &nbsp;B"]
+
+    B1 --> F["RRF<br>k = 60"]
+    B2 --> F
+    B3 --> F
+    V1 --> F
+    V2 --> F
+    V3 --> F
+
+    F --> OUT["A &nbsp;0.03252<br>C &nbsp;0.03227<br>B &nbsp;0.03200"]
+```
+
+Step by step, for **document A**:
+
+```text
+BM25   →  rank #1  →  1 / (60 + 1)  =  0.016393
+vector →  rank #2  →  1 / (60 + 2)  =  0.016129
+                                       ─────────
+                            RRF(A) =    0.032522
+```
+
+All three:
+
+| Doc | BM25 rank | contributes | vector rank | contributes | RRF | final |
+|---|---|---|---|---|---|---|
+| **A** | #1 | 1/61 = 0.016393 | #2 | 1/62 = 0.016129 | **0.032522** | 1st |
+| **C** | #3 | 1/63 = 0.015873 | #1 | 1/61 = 0.016393 | **0.032266** | 2nd |
+| **B** | #2 | 1/62 = 0.016129 | #3 | 1/63 = 0.015873 | **0.032002** | 3rd |
+
+**A > C > B.** Neither channel had that order. A wins because it is near the top of
+both; C beats B because a first place in one list outweighs a second place, barely.
+
+Notice how *close* those three numbers are — 0.0325, 0.0323, 0.0320. That is not an
+accident, and it is the next thing to understand.
+
+### What `k` actually does
+
+`k` is a damper on how much the top of a list dominates. Look at what one document's
+first-place contribution is worth relative to its fifth-place contribution:
+
+| `k` | rank #1 | rank #5 | ratio |
+|---|---|---|---|
+| 0 | 1.000 | 0.200 | **5.0×** |
+| 10 | 0.0909 | 0.0667 | 1.4× |
+| 60 | 0.0164 | 0.0154 | **1.06×** |
+
+At `k=0`, being first is five times better than being fifth. At `k=60` it is 6% better.
+
+Which turns into a concrete rule about what fusion rewards. Two documents:
+
+- **D** — #1 in BM25, and **absent** from the vector list
+- **E** — #5 in *both* lists
+
+| `k` | D (top of one list) | E (mediocre in both) | winner |
+|---|---|---|---|
+| 0 | 1.000 | 0.400 | **D** |
+| 1 | 0.500 | 0.333 | **D** |
+| 3 | 0.250 | 0.250 | tie |
+| 10 | 0.0909 | 0.1333 | **E** |
+| **60** | 0.0164 | **0.0308** | **E**, by 1.9× |
+
+!!! done "The one sentence to keep"
+
+    A large `k` makes **agreement between the channels** matter more than **being first
+    in one of them**. `k = 60` is the value from the original RRF paper, and it is a
+    strong preference for consensus.
+
+That is usually what you want. Two independent retrieval methods both liking a document
+is real evidence; one method loving it could be a quirk of that method.
+
+## And it is exactly why always-fusing lost
+
+Now the measured result reads differently.
 
 !!! measured "Always-hybrid is worse than dense alone"
 
@@ -47,12 +166,23 @@ that drifts with the corpus.
 
     Fusing always **cost 0.074 MRR** against just using the dense channel.
 
-The mechanism is not subtle once you see it: for a prose question, BM25's top result is
-a keyword coincidence. RRF does not know that. It promotes the best guess of the channel
-that failed, and that guess displaces a real answer.
+RRF assumes both lists are *opinions*. For a plain-language question, BM25's list is not
+an opinion — it is whatever documents happened to share a common word. But RRF cannot
+tell the difference: those documents are in a list, so they get a full vote, and with
+`k=60` a document sitting mid-list in the noisy channel outranks a document the good
+channel put first.
 
-Fusion assumes both channels had a fair shot at the query. For a query only one of them
-can serve, it is actively harmful.
+Consensus weighting is a virtue when both channels are competent. It is a bug when one
+of them was never going to be.
+
+```mermaid
+flowchart LR
+    Q2["‘how are webhook events queued?’"] --> D["dense<br>finds the right file at #1"]
+    Q2 --> B["BM25<br>matches on ‘events’, ‘queued’"]
+    D --> R["RRF"]
+    B --> R
+    R --> BAD["a keyword coincidence,<br>promoted by consensus,<br>above the real answer"]
+```
 
 ## Route instead
 
@@ -97,4 +227,4 @@ call and a source of non-determinism.
 The retriever now finds the right thing for both query shapes. It will also, with equal
 confidence, return eight chunks for a question about a five-star resort.
 
-That is **[rung 4](04-honesty.md)**.
+That is **[rung 5](05-honesty.md)**.

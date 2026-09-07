@@ -44,6 +44,20 @@ Fold that header into `text` and every citation you show a human starts with thr
 lines of metadata. Leave it out of `indexed_text` and a method called `handle` is
 indistinguishable from the forty other `handle`s in the repo.
 
+```mermaid
+flowchart LR
+    SRC["source file"] --> P["parser"]
+    P --> C["one chunk<br>= one code unit"]
+    C --> T["<b>text</b><br>just the body"]
+    C --> H["<b>header</b><br>file · class · method<br>imports · language"]
+    T --> CITE["citation shown<br>to a human"]
+    T --> PROMPT["what the LLM reads"]
+    T --> IX["<b>indexed_text</b><br>header + text"]
+    H --> IX
+    IX --> EMB["embedding"]
+    IX --> BM["BM25"]
+```
+
 If you take one thing from this rung, take this: **embed more than you display.** It
 costs nothing and it is why a chunk can be found by the name of the class it lives in.
 

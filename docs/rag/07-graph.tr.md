@@ -1,8 +1,8 @@
-# 6. basamak — GraphRAG
+# 7. basamak — GraphRAG
 
 !!! done "Burada kurulmadı"
 
-    Bu proje 5. basamakta duruyor. Bu sayfa 6. basamağın ne olduğunu, ne zaman değdiğini
+    Bu proje 6. basamakta duruyor. Bu sayfa 7. basamağın ne olduğunu, ne zaman değdiğini
     ve kurulacak olsaydı önce neyin kurulacağını anlatıyor — gerisiyle aynı ölçüde, ki bu
     da aşağıdaki sayıların başkalarına ait olduğu ve öyle etiketlendiği anlamına geliyor.
 
@@ -46,7 +46,7 @@ Bir kod tabanının **hiçbir LLM gerektirmeyen** gerçek ve kesin bir grafiği 
 dosyayı ayrıştırıyor — parçaları üreten aynı geçiş, kenarları da belirlenimci biçimde ve
 bedavaya üretebilir.
 
-Bu önemli, çünkü 6. basamağın asıl maliyetini ortadan kaldırıyor. Metin GraphRAG'inde
+Bu önemli, çünkü 7. basamağın asıl maliyetini ortadan kaldırıyor. Metin GraphRAG'inde
 çıkarım, korpusun tamamı üzerinde bir LLM geçişi; gerçek paraya mal oluyor, *olasılıksal*
 (aynı doküman iki kez çıkarıldığında farklı varlıklar veriyor) ve korpus değiştiğinde
 yeniden koşulması gerekiyor. Bir çağrı grafiği bunların hiçbiri değil: kesin, ucuz ve
@@ -84,8 +84,8 @@ biçimde bir maliyet, üstüne bir de kümeleme geçişi.
 
 **Değerlendirme.** Bu konuda yavaş olmanın asıl sebebi bu. Küresel bir cevabın altın pasajı
 yok, dolayısıyla Recall@k geçerli değil ve dürüst yöntemler kapsamlılık ile çeşitlilik
-üzerinde LLM-hakem, ya da insan puanlaması. İkisi de [4. basamaktaki](04-honesty.md)
-araçlardan daha zayıf. 6. basamağı kurup işe yaradığını gösterememek tamamen mümkün — ki bu
+üzerinde LLM-hakem, ya da insan puanlaması. İkisi de [5. basamaktaki](05-honesty.md)
+araçlardan daha zayıf. 7. basamağı kurup işe yaradığını gösterememek tamamen mümkün — ki bu
 projenin tek kuralına göre, yayınlamaman gerektiği anlamına gelir.
 
 ## Ne zaman çıkmalı
@@ -99,7 +99,7 @@ projenin tek kuralına göre, yayınlamaman gerektiği anlamına gelir.
 - ve — kod için — bedava yapısal grafiği zaten aldın ve yetmedi
 
 Gerçekten gördüğün arızalar "fonksiyonu bulamadı" ya da "reddetmesi gereken bir soruyu
-cevapladı" ise çıkma. Bunlar 3. ve 4. basamak, çok daha ucuzlar ve 6. basamak onları
+cevapladı" ise çıkma. Bunlar 3. ve 5. basamak, çok daha ucuzlar ve 7. basamak onları
 düzeltmiyor.
 
 !!! measured "Bu basamağın dürüst durumu"

@@ -92,9 +92,10 @@ plugins:
             1. Naive RAG: 1. Naif RAG
             2. Chunks that are units: 2. Birim olan parçalar
             3. Lexical search and routing: 3. Sözcüksel arama ve yönlendirme
-            4. Knowing when you don't know: 4. Bilmediğini bilmek
-            5. Agentic retrieval: 5. Ajanlı erişim
-            6. GraphRAG: 6. GraphRAG
+            4. Query transformation: 4. Sorgu dönüşümü
+            5. Knowing when you don't know: 5. Bilmediğini bilmek
+            6. Agentic retrieval: 6. Ajanlı erişim
+            7. GraphRAG: 7. GraphRAG
             The pipeline: Hat
             1. Sources and sync: 1. Kaynaklar ve senkronizasyon
             2. Indexing: 2. İndeksleme
@@ -111,9 +112,10 @@ nav:
       - 1. Naive RAG: rag/01-naive.md
       - 2. Chunks that are units: rag/02-chunking.md
       - 3. Lexical search and routing: rag/03-hybrid.md
-      - 4. Knowing when you don't know: rag/04-honesty.md
-      - 5. Agentic retrieval: rag/05-agentic.md
-      - 6. GraphRAG: rag/06-graph.md
+      - 4. Query transformation: rag/04-query.md
+      - 5. Knowing when you don't know: rag/05-honesty.md
+      - 6. Agentic retrieval: rag/06-agentic.md
+      - 7. GraphRAG: rag/07-graph.md
   - The pipeline:
       - 1. Sources and sync: 01-sources.md
       - 2. Indexing: 02-indexing.md
