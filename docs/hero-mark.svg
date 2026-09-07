@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160" role="img" aria-label="Milvus RAG">
+  <!-- The mark in one line: code on the left becomes points in a vector space on
+       the right. Same palette as the hero. -->
+  <rect width="160" height="160" rx="30" fill="#0d1410"/>
+
+  <!-- source lines -->
+  <g stroke="#3bf66b" stroke-width="7" stroke-linecap="round" opacity="0.9">
+    <line x1="30" y1="52" x2="66" y2="52"/>
+    <line x1="30" y1="72" x2="58" y2="72"/>
+    <line x1="30" y1="92" x2="70" y2="92"/>
+    <line x1="30" y1="112" x2="52" y2="112"/>
+  </g>
+
+  <!-- the crossing: chunk to vector -->
+  <g stroke="#29b34e" stroke-width="2" opacity="0.65">
+    <path d="M72 62 C 92 62, 96 74, 112 60" fill="none"/>
+    <path d="M72 80 C 92 80, 98 92, 118 84" fill="none"/>
+    <path d="M72 98 C 92 98, 96 106, 108 108" fill="none"/>
+  </g>
+
+  <!-- vector space -->
+  <g fill="#3bf66b">
+    <circle cx="114" cy="58" r="6"/>
+    <circle cx="130" cy="76" r="5"/>
+    <circle cx="120" cy="84" r="4.5"/>
+    <circle cx="108" cy="108" r="5.5"/>
+    <circle cx="128" cy="106" r="4"/>
+    <circle cx="116" cy="126" r="4.5"/>
+  </g>
+  <g fill="#ffc24b">
+    <!-- the hit that comes back -->
+    <circle cx="120" cy="84" r="8" fill="none" stroke="#ffc24b" stroke-width="2.5"/>
+  </g>
+</svg>

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 420" role="img" aria-label="Milvus RAG flow: push, tree-sitter chunk, BGE-M3 + BM25 into Milvus, an agent that knows your code over MCP + RAG">
-  <!-- Anlatı hero'su, tek 10 sn'lik döngü: commit darbesi dosyayı chunk'lara böler,
-       chunk'lar vektör kümesine (Milvus) akar, Türkçe sorgu kümeye gidip skorlu
-       hit'leri geri getirir. JS yok — GitHub <img> içinde yalnızca SMIL/CSS çalışır. -->
+  <!-- A narrative hero on one 10s loop: a commit pulse splits the file into chunks,
+       the chunks flow into the vector cloud (Milvus), a query travels to the cloud and
+       brings scored hits back. No JS — only SMIL/CSS run inside a GitHub <img>. -->
   <defs>
     <radialGradient id="glowGreen" cx="50%" cy="50%" r="50%">
       <stop offset="0%" stop-color="#3bf66b" stop-opacity="0.14"/>
@@ -33,7 +33,7 @@
   <ellipse cx="1150" cy="340" rx="320" ry="180" fill="url(#glowBlue)"/>
   <rect x="430" y="-60" width="300" height="560" fill="url(#sheen)" transform="skewX(-14)"/>
 
-  <!-- uzak, sönük yıldızlar -->
+  <!-- distant, dim stars -->
   <g fill="#3bf66b" opacity="0.35">
     <circle cx="95" cy="120" r="2"/>
     <circle cx="700" cy="75" r="1.5"/>
@@ -41,7 +41,7 @@
     <circle cx="1560" cy="110" r="2"/>
   </g>
 
-  <!-- ═ Sahne 1: git push ═ -->
+  <!-- = Scene 1: git push = -->
   <g stroke="#2a4033" stroke-width="2" fill="none">
     <path d="M 210 115 V 305"/>
     <path d="M 255 270 C 255 245 210 250 210 228"/>
@@ -56,14 +56,14 @@
   </circle>
   <text class="label" x="210" y="348" text-anchor="middle">push</text>
 
-  <!-- push → dosya bağlantısı ve darbe -->
+  <!-- push -> file link and pulse -->
   <path d="M 218 152 C 300 165 340 180 398 195" fill="none" stroke="#3bf66b" stroke-opacity="0.2" stroke-width="1.2"/>
   <circle class="motion" r="3" fill="#dcebe1" opacity="0">
     <animateMotion dur="10s" repeatCount="indefinite" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;0.06;0.16;1" path="M 218 152 C 300 165 340 180 398 195"/>
     <animate attributeName="opacity" dur="10s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.06;0.07;0.15;0.16;1"/>
   </circle>
 
-  <!-- ═ Sahne 2: dosya → tree-sitter chunk ═ -->
+  <!-- = Scene 2: file -> tree-sitter chunks = -->
   <rect x="400" y="135" width="120" height="150" rx="10" fill="#0d1410" stroke="#2a4033" stroke-width="1.5"/>
   <g rx="2.5">
     <rect x="416" y="153" width="72" height="5" rx="2.5" fill="#29b34e" opacity="0.9"/>
@@ -104,7 +104,7 @@
   </rect>
   <text class="label" x="536" y="348" text-anchor="middle">tree-sitter chunk</text>
 
-  <!-- chunk → küme yolları ve embed noktaları -->
+  <!-- chunk -> cloud paths and embed points -->
   <g stroke="#3bf66b" stroke-opacity="0.12" stroke-width="1.2" fill="none">
     <path d="M 674 159 C 770 150 830 158 903 165"/>
     <path d="M 674 225 C 780 222 860 216 970 210"/>
@@ -123,7 +123,7 @@
     <animate attributeName="opacity" dur="10s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.36;0.37;0.45;0.46;1"/>
   </circle>
 
-  <!-- ═ Sahne 3: vektör kümesi (Milvus) ═ -->
+  <!-- = Scene 3: the vector cloud (Milvus) = -->
   <g stroke="#3bf66b" stroke-opacity="0.35" stroke-width="1.2" fill="none">
     <path d="M 980 210 L 905 165"/>
     <path d="M 980 210 L 925 262"/>
@@ -154,7 +154,7 @@
   </circle>
   <text class="label" x="980" y="348" text-anchor="middle">BGE-M3 + BM25 → Milvus</text>
 
-  <!-- ═ Sahne 4: Türkçe sorgu ve skorlu hit'ler ═ -->
+  <!-- = Scene 4: a non-English query and scored hits = -->
   <text x="1233" y="148" font-size="16" fill="#dcebe1" opacity="0.95">&gt; <tspan fill="#3bf66b" font-weight="600">MCP + RAG</tspan> · knows your code</text>
   <rect class="motion" x="1546" y="134" width="8" height="16" fill="#3bf66b">
     <animate attributeName="opacity" dur="1.2s" repeatCount="indefinite" calcMode="discrete" values="1;0" keyTimes="0;0.5"/>
@@ -165,7 +165,7 @@
     <animate attributeName="opacity" dur="10s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.55;0.56;0.62;0.63;1"/>
   </circle>
 
-  <!-- sonuç satırları -->
+  <!-- result rows -->
   <g>
     <rect x="1240" y="200" width="300" height="26" rx="6" fill="#0d1410" stroke="#2a4033" stroke-width="1.5"/>
     <rect x="1248" y="206" width="3" height="14" rx="1.5" fill="#3bf66b"/>
@@ -183,7 +183,7 @@
     <rect x="1504" y="281" width="24" height="8" rx="4" fill="#3bf66b" opacity="0.75"/>
   </g>
 
-  <!-- küme → sonuç dönüş noktaları ve satır parlamaları -->
+  <!-- cloud -> result return points and row glows -->
   <circle class="motion" r="2.5" fill="#3bf66b" opacity="0">
     <animateMotion dur="10s" repeatCount="indefinite" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;0.66;0.73;1" path="M 990 210 C 1090 202 1160 210 1244 212"/>
     <animate attributeName="opacity" dur="10s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.66;0.67;0.72;0.73;1"/>

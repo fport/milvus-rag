@@ -29,6 +29,10 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
 ]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocs-static-i18n>=1.2",
+]
 
 [project.scripts]
 rag = "milvus_rag.cli:app"

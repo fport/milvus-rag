@@ -106,3 +106,8 @@ clear the retriever cache`.
   `fallbacks="default"`. Do not open an `anthropic.Anthropic()` anywhere else.
 - Write measured numbers into the "Measurement ledger" in README.md (and mirror them into
   README.tr.md); the output of a command that actually ran, not an estimate.
+- The documentation site lives in `docs/` (MkDocs Material, published to
+  https://fport.github.io/milvus-rag/). Every page is bilingual: `<page>.md` is English and
+  `<page>.tr.md` its Turkish counterpart — change one, change the other. A number that goes
+  into the README ledger and is also quoted on a docs page has to move in both places.
+  `uv run mkdocs serve` to preview, `uv run mkdocs build --strict` to check the links.

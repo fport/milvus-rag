@@ -20,6 +20,10 @@
   <a href="DEPLOYMENT.md">Deploying to a server</a>
 </p>
 
+<p align="center">
+  <a href="https://fport.github.io/milvus-rag/"><strong>Documentation — what was built, and why</strong></a>
+</p>
+
 ---
 
 You pick a repo from Azure DevOps or GitHub; the service clones it, splits it into code

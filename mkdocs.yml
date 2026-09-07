@@ -1,0 +1,111 @@
+site_name: Milvus RAG
+site_description: A search service that understands a codebase and refreshes itself on push
+site_url: https://fport.github.io/milvus-rag/
+repo_url: https://github.com/fport/milvus-rag
+repo_name: fport/milvus-rag
+edit_uri: edit/main/docs/
+copyright: MIT licensed
+
+theme:
+  name: material
+  language: en
+  logo: hero-mark.svg
+  favicon: hero-mark.svg
+  font:
+    text: Inter
+    code: JetBrains Mono
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: green
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: green
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
+    - search.highlight
+    - search.suggest
+
+extra_css:
+  - stylesheets/neon.css
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: tr
+          name: Türkçe
+          build: true
+          nav_translations:
+            Start here: Buradan başla
+            Overview: Genel bakış
+            The pipeline: Hat
+            1. Sources and sync: 1. Kaynaklar ve senkronizasyon
+            2. Indexing: 2. İndeksleme
+            3. Retrieval: 3. Erişim
+            4. Answers and agents: 4. Cevaplar ve ajanlar
+            5. Measurement: 5. Ölçüm
+            Operations: İşletim
+
+nav:
+  - Start here:
+      - Overview: index.md
+  - The pipeline:
+      - 1. Sources and sync: 01-sources.md
+      - 2. Indexing: 02-indexing.md
+      - 3. Retrieval: 03-retrieval.md
+      - 4. Answers and agents: 04-answers.md
+      - 5. Measurement: 05-measurement.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/fport/milvus-rag

@@ -1,0 +1,157 @@
+/* Neon-on-black, taken from the project's own hero palette.
+ *
+ * Material's built-in "green" is nowhere near the hero's #3bf66b, so the accent
+ * is overridden directly rather than approximated.
+ */
+
+:root {
+  --rag-green: #3bf66b;
+  --rag-green-dim: #29b34e;
+  --rag-amber: #ffc24b;
+  --rag-ink: #0d1410;
+  --rag-ink-soft: #131c17;
+  --rag-mist: #dcebe1;
+}
+
+/* --- dark scheme: the primary look ------------------------------------ */
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: var(--rag-ink);
+  --md-default-bg-color--light: var(--rag-ink-soft);
+  --md-default-fg-color: var(--rag-mist);
+  --md-default-fg-color--light: #b9cbc0;
+  --md-default-fg-color--lighter: #7d9385;
+
+  --md-primary-fg-color: var(--rag-ink);
+  --md-primary-bg-color: var(--rag-mist);
+
+  --md-accent-fg-color: var(--rag-green);
+  --md-typeset-a-color: var(--rag-green);
+
+  --md-code-bg-color: #101812;
+  --md-code-fg-color: #cfe0d5;
+  --md-code-hl-keyword-color: var(--rag-green);
+  --md-code-hl-function-color: #7ef79c;
+  --md-code-hl-string-color: #c3d6c9;
+  --md-code-hl-comment-color: #6c8375;
+  --md-code-hl-number-color: var(--rag-amber);
+}
+
+[data-md-color-scheme="slate"] .md-header,
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: #0a100c;
+  border-bottom: 1px solid #212f26;
+}
+
+[data-md-color-scheme="slate"] .md-typeset h1,
+[data-md-color-scheme="slate"] .md-typeset h2 {
+  color: #eef7f1;
+}
+
+/* The section marker that makes each stage read like a chapter. */
+[data-md-color-scheme="slate"] .md-typeset h2 {
+  border-left: 3px solid var(--rag-green);
+  padding-left: 0.6rem;
+  margin-left: -0.75rem;
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  background-color: #16211a;
+  color: var(--rag-green);
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) td {
+  border-top-color: #212f26;
+}
+
+[data-md-color-scheme="slate"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__link:focus,
+[data-md-color-scheme="slate"] .md-nav__link:hover {
+  color: var(--rag-green);
+}
+
+/* --- light scheme ----------------------------------------------------- */
+
+[data-md-color-scheme="default"] {
+  --md-accent-fg-color: var(--rag-green-dim);
+  --md-typeset-a-color: var(--rag-green-dim);
+}
+
+[data-md-color-scheme="default"] .md-typeset h2 {
+  border-left: 3px solid var(--rag-green-dim);
+  padding-left: 0.6rem;
+  margin-left: -0.75rem;
+}
+
+/* --- shared ----------------------------------------------------------- */
+
+.md-typeset code {
+  border-radius: 3px;
+}
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-left-width: 3px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+}
+
+/* "What this stage owns" callout, once per page. */
+.md-typeset .admonition.done,
+.md-typeset details.done {
+  border-color: var(--rag-green);
+}
+
+.md-typeset .done > .admonition-title,
+.md-typeset .done > summary {
+  background-color: rgba(59, 246, 107, 0.12);
+}
+
+.md-typeset .done > .admonition-title::before,
+.md-typeset .done > summary::before {
+  background-color: var(--rag-green);
+  -webkit-mask-image: var(--md-admonition-icon--success);
+  mask-image: var(--md-admonition-icon--success);
+}
+
+/* A measured-number callout: this project's whole argument rests on them. */
+.md-typeset .admonition.measured,
+.md-typeset details.measured {
+  border-color: var(--rag-amber);
+}
+
+.md-typeset .measured > .admonition-title,
+.md-typeset .measured > summary {
+  background-color: rgba(255, 194, 75, 0.12);
+}
+
+.md-typeset .measured > .admonition-title::before,
+.md-typeset .measured > summary::before {
+  background-color: var(--rag-amber);
+  -webkit-mask-image: var(--md-admonition-icon--quote);
+  mask-image: var(--md-admonition-icon--quote);
+}
+
+.rag-hero {
+  text-align: center;
+  margin: 0 0 2rem;
+}
+
+.rag-hero img {
+  max-width: 100%;
+  border-radius: 10px;
+}
+
+.rag-badges {
+  text-align: center;
+  margin: -1rem 0 2rem;
+}
+
+.rag-badges img {
+  margin: 0 0.15rem;
+}
+
+/* Mermaid diagrams on the dark ground. */
+.mermaid {
+  background: transparent !important;
+}

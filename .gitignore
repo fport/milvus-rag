@@ -11,3 +11,6 @@ evals/results/*.json
 # Golden sets are specific to the indexed repo and contain internal file paths; only the template is published.
 evals/golden.*.jsonl
 !evals/golden.example.jsonl
+
+# MkDocs build output
+site/
